@@ -3,12 +3,20 @@
     "needle": {
       "libs": {
         "arm64-v8a": {
-          "url": "https://github.com/knoop7/Ava/releases/download/local-llm-v1/ava-needle-arm64.so",
+          "url": "https://raw.githubusercontent.com/knoop7/Ava/master/local-llm/ava-needle-arm64.so",
+          "urls": [
+            "https://raw.githubusercontent.com/knoop7/Ava/master/local-llm/ava-needle-arm64.so",
+            "https://github.com/knoop7/Ava/releases/download/local-llm-v1/ava-needle-arm64.so"
+          ],
           "sha256": "c66f03168014962cc6c632128e06d4b374adcc942c3f648bfc739edb9ab2aa18",
           "size": 14332776
         },
         "armeabi-v7a": {
-          "url": "https://github.com/knoop7/Ava/releases/download/local-llm-v1/ava-needle-armv7.so",
+          "url": "https://raw.githubusercontent.com/knoop7/Ava/master/local-llm/ava-needle-armv7.so",
+          "urls": [
+            "https://raw.githubusercontent.com/knoop7/Ava/master/local-llm/ava-needle-armv7.so",
+            "https://github.com/knoop7/Ava/releases/download/local-llm-v1/ava-needle-armv7.so"
+          ],
           "sha256": "97aab6d3f87a2129941f6b5cb860c9a38b66112ff3d33f214310fbe398ad83ab",
           "size": 14098584
         }
@@ -17,12 +25,20 @@
     "lfm": {
       "libs": {
         "arm64-v8a": {
-          "url": "https://github.com/knoop7/Ava/releases/download/local-llm-v1/ava-lfm-arm64.so",
+          "url": "https://raw.githubusercontent.com/knoop7/Ava/master/local-llm/ava-lfm-arm64.so",
+          "urls": [
+            "https://raw.githubusercontent.com/knoop7/Ava/master/local-llm/ava-lfm-arm64.so",
+            "https://github.com/knoop7/Ava/releases/download/local-llm-v1/ava-lfm-arm64.so"
+          ],
           "sha256": "44fdce7c432c13c929e1c6ed19cd3382d60054e0dd20f1b2b1256519eae5259a",
           "size": 4353072
         },
         "armeabi-v7a": {
-          "url": "https://github.com/knoop7/Ava/releases/download/local-llm-v1/ava-lfm-armv7.so",
+          "url": "https://raw.githubusercontent.com/knoop7/Ava/master/local-llm/ava-lfm-armv7.so",
+          "urls": [
+            "https://raw.githubusercontent.com/knoop7/Ava/master/local-llm/ava-lfm-armv7.so",
+            "https://github.com/knoop7/Ava/releases/download/local-llm-v1/ava-lfm-armv7.so"
+          ],
           "sha256": "c0e98f5fa74558eabd0d348fa5fa96f1155f1d925afa2db85fac1d099782040e",
           "size": 3006224
         }
@@ -36,5 +52,5 @@
       }
     }
   },
-  "version": 5
+  "version": 6
 }
