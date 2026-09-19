@@ -1,0 +1,1624 @@
+{
+  "scenes": [
+    {
+      "id": "morning",
+      "icon": "fa-sun",
+      "iconColor": "text-amber-200",
+      "title": "Guten Morgen, ein neuer Tag",
+      "desc": "Zeit zum Aufstehen",
+      "subDesc": "Die Vorhänge sind automatisch geöffnet",
+      "themeColors": [
+        "#f59e0b",
+        "#d97706",
+        "#92400e",
+        "#78350f"
+      ],
+      "beamColor": "rgba(251, 191, 36, 0.8)",
+      "dividerColor": "rgba(251, 191, 36, 0.8)",
+      "dotColor": "bg-amber-300",
+      "animation": "sun-rise 3s ease-in-out infinite"
+    },
+    {
+      "id": "doorbell",
+      "icon": "fa-bell",
+      "iconColor": "text-amber-300",
+      "title": "Es läutet an der Tür",
+      "desc": "Türklingel-Sensor",
+      "subDesc": "Besucher erkannt",
+      "themeColors": [
+        "#fbbf24",
+        "#f59e0b",
+        "#b45309",
+        "#78350f"
+      ],
+      "beamColor": "rgba(251, 191, 36, 0.8)",
+      "dividerColor": "rgba(251, 191, 36, 0.8)",
+      "dotColor": "bg-amber-400",
+      "animation": "bell-ring 1s ease-in-out infinite"
+    },
+    {
+      "id": "door_open",
+      "icon": "fa-door-open",
+      "iconColor": "text-green-300",
+      "title": "Türen und Fenster sind offen",
+      "desc": "Tür- und Fenstersensor",
+      "subDesc": "Offen-Status erkannt",
+      "themeColors": [
+        "#22c55e",
+        "#16a34a",
+        "#15803d",
+        "#166534"
+      ],
+      "beamColor": "rgba(34, 197, 94, 0.8)",
+      "dividerColor": "rgba(34, 197, 94, 0.8)",
+      "dotColor": "bg-green-400",
+      "animation": ""
+    },
+    {
+      "id": "water_leak",
+      "icon": "fa-droplet",
+      "iconColor": "text-cyan-300",
+      "title": "Wasseralarm",
+      "desc": "Wassersensor",
+      "subDesc": "Ungewöhnliche Feuchtigkeit erkannt",
+      "themeColors": [
+        "#06b6d4",
+        "#0891b2",
+        "#0e7490",
+        "#155e75"
+      ],
+      "beamColor": "rgba(6, 182, 212, 0.8)",
+      "dividerColor": "rgba(6, 182, 212, 0.8)",
+      "dotColor": "bg-cyan-400",
+      "animation": "pulse 1.5s infinite"
+    },
+    {
+      "id": "smoke",
+      "icon": "fa-fire",
+      "iconColor": "text-red-400",
+      "title": "Rauchalarm",
+      "desc": "Rauchmelder",
+      "subDesc": "Erhöhte Rauchkonzentration erkannt",
+      "themeColors": [
+        "#ef4444",
+        "#dc2626",
+        "#b91c1c",
+        "#991b1b"
+      ],
+      "beamColor": "rgba(239, 68, 68, 0.8)",
+      "dividerColor": "rgba(239, 68, 68, 0.8)",
+      "dotColor": "bg-red-500",
+      "animation": "pulse 0.8s infinite"
+    },
+    {
+      "id": "motion",
+      "icon": "fa-person-walking",
+      "iconColor": "text-blue-300",
+      "title": "Bewegung erkannt",
+      "desc": "Bewegungsmelder",
+      "subDesc": "Annäherung einer Person erkannt",
+      "themeColors": [
+        "#3b82f6",
+        "#2563eb",
+        "#1d4ed8",
+        "#1e40af"
+      ],
+      "beamColor": "rgba(59, 130, 246, 0.8)",
+      "dividerColor": "rgba(59, 130, 246, 0.8)",
+      "dotColor": "bg-blue-400",
+      "animation": ""
+    },
+    {
+      "id": "temp_high",
+      "icon": "fa-temperature-high",
+      "iconColor": "text-orange-400",
+      "title": "Temperatur zu hoch",
+      "desc": "Temperatursensor",
+      "subDesc": "Bitte die Raumtemperatur beachten",
+      "themeColors": [
+        "#f97316",
+        "#ea580c",
+        "#c2410c",
+        "#9a3412"
+      ],
+      "beamColor": "rgba(249, 115, 22, 0.8)",
+      "dividerColor": "rgba(249, 115, 22, 0.8)",
+      "dotColor": "bg-orange-500",
+      "animation": ""
+    },
+    {
+      "id": "battery_low",
+      "icon": "fa-battery-quarter",
+      "iconColor": "text-yellow-300",
+      "title": "Akku fast leer",
+      "desc": "Gerätebatterie",
+      "subDesc": "Bitte rechtzeitig laden oder tauschen",
+      "themeColors": [
+        "#eab308",
+        "#ca8a04",
+        "#a16207",
+        "#854d0e"
+      ],
+      "beamColor": "rgba(234, 179, 8, 0.8)",
+      "dividerColor": "rgba(234, 179, 8, 0.8)",
+      "dotColor": "bg-yellow-400",
+      "animation": "pulse 2s infinite"
+    },
+    {
+      "id": "package",
+      "icon": "fa-box",
+      "iconColor": "text-purple-300",
+      "title": "Paket ist da",
+      "desc": "Kamera",
+      "subDesc": "Zustellung erkannt",
+      "themeColors": [
+        "#a855f7",
+        "#9333ea",
+        "#7e22ce",
+        "#6b21a8"
+      ],
+      "beamColor": "rgba(168, 85, 247, 0.8)",
+      "dividerColor": "rgba(168, 85, 247, 0.8)",
+      "dotColor": "bg-purple-400",
+      "animation": ""
+    },
+    {
+      "id": "goodnight",
+      "icon": "fa-moon",
+      "iconColor": "text-indigo-300",
+      "title": "Gute Nacht und süße Träume",
+      "desc": "Schlafmodus aktiviert",
+      "subDesc": "Das Licht ist aus",
+      "themeColors": [
+        "#6366f1",
+        "#4f46e5",
+        "#4338ca",
+        "#3730a3"
+      ],
+      "beamColor": "rgba(99, 102, 241, 0.8)",
+      "dividerColor": "rgba(99, 102, 241, 0.8)",
+      "dotColor": "bg-indigo-400",
+      "animation": ""
+    },
+    {
+      "id": "ac_on",
+      "icon": "fa-snowflake",
+      "iconColor": "text-sky-300",
+      "title": "Die Klimaanlage läuft",
+      "desc": "Klimagerät",
+      "subDesc": "Temperatur wird angepasst",
+      "themeColors": [
+        "#0ea5e9",
+        "#0284c7",
+        "#0369a1",
+        "#075985"
+      ],
+      "beamColor": "rgba(14, 165, 233, 0.8)",
+      "dividerColor": "rgba(14, 165, 233, 0.8)",
+      "dotColor": "bg-sky-400",
+      "animation": "spin-slow 8s linear infinite"
+    },
+    {
+      "id": "laundry_done",
+      "icon": "fa-shirt",
+      "iconColor": "text-lime-300",
+      "title": "Waschmaschine ist fertig",
+      "desc": "Waschmaschine",
+      "subDesc": "Bitte die Wäsche herausnehmen",
+      "themeColors": [
+        "#84cc16",
+        "#65a30d",
+        "#4d7c0f",
+        "#3f6212"
+      ],
+      "beamColor": "rgba(132, 204, 22, 0.8)",
+      "dividerColor": "rgba(132, 204, 22, 0.8)",
+      "dotColor": "bg-lime-400",
+      "animation": ""
+    },
+    {
+      "id": "garage",
+      "icon": "fa-warehouse",
+      "iconColor": "text-slate-300",
+      "title": "Das Garagentor ist offen",
+      "desc": "Garagentorsensor",
+      "subDesc": "Offen-Status erkannt",
+      "themeColors": [
+        "#64748b",
+        "#475569",
+        "#334155",
+        "#1e293b"
+      ],
+      "beamColor": "rgba(100, 116, 139, 0.8)",
+      "dividerColor": "rgba(100, 116, 139, 0.8)",
+      "dotColor": "bg-slate-400",
+      "animation": ""
+    },
+    {
+      "id": "security",
+      "icon": "fa-shield-halved",
+      "iconColor": "text-cyan-200",
+      "title": "Alarmanlage ist scharf",
+      "desc": "Sicherheitssystem",
+      "subDesc": "Abwesenheitsmodus aktiviert",
+      "themeColors": [
+        "#22d3ee",
+        "#06b6d4",
+        "#0891b2",
+        "#0e7490"
+      ],
+      "beamColor": "rgba(34, 211, 238, 0.8)",
+      "dividerColor": "rgba(34, 211, 238, 0.8)",
+      "dotColor": "bg-cyan-300",
+      "animation": ""
+    },
+    {
+      "id": "empty",
+      "icon": "in",
+      "iconColor": "text-teal-300",
+      "title": "Der Saugroboter arbeitet",
+      "desc": "Saugroboter",
+      "subDesc": "Reinigt gerade den Raum",
+      "themeColors": [
+        "#2dd4bf",
+        "#14b8a6",
+        "#0d9488",
+        "#0f766e"
+      ],
+      "beamColor": "rgba(45, 212, 191, 0.8)",
+      "dividerColor": "rgba(45, 212, 191, 0.8)",
+      "dotColor": "bg-teal-400",
+      "animation": "spin-slow 4s linear infinite"
+    },
+    {
+      "id": "weather",
+      "icon": "fa-cloud-bolt",
+      "iconColor": "text-gray-300",
+      "title": "Unwetterwarnung",
+      "desc": "Wetterdienst",
+      "subDesc": "Bitte auf das Wetter achten",
+      "themeColors": [
+        "#6b7280",
+        "#4b5563",
+        "#374151",
+        "#1f2937"
+      ],
+      "beamColor": "rgba(107, 114, 128, 0.8)",
+      "dividerColor": "rgba(107, 114, 128, 0.8)",
+      "dotColor": "bg-gray-400",
+      "animation": "pulse 1.5s infinite"
+    },
+    {
+      "id": "baby",
+      "icon": "fa-baby",
+      "iconColor": "text-orange-200",
+      "title": "Das Baby ist wach",
+      "desc": "Babyüberwachung",
+      "subDesc": "Aktivität erkannt",
+      "themeColors": [
+        "#fb923c",
+        "#f97316",
+        "#ea580c",
+        "#c2410c"
+      ],
+      "beamColor": "rgba(251, 146, 60, 0.8)",
+      "dividerColor": "rgba(251, 146, 60, 0.8)",
+      "dotColor": "bg-orange-300",
+      "animation": "pulse 1s infinite"
+    },
+    {
+      "id": "pet",
+      "icon": "fa-paw",
+      "iconColor": "text-amber-400",
+      "title": "Haustier unterwegs",
+      "desc": "Kamera",
+      "subDesc": "Aktivität des Haustiers erkannt",
+      "themeColors": [
+        "#d97706",
+        "#b45309",
+        "#92400e",
+        "#78350f"
+      ],
+      "beamColor": "rgba(217, 119, 6, 0.8)",
+      "dividerColor": "rgba(217, 119, 6, 0.8)",
+      "dotColor": "bg-amber-500",
+      "animation": ""
+    },
+    {
+      "id": "tv",
+      "icon": "fa-tv",
+      "iconColor": "text-violet-300",
+      "title": "Der Fernseher läuft",
+      "desc": "Fernsehgerät",
+      "subDesc": "Eine Sendung läuft",
+      "themeColors": [
+        "#8b5cf6",
+        "#7c3aed",
+        "#6d28d9",
+        "#5b21b6"
+      ],
+      "beamColor": "rgba(139, 92, 246, 0.8)",
+      "dividerColor": "rgba(139, 92, 246, 0.8)",
+      "dotColor": "bg-violet-400",
+      "animation": ""
+    },
+    {
+      "id": "gas_leak",
+      "icon": "fa-biohazard",
+      "iconColor": "text-red-300",
+      "title": "Gasalarm",
+      "desc": "Gassensor",
+      "subDesc": "Bitte sofort prüfen",
+      "themeColors": [
+        "#f87171",
+        "#ef4444",
+        "#dc2626",
+        "#b91c1c"
+      ],
+      "beamColor": "rgba(248, 113, 113, 0.8)",
+      "dividerColor": "rgba(248, 113, 113, 0.8)",
+      "dotColor": "bg-red-400",
+      "animation": "pulse 0.5s infinite"
+    },
+    {
+      "id": "offline",
+      "icon": "fa-plug-circle-xmark",
+      "iconColor": "text-gray-400",
+      "title": "Gerät ist offline",
+      "desc": "Gateway",
+      "subDesc": "Verbindung verloren",
+      "themeColors": [
+        "#9ca3af",
+        "#6b7280",
+        "#4b5563",
+        "#374151"
+      ],
+      "beamColor": "rgba(156, 163, 175, 0.8)",
+      "dividerColor": "rgba(156, 163, 175, 0.8)",
+      "dotColor": "bg-gray-500",
+      "animation": ""
+    },
+    {
+      "id": "new_year",
+      "icon": "fa-champagne-glasses",
+      "iconColor": "text-yellow-200",
+      "title": "Frohes neues Jahr",
+      "desc": "Das neue Jahr beginnt",
+      "subDesc": "Alles Gute für dich",
+      "themeColors": [
+        "#fef08a",
+        "#fde047",
+        "#face15",
+        "#eab308"
+      ],
+      "beamColor": "rgba(253, 224, 71, 0.8)",
+      "dividerColor": "rgba(253, 224, 71, 0.8)",
+      "dotColor": "bg-yellow-300",
+      "animation": "pulse 2s infinite"
+    },
+    {
+      "id": "spring_festival",
+      "icon": "fa-horse",
+      "iconColor": "text-red-500",
+      "title": "Frohes Neujahrsfest",
+      "desc": "Viel Glück im neuen Jahr",
+      "subDesc": "Möge alles gelingen",
+      "themeColors": [
+        "#fca5a5",
+        "#f87171",
+        "#ef4444",
+        "#dc2626"
+      ],
+      "beamColor": "rgba(248, 113, 113, 0.8)",
+      "dividerColor": "rgba(248, 113, 113, 0.8)",
+      "dotColor": "bg-red-400",
+      "animation": "pulse 1.5s infinite"
+    },
+    {
+      "id": "birthday",
+      "icon": "fa-cake-candles",
+      "iconColor": "text-pink-300",
+      "title": "Alles Gute zum Geburtstag",
+      "desc": "Ein besonderer Tag",
+      "subDesc": "Mögen alle Wünsche in Erfüllung gehen",
+      "themeColors": [
+        "#f9a8d4",
+        "#f472b6",
+        "#ec4899",
+        "#db2777"
+      ],
+      "beamColor": "rgba(244, 114, 182, 0.8)",
+      "dividerColor": "rgba(244, 114, 182, 0.8)",
+      "dotColor": "bg-pink-400",
+      "animation": "pulse 1s infinite"
+    },
+    {
+      "id": "coffee",
+      "icon": "fa-mug-hot",
+      "iconColor": "text-amber-600",
+      "title": "Der Kaffee ist fertig",
+      "desc": "Kaffeemaschine",
+      "subDesc": "Dein Kaffee wartet",
+      "themeColors": [
+        "#92400e",
+        "#78350f",
+        "#451a03",
+        "#292524"
+      ],
+      "beamColor": "rgba(146, 64, 14, 0.8)",
+      "dividerColor": "rgba(146, 64, 14, 0.8)",
+      "dotColor": "bg-amber-700",
+      "animation": ""
+    },
+    {
+      "id": "window_open",
+      "icon": "fa-house-chimney-window",
+      "iconColor": "text-sky-200",
+      "title": "Das Fenster ist offen",
+      "desc": "Fenstersensor",
+      "subDesc": "Lüftung erkannt",
+      "themeColors": [
+        "#7dd3fc",
+        "#38bdf8",
+        "#0ea5e9",
+        "#0284c7"
+      ],
+      "beamColor": "rgba(125, 211, 252, 0.8)",
+      "dividerColor": "rgba(125, 211, 252, 0.8)",
+      "dotColor": "bg-sky-300",
+      "animation": ""
+    },
+    {
+      "id": "water_heater",
+      "icon": "fa-hot-tub-person",
+      "iconColor": "text-rose-300",
+      "title": "Warmwasser ist bereit",
+      "desc": "Warmwasserbereiter",
+      "subDesc": "Du kannst baden gehen",
+      "themeColors": [
+        "#fda4af",
+        "#fb7185",
+        "#f43f5e",
+        "#e11d48"
+      ],
+      "beamColor": "rgba(253, 164, 175, 0.8)",
+      "dividerColor": "rgba(253, 164, 175, 0.8)",
+      "dotColor": "bg-rose-400",
+      "animation": ""
+    },
+    {
+      "id": "air_purifier",
+      "icon": "fa-wind",
+      "iconColor": "text-emerald-200",
+      "title": "Luftreinigung läuft",
+      "desc": "Luftreiniger",
+      "subDesc": "Die Luftqualität wird verbessert",
+      "themeColors": [
+        "#a7f3d0",
+        "#6ee7b7",
+        "#34d399",
+        "#10b981"
+      ],
+      "beamColor": "rgba(167, 243, 208, 0.8)",
+      "dividerColor": "rgba(167, 243, 208, 0.8)",
+      "dotColor": "bg-emerald-300",
+      "animation": "spin-slow 6s linear infinite"
+    },
+    {
+      "id": "humidifier",
+      "icon": "fa-smog",
+      "iconColor": "text-blue-200",
+      "title": "Der Luftbefeuchter läuft",
+      "desc": "Luftbefeuchter",
+      "subDesc": "Luftfeuchtigkeit wird angepasst",
+      "themeColors": [
+        "#bfdbfe",
+        "#93c5fd",
+        "#60a5fa",
+        "#3b82f6"
+      ],
+      "beamColor": "rgba(191, 219, 254, 0.8)",
+      "dividerColor": "rgba(191, 219, 254, 0.8)",
+      "dotColor": "bg-blue-300",
+      "animation": "pulse 3s infinite"
+    },
+    {
+      "id": "rice_cooker",
+      "icon": "fa-fire-burner",
+      "iconColor": "text-stone-200",
+      "title": "Der Reis ist fertig",
+      "desc": "Reiskocher",
+      "subDesc": "Wird warm gehalten",
+      "themeColors": [
+        "#e7e5e4",
+        "#d6d3d1",
+        "#a8a29e",
+        "#78716c"
+      ],
+      "beamColor": "rgba(231, 229, 228, 0.8)",
+      "dividerColor": "rgba(231, 229, 228, 0.8)",
+      "dotColor": "bg-stone-300",
+      "animation": ""
+    },
+    {
+      "id": "microwave",
+      "icon": "fa-radiation",
+      "iconColor": "text-yellow-400",
+      "title": "Mikrowelle fertig",
+      "desc": "Mikrowelle",
+      "subDesc": "Das Essen ist aufgewärmt",
+      "themeColors": [
+        "#fef08a",
+        "#fde047",
+        "#face15",
+        "#eab308"
+      ],
+      "beamColor": "rgba(254, 240, 138, 0.8)",
+      "dividerColor": "rgba(254, 240, 138, 0.8)",
+      "dotColor": "bg-yellow-400",
+      "animation": ""
+    },
+    {
+      "id": "router",
+      "icon": "fa-tower-broadcast",
+      "iconColor": "text-cyan-400",
+      "title": "Netzwerk verbunden",
+      "desc": "Router",
+      "subDesc": "Netzwerkstatus normal",
+      "themeColors": [
+        "#22d3ee",
+        "#06b6d4",
+        "#0891b2",
+        "#0e7490"
+      ],
+      "beamColor": "rgba(34, 211, 238, 0.8)",
+      "dividerColor": "rgba(34, 211, 238, 0.8)",
+      "dotColor": "bg-cyan-400",
+      "animation": "pulse 2s infinite"
+    },
+    {
+      "id": "nas",
+      "icon": "fa-hard-drive",
+      "iconColor": "text-slate-400",
+      "title": "NAS-Backup abgeschlossen",
+      "desc": "Speicherserver",
+      "subDesc": "Daten sind gesichert",
+      "themeColors": [
+        "#94a3b8",
+        "#64748b",
+        "#475569",
+        "#334155"
+      ],
+      "beamColor": "rgba(148, 163, 184, 0.8)",
+      "dividerColor": "rgba(148, 163, 184, 0.8)",
+      "dotColor": "bg-slate-500",
+      "animation": ""
+    },
+    {
+      "id": "printer",
+      "icon": "fa-print",
+      "iconColor": "text-neutral-300",
+      "title": "Druck abgeschlossen",
+      "desc": "Drucker",
+      "subDesc": "Das Dokument ist gedruckt",
+      "themeColors": [
+        "#d4d4d4",
+        "#a3a3a3",
+        "#737373",
+        "#525252"
+      ],
+      "beamColor": "rgba(212, 212, 212, 0.8)",
+      "dividerColor": "rgba(212, 212, 212, 0.8)",
+      "dotColor": "bg-neutral-400",
+      "animation": ""
+    },
+    {
+      "id": "projector",
+      "icon": "makes-film",
+      "iconColor": "text-fuchsia-300",
+      "title": "Der Beamer ist an",
+      "desc": "Heimkino",
+      "subDesc": "Bereit für den Film",
+      "themeColors": [
+        "#f0abfc",
+        "#e879f9",
+        "#d946ef",
+        "#c026d3"
+      ],
+      "beamColor": "rgba(240, 171, 252, 0.8)",
+      "dividerColor": "rgba(240, 171, 252, 0.8)",
+      "dotColor": "bg-fuchsia-400",
+      "animation": ""
+    },
+    {
+      "id": "speaker",
+      "icon": "fa-volume-high",
+      "iconColor": "text-orange-300",
+      "title": "Lautsprecher spielt",
+      "desc": "Smart Speaker",
+      "subDesc": "Musik läuft",
+      "themeColors": [
+        "#fdba74",
+        "#fb923c",
+        "#f97316",
+        "#ea580c"
+      ],
+      "beamColor": "rgba(253, 186, 116, 0.8)",
+      "dividerColor": "rgba(253, 186, 116, 0.8)",
+      "dotColor": "bg-orange-400",
+      "animation": "pulse 1.5s infinite"
+    },
+    {
+      "id": "door_lock",
+      "icon": "fa-lock",
+      "iconColor": "text-emerald-400",
+      "title": "Die Tür ist verriegelt",
+      "desc": "Türschloss",
+      "subDesc": "Alles sicher",
+      "themeColors": [
+        "#4ade80",
+        "#22c55e",
+        "#16a34a",
+        "#15803d"
+      ],
+      "beamColor": "rgba(74, 222, 128, 0.8)",
+      "dividerColor": "rgba(74, 222, 128, 0.8)",
+      "dotColor": "bg-emerald-500",
+      "animation": ""
+    },
+    {
+      "id": "door_unlock",
+      "icon": "fa-lock-open",
+      "iconColor": "text-red-400",
+      "title": "Das Türschloss ist offen",
+      "desc": "Türschloss",
+      "subDesc": "Bitte auf die Haustür achten",
+      "themeColors": [
+        "#f87171",
+        "#ef4444",
+        "#dc2626",
+        "#b91c1c"
+      ],
+      "beamColor": "rgba(248, 113, 113, 0.8)",
+      "dividerColor": "rgba(248, 113, 113, 0.8)",
+      "dotColor": "bg-red-500",
+      "animation": "pulse 1s infinite"
+    },
+    {
+      "id": "curtain_open",
+      "icon": "fa-bars-staggered",
+      "iconColor": "text-amber-200",
+      "title": "Die Vorhänge sind offen",
+      "desc": "Vorhangsteuerung",
+      "subDesc": "Genieße die Sonne",
+      "themeColors": [
+        "#fde68a",
+        "#fcd34d",
+        "#fbbf24",
+        "#f59e0b"
+      ],
+      "beamColor": "rgba(253, 230, 138, 0.8)",
+      "dividerColor": "rgba(253, 230, 138, 0.8)",
+      "dotColor": "bg-amber-300",
+      "animation": ""
+    },
+    {
+      "id": "curtain_close",
+      "icon": "fa-bars-staggered",
+      "iconColor": "text-indigo-300",
+      "title": "Die Vorhänge sind zu",
+      "desc": "Vorhangsteuerung",
+      "subDesc": "Privatmodus aktiv",
+      "themeColors": [
+        "#a5b4fc",
+        "#818cf8",
+        "#6366f1",
+        "#4f46e5"
+      ],
+      "beamColor": "rgba(165, 180, 252, 0.8)",
+      "dividerColor": "rgba(165, 180, 252, 0.8)",
+      "dotColor": "bg-indigo-400",
+      "animation": ""
+    },
+    {
+      "id": "floor_heating",
+      "icon": "fa-temperature-arrow-up",
+      "iconColor": "text-red-400",
+      "title": "Die Fußbodenheizung läuft",
+      "desc": "Fußbodenheizung",
+      "subDesc": "Heizt gerade auf",
+      "themeColors": [
+        "#f87171",
+        "#ef4444",
+        "#dc2626",
+        "#b91c1c"
+      ],
+      "beamColor": "rgba(248, 113, 113, 0.8)",
+      "dividerColor": "rgba(248, 113, 113, 0.8)",
+      "dotColor": "bg-red-500",
+      "animation": "pulse 2s infinite"
+    },
+    {
+      "id": "fresh_air",
+      "icon": "fa-leaf",
+      "iconColor": "text-green-300",
+      "title": "Die Lüftungsanlage läuft",
+      "desc": "Lüftungsanlage",
+      "subDesc": "Wird gerade belüftet",
+      "themeColors": [
+        "#86",
+        "#4ade80",
+        "#22c55e",
+        "#16a34a"
+      ],
+      "beamColor": "rgba(134, 239, 172, 0.8)",
+      "dividerColor": "rgba(134, 239, 172, 0.8)",
+      "dotColor": "bg-green-400",
+      "animation": "spin-slow 8s linear infinite"
+    },
+    {
+      "id": "water_purifier",
+      "icon": "fa-faucet-drip",
+      "iconColor": "text-blue-300",
+      "title": "Der Wasserfilter arbeitet",
+      "desc": "Wasserfilter",
+      "subDesc": "Wasserqualität ist gut",
+      "themeColors": [
+        "#93c5fd",
+        "#60a5fa",
+        "#3b82f6",
+        "#2563eb"
+      ],
+      "beamColor": "rgba(147, 197, 253, 0.8)",
+      "dividerColor": "rgba(147, 197, 253, 0.8)",
+      "dotColor": "bg-blue-400",
+      "animation": ""
+    },
+    {
+      "id": "ev_charging",
+      "icon": "fa-charging-station",
+      "iconColor": "text-lime-400",
+      "title": "Das E-Auto lädt",
+      "desc": "Wallbox",
+      "subDesc": "Voraussichtlich bald vollgeladen",
+      "themeColors": [
+        "#a3e635",
+        "#84cc16",
+        "#65a30d",
+        "#4d7c0f"
+      ],
+      "beamColor": "rgba(163, 230, 53, 0.8)",
+      "dividerColor": "rgba(163, 230, 53, 0.8)",
+      "dotColor": "bg-lime-500",
+      "animation": "pulse 2s infinite"
+    },
+    {
+      "id": "ev_charged",
+      "icon": "fa-bolt",
+      "iconColor": "text-yellow-300",
+      "title": "Das E-Auto ist vollgeladen",
+      "desc": "Wallbox",
+      "subDesc": "Bereit für die nächste Fahrt",
+      "themeColors": [
+        "#fde047",
+        "#face15",
+        "#eab308",
+        "#ca8a04"
+      ],
+      "beamColor": "rgba(253, 224, 71, 0.8)",
+      "dividerColor": "rgba(253, 224, 71, 0.8)",
+      "dotColor": "bg-yellow-400",
+      "animation": ""
+    },
+    {
+      "id": "locker",
+      "icon": "fa-mailbox",
+      "iconColor": "text-blue-400",
+      "title": "Paket in der Packstation",
+      "desc": "Packstation",
+      "subDesc": "Bitte zeitnah abholen",
+      "themeColors": [
+        "#60a5fa",
+        "#3b82f6",
+        "#2563eb",
+        "#1d4ed8"
+      ],
+      "beamColor": "rgba(96, 165, 250, 0.8)",
+      "dividerColor": "rgba(96, 165, 250, 0.8)",
+      "dotColor": "bg-blue-500",
+      "animation": ""
+    },
+    {
+      "id": "visitor",
+      "icon": "fa-user",
+      "iconColor": "text-violet-300",
+      "title": "Besuch ist da",
+      "desc": "Türsprechanlage",
+      "subDesc": "Jemand wartet auf Einlass",
+      "themeColors": [
+        "#c4b5fd",
+        "#a78bfa",
+        "#8b5cf6",
+        "#7c3aed"
+      ],
+      "beamColor": "rgba(196, 181, 253, 0.8)",
+      "dividerColor": "rgba(196, 181, 253, 0.8)",
+      "dotColor": "bg-violet-400",
+      "animation": "pulse 1s infinite"
+    },
+    {
+      "id": "meeting",
+      "icon": "fa-calendar-check",
+      "iconColor": "text-blue-300",
+      "title": "Das Meeting beginnt gleich",
+      "desc": "Kalendererinnerung",
+      "subDesc": "Bitte pünktlich teilnehmen",
+      "themeColors": [
+        "#93c5fd",
+        "#60a5fa",
+        "#3b82f6",
+        "#2563eb"
+      ],
+      "beamColor": "rgba(147, 197, 253, 0.8)",
+      "dividerColor": "rgba(147, 197, 253, 0.8)",
+      "dotColor": "bg-blue-400",
+      "animation": ""
+    },
+    {
+      "id": "workout",
+      "icon": "fa-person-running",
+      "iconColor": "text-orange-400",
+      "title": "Zeit für Sport",
+      "desc": "Gesundheitserinnerung",
+      "subDesc": "Zeit, in Bewegung zu kommen",
+      "themeColors": [
+        "#fb923c",
+        "#f97316",
+        "#ea580c",
+        "#c2410c"
+      ],
+      "beamColor": "rgba(251, 146, 60, 0.8)",
+      "dividerColor": "rgba(251, 146, 60, 0.8)",
+      "dotColor": "bg-orange-500",
+      "animation": ""
+    },
+    {
+      "id": "sleep_report",
+      "icon": "fa-bed",
+      "iconColor": "text-indigo-200",
+      "title": "Schlafbericht",
+      "desc": "Schlafüberwachung",
+      "subDesc": "Schau dir die Schlafqualität der Nacht an",
+      "themeColors": [
+        "#c7d2fe",
+        "#a5b4fc",
+        "#818cf8",
+        "#6366f1"
+      ],
+      "beamColor": "rgba(199, 210, 254, 0.8)",
+      "dividerColor": "rgba(199, 210, 254, 0.8)",
+      "dotColor": "bg-indigo-300",
+      "animation": ""
+    },
+    {
+      "id": "alarm",
+      "icon": "fa-clock",
+      "iconColor": "text-rose-400",
+      "title": "Der Wecker klingelt",
+      "desc": "Wecker",
+      "subDesc": "Ein neuer Tag beginnt",
+      "themeColors": [
+        "#fb7185",
+        "#f43f5e",
+        "#e11d48",
+        "#be123c"
+      ],
+      "beamColor": "rgba(251, 113, 133, 0.8)",
+      "dividerColor": "rgba(251, 113, 133, 0.8)",
+      "dotColor": "bg-rose-500",
+      "animation": "bell-ring 0.5s ease-in-out infinite"
+    },
+    {
+      "id": "power_usage",
+      "icon": "fa-bolt",
+      "iconColor": "text-yellow-400",
+      "title": "Hinweis zum Stromverbrauch",
+      "desc": "Verbrauchsüberwachung",
+      "subDesc": "Der Verbrauch ist diesen Monat höher",
+      "themeColors": [
+        "#fde047",
+        "#face15",
+        "#eab308",
+        "#ca8a04"
+      ],
+      "beamColor": "rgba(253, 224, 71, 0.8)",
+      "dividerColor": "rgba(253, 224, 71, 0.8)",
+      "dotColor": "bg-yellow-500",
+      "animation": ""
+    },
+    {
+      "id": "traffic_limit",
+      "icon": "fa-car",
+      "iconColor": "text-red-300",
+      "title": "Hinweis zur Verkehrsbeschränkung",
+      "desc": "Verkehrshinweis",
+      "subDesc": "Bitte auf die Fahrverbote achten",
+      "themeColors": [
+        "#fca5a5",
+        "#f87171",
+        "#ef4444",
+        "#dc2626"
+      ],
+      "beamColor": "rgba(252, 165, 165, 0.8)",
+      "dividerColor": "rgba(252, 165, 165, 0.8)",
+      "dotColor": "bg-red-400",
+      "animation": ""
+    },
+    {
+      "id": "typhoon",
+      "icon": "fa-hurricane",
+      "iconColor": "text-cyan-300",
+      "title": "Sturmwarnung",
+      "desc": "Wetterwarnung",
+      "subDesc": "Bitte auf starken Wind vorbereiten",
+      "themeColors": [
+        "#67e8f9",
+        "#22d3ee",
+        "#06b6d4",
+        "#0891b2"
+      ],
+      "beamColor": "rgba(103, 232, 249, 0.8)",
+      "dividerColor": "rgba(103, 232, 249, 0.8)",
+      "dotColor": "bg-cyan-400",
+      "animation": "spin-slow 2s linear infinite"
+    },
+    {
+      "id": "earthquake",
+      "icon": "fa-house-crack",
+      "iconColor": "text-orange-500",
+      "title": "Erdbebenfrühwarnung",
+      "desc": "Erdbebenüberwachung",
+      "subDesc": "Bitte auf die Sicherheit achten",
+      "themeColors": [
+        "#f97316",
+        "#ea580c",
+        "#c2410c",
+        "#9a3412"
+      ],
+      "beamColor": "rgba(249, 115, 22, 0.8)",
+      "dividerColor": "rgba(249, 115, 22, 0.8)",
+      "dotColor": "bg-orange-600",
+      "animation": "pulse 0.3s infinite"
+    },
+    {
+      "id": "eco_mode",
+      "icon": "fa-seedling",
+      "iconColor": "text-green-400",
+      "title": "Energiesparmodus aktiviert",
+      "desc": "Energieverwaltung",
+      "subDesc": "Intelligentes Stromsparen",
+      "themeColors": [
+        "#4ade80",
+        "#22c55e",
+        "#16a34a",
+        "#15803d"
+      ],
+      "beamColor": "rgba(74, 222, 128, 0.8)",
+      "dividerColor": "rgba(74, 222, 128, 0.8)",
+      "dotColor": "bg-green-500",
+      "animation": ""
+    },
+    {
+      "id": "party_mode",
+      "icon": "fa-champagne-glasses",
+      "iconColor": "text-fuchsia-400",
+      "title": "Partymodus",
+      "desc": "Szenenwechsel",
+      "subDesc": "Licht und Musik sind an",
+      "themeColors": [
+        "#e879f9",
+        "#d946ef",
+        "#c026d3",
+        "#a21caf"
+      ],
+      "beamColor": "rgba(232, 121, 249, 0.8)",
+      "dividerColor": "rgba(232, 121, 249, 0.8)",
+      "dotColor": "bg-fuchsia-500",
+      "animation": "pulse 0.8s infinite"
+    },
+    {
+      "id": "printer_3d",
+      "icon": "fa-print",
+      "iconColor": "text-cyan-400",
+      "title": "3D-Druck abgeschlossen",
+      "desc": "3D-Drucker",
+      "subDesc": "Das Modell ist fertig gedruckt",
+      "themeColors": [
+        "#22d3ee",
+        "#06b6d4",
+        "#0891b2",
+        "#0e7490"
+      ],
+      "beamColor": "rgba(34, 211, 238, 0.8)",
+      "dividerColor": "rgba(34, 211, 238, 0.8)",
+      "dotColor": "bg-cyan-400",
+      "animation": ""
+    },
+    {
+      "id": "cinema_mode",
+      "icon": "fa-clapperboard",
+      "iconColor": "text-fuchsia-300",
+      "title": "Kinomodus ist an",
+      "desc": "Heimkino",
+      "subDesc": "Das Licht ist gedimmt, viel Spaß beim Film",
+      "themeColors": [
+        "#f0abfc",
+        "#e879f9",
+        "#d946ef",
+        "#c026d3"
+      ],
+      "beamColor": "rgba(240, 171, 252, 0.8)",
+      "dividerColor": "rgba(240, 171, 252, 0.8)",
+      "dotColor": "bg-fuchsia-400",
+      "animation": "pulse 2s infinite"
+    },
+    {
+      "id": "reading_mode",
+      "icon": "fa-book-open",
+      "iconColor": "text-amber-200",
+      "title": "Lesemodus ist an",
+      "desc": "Szenenwechsel",
+      "subDesc": "Das Licht ist auf Lesefarbtemperatur eingestellt",
+      "themeColors": [
+        "#fde68a",
+        "#fcd34d",
+        "#fbbf24",
+        "#f59e0b"
+      ],
+      "beamColor": "rgba(253, 230, 138, 0.8)",
+      "dividerColor": "rgba(253, 230, 138, 0.8)",
+      "dotColor": "bg-amber-300",
+      "animation": ""
+    },
+    {
+      "id": "gaming_mode",
+      "icon": "fa-gamepad",
+      "iconColor": "text-violet-400",
+      "title": "Spielemodus ist an",
+      "desc": "Unterhaltungsszene",
+      "subDesc": "Licht und Ton sind optimiert",
+      "themeColors": [
+        "#a78bfa",
+        "#8b5cf6",
+        "#7c3aed",
+        "#6d28d9"
+      ],
+      "beamColor": "rgba(167, 139, 250, 0.8)",
+      "dividerColor": "rgba(167, 139, 250, 0.8)",
+      "dotColor": "bg-violet-500",
+      "animation": "pulse 1.5s infinite"
+    },
+    {
+      "id": "dishwasher",
+      "icon": "fa-sink",
+      "iconColor": "text-sky-300",
+      "title": "Geschirrspüler fertig",
+      "desc": "Geschirrspüler",
+      "subDesc": "Das Geschirr ist gespült und getrocknet",
+      "themeColors": [
+        "#7dd3fc",
+        "#38bdf8",
+        "#0ea5e9",
+        "#0284c7"
+      ],
+      "beamColor": "rgba(125, 211, 252, 0.8)",
+      "dividerColor": "rgba(125, 211, 252, 0.8)",
+      "dotColor": "bg-sky-300",
+      "animation": ""
+    },
+    {
+      "id": "garbage_day",
+      "icon": "fa-trash-can",
+      "iconColor": "text-stone-400",
+      "title": "Erinnerung: Müllabfuhr",
+      "desc": "Haushaltsassistent",
+      "subDesc": "Bitte den Müll rausstellen",
+      "themeColors": [
+        "#a8a29e",
+        "#78716c",
+        "#57534e",
+        "#44403c"
+      ],
+      "beamColor": "rgba(168, 162, 158, 0.8)",
+      "dividerColor": "rgba(168, 162, 158, 0.8)",
+      "dotColor": "bg-stone-400",
+      "animation": "pulse 2s infinite"
+    },
+    {
+      "id": "medicine_reminder",
+      "icon": "fa-pills",
+      "iconColor": "text-pink-400",
+      "title": "Erinnerung: Medikamente",
+      "desc": "Gesundheitsvorsorge",
+      "subDesc": "Zeit für die Einnahme",
+      "themeColors": [
+        "#f472b6",
+        "#ec4899",
+        "#db2777",
+        "#be185d"
+      ],
+      "beamColor": "rgba(244, 114, 182, 0.8)",
+      "dividerColor": "rgba(244, 114, 182, 0.8)",
+      "dotColor": "bg-pink-500",
+      "animation": "pulse 1s infinite"
+    },
+    {
+      "id": "hydration_reminder",
+      "icon": "fa-glass-water",
+      "iconColor": "text-blue-300",
+      "title": "Erinnerung: Trinken",
+      "desc": "Gesundheitsassistent",
+      "subDesc": "Zeit für ein Glas Wasser",
+      "themeColors": [
+        "#93c5fd",
+        "#60a5fa",
+        "#3b82f6",
+        "#2563eb"
+      ],
+      "beamColor": "rgba(147, 197, 253, 0.8)",
+      "dividerColor": "rgba(147, 197, 253, 0.8)",
+      "dotColor": "bg-blue-400",
+      "animation": "pulse 3s infinite"
+    },
+    {
+      "id": "weight_scale",
+      "icon": "fa-weight-scale",
+      "iconColor": "text-emerald-300",
+      "title": "Gewicht wurde erfasst",
+      "desc": "Smarte Waage",
+      "subDesc": "Gesundheitsdaten synchronisiert",
+      "themeColors": [
+        "#6ee7b7",
+        "#34d399",
+        "#10b981",
+        "#059669"
+      ],
+      "beamColor": "rgba(110, 231, 183, 0.8)",
+      "dividerColor": "rgba(110, 231, 183, 0.8)",
+      "dotColor": "bg-emerald-400",
+      "animation": ""
+    },
+    {
+      "id": "karaoke_mode",
+      "icon": "fa-microphone",
+      "iconColor": "text-rose-400",
+      "title": "Karaokemodus ist an",
+      "desc": "Heimunterhaltung",
+      "subDesc": "Die Klangeffekte sind optimiert",
+      "themeColors": [
+        "#fb7185",
+        "#f43f5e",
+        "#e11d48",
+        "#be123c"
+      ],
+      "beamColor": "rgba(251, 113, 133, 0.8)",
+      "dividerColor": "rgba(251, 113, 133, 0.8)",
+      "dotColor": "bg-rose-500",
+      "animation": "pulse 1.2s infinite"
+    },
+    {
+      "id": "air_quality_warning",
+      "icon": "fa-smog",
+      "iconColor": "text-yellow-400",
+      "title": "Warnung zur Luftqualität",
+      "desc": "Umweltüberwachung",
+      "subDesc": "Der Luftverschmutzungsindex ist hoch",
+      "themeColors": [
+        "#face15",
+        "#eab308",
+        "#ca8a04",
+        "#a16207"
+      ],
+      "beamColor": "rgba(250, 204, 21, 0.8)",
+      "dividerColor": "rgba(250, 204, 21, 0.8)",
+      "dotColor": "bg-yellow-500",
+      "animation": "pulse 2s infinite"
+    },
+    {
+      "id": "welcome_home",
+      "icon": "fa-house-user",
+      "iconColor": "text-green-300",
+      "title": "Willkommen zu Hause",
+      "desc": "Smarte Szene",
+      "subDesc": "Schön, dass du da bist",
+      "themeColors": [
+        "#86",
+        "#4ade80",
+        "#22c55e",
+        "#16a34a"
+      ],
+      "beamColor": "rgba(134, 239, 172, 0.8)",
+      "dividerColor": "rgba(134, 239, 172, 0.8)",
+      "dotColor": "bg-green-400",
+      "animation": ""
+    },
+    {
+      "id": "movie_time",
+      "icon": "fa-clapperboard",
+      "iconColor": "text-purple-300",
+      "title": "Zeit für einen Film",
+      "desc": "Smarte Szene",
+      "subDesc": "Das Licht ist gedimmt",
+      "themeColors": [
+        "#c4b5fd",
+        "#a78bfa",
+        "#8b5cf6",
+        "#7c3aed"
+      ],
+      "beamColor": "rgba(196, 181, 253, 0.8)",
+      "dividerColor": "rgba(196, 181, 253, 0.8)",
+      "dotColor": "bg-violet-400",
+      "animation": ""
+    },
+    {
+      "id": "computer_reminder",
+      "icon": "fa-desktop",
+      "iconColor": "text-blue-300",
+      "title": "Mach eine Pause",
+      "desc": "Gesundheitserinnerung",
+      "subDesc": "Gönn deinen Augen Ruhe",
+      "themeColors": [
+        "#93c5fd",
+        "#60a5fa",
+        "#3b82f6",
+        "#2563eb"
+      ],
+      "beamColor": "rgba(147, 197, 253, 0.8)",
+      "dividerColor": "rgba(147, 197, 253, 0.8)",
+      "dotColor": "bg-blue-400",
+      "animation": "pulse 3s infinite"
+    },
+    {
+      "id": "phone_reminder",
+      "icon": "fa-mobile-screen",
+      "iconColor": "text-orange-300",
+      "title": "Leg das Handy weg",
+      "desc": "Gesundheitserinnerung",
+      "subDesc": "Weniger Bildschirm, mehr Pause",
+      "themeColors": [
+        "#fdba74",
+        "#fb923c",
+        "#f97316",
+        "#ea580c"
+      ],
+      "beamColor": "rgba(253, 186, 116, 0.8)",
+      "dividerColor": "rgba(253, 186, 116, 0.8)",
+      "dotColor": "bg-orange-400",
+      "animation": "pulse 2s infinite"
+    },
+    {
+      "id": "love_reminder",
+      "icon": "fa-heart",
+      "iconColor": "text-pink-300",
+      "title": "Ich denk an dich",
+      "desc": "Liebestagebuch",
+      "subDesc": "Sag heute ruhig mal: Ich liebe dich",
+      "themeColors": [
+        "#f9a8d4",
+        "#f472b6",
+        "#ec4899",
+        "#db2777"
+      ],
+      "beamColor": "rgba(249, 168, 212, 0.8)",
+      "dividerColor": "rgba(249, 168, 212, 0.8)",
+      "dotColor": "bg-pink-400",
+      "animation": "pulse 2s infinite"
+    },
+    {
+      "id": "anniversary",
+      "icon": "fa-ring",
+      "iconColor": "text-rose-300",
+      "title": "Hochzeitstag",
+      "desc": "Ein besonderer Tag",
+      "subDesc": "Auf dass die Liebe bleibt",
+      "themeColors": [
+        "#fda4af",
+        "#fb7185",
+        "#f43f5e",
+        "#e11d48"
+      ],
+      "beamColor": "rgba(253, 164, 175, 0.8)",
+      "dividerColor": "rgba(253, 164, 175, 0.8)",
+      "dotColor": "bg-rose-400",
+      "animation": "pulse 1.5s infinite"
+    },
+    {
+      "id": "dating_anniversary",
+      "icon": "fa-heart-circle-check",
+      "iconColor": "text-red-300",
+      "title": "Jahrestag",
+      "desc": "Ein besonderer Tag",
+      "subDesc": "Schön, dass wir uns getroffen haben",
+      "themeColors": [
+        "#fca5a5",
+        "#f87171",
+        "#ef4444",
+        "#dc2626"
+      ],
+      "beamColor": "rgba(252, 165, 165, 0.8)",
+      "dividerColor": "rgba(252, 165, 165, 0.8)",
+      "dotColor": "bg-red-400",
+      "animation": "pulse 1.5s infinite"
+    },
+    {
+      "id": "sleep_reminder",
+      "icon": "fa-bed",
+      "iconColor": "text-indigo-300",
+      "title": "Zeit zum Schlafen, gute Nacht",
+      "desc": "Gesundheitserinnerung",
+      "subDesc": "Früh ins Bett, früh raus",
+      "themeColors": [
+        "#a5b4fc",
+        "#818cf8",
+        "#6366f1",
+        "#4f46e5"
+      ],
+      "beamColor": "rgba(165, 180, 252, 0.8)",
+      "dividerColor": "rgba(165, 180, 252, 0.8)",
+      "dotColor": "bg-indigo-400",
+      "animation": ""
+    },
+    {
+      "id": "go_out_reminder",
+      "icon": "fa-door-open",
+      "iconColor": "text-amber-300",
+      "title": "Du gehst raus, komm gut an",
+      "desc": "Smarter Assistent",
+      "subDesc": "Schlüssel und Geldbörse nicht vergessen",
+      "themeColors": [
+        "#fcd34d",
+        "#fbbf24",
+        "#f59e0b",
+        "#d97706"
+      ],
+      "beamColor": "rgba(252, 211, 77, 0.8)",
+      "dividerColor": "rgba(252, 211, 77, 0.8)",
+      "dotColor": "bg-amber-400",
+      "animation": ""
+    },
+    {
+      "id": "phone_charging",
+      "icon": "fa-battery-half",
+      "iconColor": "text-red-300",
+      "title": "Zeit zum Aufladen",
+      "desc": "Handyakku",
+      "subDesc": "Der Akku ist schwach, bitte laden",
+      "themeColors": [
+        "#fca5a5",
+        "#f87171",
+        "#ef4444",
+        "#dc2626"
+      ],
+      "beamColor": "rgba(252, 165, 165, 0.8)",
+      "dividerColor": "rgba(252, 165, 165, 0.8)",
+      "dotColor": "bg-red-400",
+      "animation": "pulse 2s infinite"
+    },
+    {
+      "id": "weather_change",
+      "icon": "fa-umbrella",
+      "iconColor": "text-sky-300",
+      "title": "Denk an den Regenschirm",
+      "desc": "Wetterdienst",
+      "subDesc": "Heute kann es regnen",
+      "themeColors": [
+        "#7dd3fc",
+        "#38bdf8",
+        "#0ea5e9",
+        "#0284c7"
+      ],
+      "beamColor": "rgba(125, 211, 252, 0.8)",
+      "dividerColor": "rgba(125, 211, 252, 0.8)",
+      "dotColor": "bg-sky-400",
+      "animation": ""
+    },
+    {
+      "id": "food_delivery",
+      "icon": "fa-motorcycle",
+      "iconColor": "text-orange-300",
+      "title": "Das Essen ist da",
+      "desc": "Lieferdienst",
+      "subDesc": "Deine Bestellung wurde geliefert",
+      "themeColors": [
+        "#fdba74",
+        "#fb923c",
+        "#f97316",
+        "#ea580c"
+      ],
+      "beamColor": "rgba(253, 186, 116, 0.8)",
+      "dividerColor": "rgba(253, 186, 116, 0.8)",
+      "dotColor": "bg-orange-400",
+      "animation": ""
+    },
+    {
+      "id": "focus_time",
+      "icon": "fa-bullseye",
+      "iconColor": "text-violet-300",
+      "title": "Konzentrationszeit",
+      "desc": "Effizienzassistent",
+      "subDesc": "Nicht stören ist aktiviert",
+      "themeColors": [
+        "#c4b5fd",
+        "#a78bfa",
+        "#8b5cf6",
+        "#7c3aed"
+      ],
+      "beamColor": "rgba(196, 181, 253, 0.8)",
+      "dividerColor": "rgba(196, 181, 253, 0.8)",
+      "dotColor": "bg-violet-400",
+      "animation": ""
+    },
+    {
+      "id": "break_reminder",
+      "icon": "fa-mug-saucer",
+      "iconColor": "text-green-300",
+      "title": "Zeit für eine Pause",
+      "desc": "Pomodoro",
+      "subDesc": "25 Minuten gearbeitet, jetzt kurz durchatmen",
+      "themeColors": [
+        "#86",
+        "#4ade80",
+        "#22c55e",
+        "#16a34a"
+      ],
+      "beamColor": "rgba(134, 239, 172, 0.8)",
+      "dividerColor": "rgba(134, 239, 172, 0.8)",
+      "dotColor": "bg-green-400",
+      "animation": ""
+    },
+    {
+      "id": "stand_reminder",
+      "icon": "fa-person",
+      "iconColor": "text-lime-300",
+      "title": "Steh auf und beweg dich",
+      "desc": "Gesundheitsassistent",
+      "subDesc": "Nach langem Sitzen bitte kurz aufstehen",
+      "themeColors": [
+        "#bef264",
+        "#a3e635",
+        "#84cc16",
+        "#65a30d"
+      ],
+      "beamColor": "rgba(190, 242, 100, 0.8)",
+      "dividerColor": "rgba(190, 242, 100, 0.8)",
+      "dotColor": "bg-lime-400",
+      "animation": ""
+    },
+    {
+      "id": "eye_protection",
+      "icon": "fa-eye",
+      "iconColor": "text-emerald-300",
+      "title": "Blick in die Ferne",
+      "desc": "Gesundheitsassistent",
+      "subDesc": "In die Ferne schauen entspannt die Augen",
+      "themeColors": [
+        "#6ee7b7",
+        "#34d399",
+        "#10b981",
+        "#059669"
+      ],
+      "beamColor": "rgba(110, 231, 183, 0.8)",
+      "dividerColor": "rgba(110, 231, 183, 0.8)",
+      "dotColor": "bg-emerald-400",
+      "animation": ""
+    },
+    {
+      "id": "posture_reminder",
+      "icon": "fa-person-arrow-up-from-line",
+      "iconColor": "text-cyan-300",
+      "title": "Sitz gerade",
+      "desc": "Gesundheitsassistent",
+      "subDesc": "Achte auf deine Haltung, schone den Rücken",
+      "themeColors": [
+        "#67e8f9",
+        "#22d3ee",
+        "#06b6d4",
+        "#0891b2"
+      ],
+      "beamColor": "rgba(103, 232, 249, 0.8)",
+      "dividerColor": "rgba(103, 232, 249, 0.8)",
+      "dotColor": "bg-cyan-400",
+      "animation": ""
+    },
+    {
+      "id": "bath_reminder",
+      "icon": "fa-shower",
+      "iconColor": "text-blue-200",
+      "title": "Zeit für ein Bad",
+      "desc": "Haushaltsassistent",
+      "subDesc": "Das warme Wasser ist bereit",
+      "themeColors": [
+        "#bfdbfe",
+        "#93c5fd",
+        "#60a5fa",
+        "#3b82f6"
+      ],
+      "beamColor": "rgba(191, 219, 254, 0.8)",
+      "dividerColor": "rgba(191, 219, 254, 0.8)",
+      "dotColor": "bg-blue-300",
+      "animation": ""
+    },
+    {
+      "id": "shopping_reminder",
+      "icon": "fa-cart-shopping",
+      "iconColor": "text-pink-300",
+      "title": "Einkaufen",
+      "desc": "Haushaltsassistent",
+      "subDesc": "Das steht heute an",
+      "themeColors": [
+        "#f9a8d4",
+        "#f472b6",
+        "#ec4899",
+        "#db2777"
+      ],
+      "beamColor": "rgba(249, 168, 212, 0.8)",
+      "dividerColor": "rgba(249, 168, 212, 0.8)",
+      "dotColor": "bg-pink-400",
+      "animation": ""
+    },
+    {
+      "id": "cooking_time",
+      "icon": "fa-utensils",
+      "iconColor": "text-orange-200",
+      "title": "Kochen",
+      "desc": "Haushaltsassistent",
+      "subDesc": "Zeit, etwas Gutes zu zaubern",
+      "themeColors": [
+        "#fed7aa",
+        "#fdba74",
+        "#fb923c",
+        "#f97316"
+      ],
+      "beamColor": "rgba(254, 215, 170, 0.8)",
+      "dividerColor": "rgba(254, 215, 170, 0.8)",
+      "dotColor": "bg-orange-300",
+      "animation": ""
+    },
+    {
+      "id": "self_care",
+      "icon": "fa-hand-sparkles",
+      "iconColor": "text-purple-300",
+      "title": "Zeit zum Entspannen",
+      "desc": "Private Momente",
+      "subDesc": "Gönn dir eine Pause",
+      "themeColors": [
+        "#d8b4fe",
+        "#c084fc",
+        "#a855f7",
+        "#9333ea"
+      ],
+      "beamColor": "rgba(216, 180, 254, 0.8)",
+      "dividerColor": "rgba(216, 180, 254, 0.8)",
+      "dotColor": "bg-purple-400",
+      "animation": ""
+    },
+    {
+      "id": "intimate_time",
+      "icon": "fa-heart-pulse",
+      "iconColor": "text-rose-300",
+      "title": "Zeit zu zweit",
+      "desc": "Private Momente",
+      "subDesc": "Genießt die Zeit miteinander",
+      "themeColors": [
+        "#fda4af",
+        "#fb7185",
+        "#f43f5e",
+        "#e11d48"
+      ],
+      "beamColor": "rgba(253, 164, 175, 0.8)",
+      "dividerColor": "rgba(253, 164, 175, 0.8)",
+      "dotColor": "bg-rose-400",
+      "animation": "pulse 2s infinite"
+    }
+  ]
+}
