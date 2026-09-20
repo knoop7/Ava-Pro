@@ -1619,6 +1619,202 @@
       "dividerColor": "rgba(253, 164, 175, 0.8)",
       "dotColor": "bg-rose-400",
       "animation": "pulse 2s infinite"
+    },
+    {
+      "id": "dishwasher_aquastop",
+      "icon": "fa-triangle-exclamation",
+      "iconColor": "text-red-400",
+      "title": "AquaStop 已触发",
+      "desc": "智能洗碗机",
+      "subDesc": "请立即检查进水",
+      "themeColors": [
+        "#f87171",
+        "#ef4444",
+        "#dc2626",
+        "#b91c1c"
+      ],
+      "beamColor": "rgba(248, 113, 113, 0.8)",
+      "dividerColor": "rgba(248, 113, 113, 0.8)",
+      "dotColor": "bg-red-400",
+      "animation": "pulse 1.5s infinite"
+    },
+    {
+      "id": "dryer_done",
+      "icon": "fa-wind",
+      "iconColor": "text-orange-300",
+      "title": "干衣机已完成",
+      "desc": "干衣机",
+      "subDesc": "请取出衣物",
+      "themeColors": [
+        "#fdba74",
+        "#fb923c",
+        "#f97316",
+        "#ea580c"
+      ],
+      "beamColor": "rgba(251, 146, 60, 0.8)",
+      "dividerColor": "rgba(251, 146, 60, 0.8)",
+      "dotColor": "bg-orange-400",
+      "animation": ""
+    },
+    {
+      "id": "dishwasher_salt_low",
+      "icon": "fa-mound",
+      "iconColor": "text-slate-200",
+      "title": "洗碗盐不足",
+      "desc": "智能洗碗机",
+      "subDesc": "请尽快补充",
+      "themeColors": [
+        "#f8fafc",
+        "#f1f5f9",
+        "#e2e8f0",
+        "#cbd5e1"
+      ],
+      "beamColor": "rgba(226, 232, 240, 0.8)",
+      "dividerColor": "rgba(226, 232, 240, 0.8)",
+      "dotColor": "bg-slate-200",
+      "animation": ""
+    },
+    {
+      "id": "dishwasher_salt_empty",
+      "icon": "fa-mound",
+      "iconColor": "text-slate-100",
+      "title": "洗碗盐已用尽",
+      "desc": "智能洗碗机",
+      "subDesc": "请补充再生盐",
+      "themeColors": [
+        "#f1f5f9",
+        "#e2e8f0",
+        "#cbd5e1",
+        "#94a3b8"
+      ],
+      "beamColor": "rgba(203, 213, 225, 0.8)",
+      "dividerColor": "rgba(203, 213, 225, 0.8)",
+      "dotColor": "bg-slate-300",
+      "animation": "pulse 2s infinite"
+    },
+    {
+      "id": "dishwasher_rinse_empty",
+      "icon": "fa-droplet",
+      "iconColor": "text-pink-400",
+      "title": "漂洗剂已用尽",
+      "desc": "智能洗碗机",
+      "subDesc": "请及时补充",
+      "themeColors": [
+        "#f9a8d4",
+        "#f472b6",
+        "#ec4899",
+        "#db2777"
+      ],
+      "beamColor": "rgba(244, 114, 182, 0.8)",
+      "dividerColor": "rgba(244, 114, 182, 0.8)",
+      "dotColor": "bg-pink-400",
+      "animation": "pulse 2s infinite"
+    },
+    {
+      "id": "dishwasher_rinse_low",
+      "icon": "fa-droplet",
+      "iconColor": "text-pink-300",
+      "title": "漂洗剂不足",
+      "desc": "智能洗碗机",
+      "subDesc": "请尽快补充",
+      "themeColors": [
+        "#fbcfe8",
+        "#f9a8d4",
+        "#f472b6",
+        "#ec4899"
+      ],
+      "beamColor": "rgba(249, 168, 212, 0.8)",
+      "dividerColor": "rgba(249, 168, 212, 0.8)",
+      "dotColor": "bg-pink-300",
+      "animation": ""
+    },
+    {
+      "id": "dishwasher_low_pressure",
+      "icon": "fa-gauge",
+      "iconColor": "text-yellow-300",
+      "title": "水压过低",
+      "desc": "智能洗碗机",
+      "subDesc": "请检查供水",
+      "themeColors": [
+        "#fde047",
+        "#facc15",
+        "#eab308",
+        "#ca8a04"
+      ],
+      "beamColor": "rgba(250, 204, 21, 0.8)",
+      "dividerColor": "rgba(250, 204, 21, 0.8)",
+      "dotColor": "bg-yellow-400",
+      "animation": ""
+    },
+    {
+      "id": "printer_3d_error",
+      "icon": "fa-triangle-exclamation",
+      "iconColor": "text-red-400",
+      "title": "3D打印出错",
+      "desc": "3D打印机",
+      "subDesc": "请检查打印机",
+      "themeColors": [
+        "#fca5a5",
+        "#f87171",
+        "#ef4444",
+        "#dc2626"
+      ],
+      "beamColor": "rgba(248, 113, 113, 0.8)",
+      "dividerColor": "rgba(248, 113, 113, 0.8)",
+      "dotColor": "bg-red-400",
+      "animation": "pulse 1.5s infinite"
+    },
+    {
+      "id": "printer_3d_paused",
+      "icon": "fa-pause",
+      "iconColor": "text-sky-300",
+      "title": "3D打印已暂停",
+      "desc": "3D打印机",
+      "subDesc": "等待继续打印",
+      "themeColors": [
+        "#93c5fd",
+        "#60a5fa",
+        "#3b82f6",
+        "#2563eb"
+      ],
+      "beamColor": "rgba(96, 165, 250, 0.8)",
+      "dividerColor": "rgba(96, 165, 250, 0.8)",
+      "dotColor": "bg-sky-400",
+      "animation": ""
+    },
+    {
+      "id": "ac_filter_alarm",
+      "icon": "fa-filter",
+      "iconColor": "text-orange-300",
+      "title": "请检查空调滤网",
+      "desc": "空调设备",
+      "subDesc": "该清洗滤网了",
+      "themeColors": [
+        "#fcd34d",
+        "#fbbf24",
+        "#f59e0b",
+        "#d97706"
+      ],
+      "beamColor": "rgba(251, 191, 36, 0.8)",
+      "dividerColor": "rgba(251, 191, 36, 0.8)",
+      "dotColor": "bg-amber-400",
+      "animation": ""
+    },
+    {
+      "id": "reset",
+      "icon": "fa-circle",
+      "iconColor": "#000000",
+      "title": "...",
+      "themeColors": [
+        "#000000",
+        "#000000",
+        "#000000",
+        "#000000"
+      ],
+      "beamColor": "rgba(0, 0, 0, 0)",
+      "dividerColor": "rgba(0, 0, 0, 0)",
+      "dotColor": "bg-black",
+      "animation": ""
     }
   ]
 }
