@@ -228,6 +228,7 @@ object NotificationScenes {
     private const val SCENES_URL_EN = "https://ghfast.top/https://raw.githubusercontent.com/knoop7/Ava/refs/heads/master/scenes_en.json"
     private const val CACHE_FILE_ZH = "scenes_zh_cache.json"
     private const val CACHE_FILE_EN = "scenes_en_cache.json"
+    private const val CACHE_FILE_CUSTOM = "scenes_custom_cache.json"
     
     private var _builtInScenes: List<NotificationScene> = emptyList()
     private var _customScenes: List<NotificationScene> = emptyList()
@@ -373,6 +374,29 @@ object NotificationScenes {
     }
     
     
+    private fun saveCustomCache(jsonString: String) {
+        val ctx = appContext ?: return
+        try {
+            ctx.openFileOutput(CACHE_FILE_CUSTOM, Context.MODE_PRIVATE).use {
+                it.write(jsonString.toByteArray())
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not save custom scene cache", e)
+        }
+    }
+
+    private fun loadCustomCache(): List<NotificationScene>? {
+        val ctx = appContext ?: return null
+        val cacheFile = ctx.getFileStreamPath(CACHE_FILE_CUSTOM)
+        if (!cacheFile.exists()) return null
+        return try {
+            parseRemoteJson(cacheFile.readText()).ifEmpty { null }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not read custom scene cache", e)
+            null
+        }
+    }
+
     fun loadCustomSceneFromUrl(
         url: String,
         onComplete: (() -> Unit)? = null
@@ -382,32 +406,57 @@ object NotificationScenes {
             onComplete?.invoke()
             return
         }
-        
+
+        // Serve the last known-good custom scenes immediately, before any
+        // network attempt. This is what actually fixes empty scene lists
+        // right after boot: the UI has scenes to show from the very first
+        // frame, independent of whether Wi-Fi has an IP yet. The network
+        // fetch below only refreshes this on success; it never blocks or
+        // clears what's already showing.
+        loadCustomCache()?.let {
+            _customScenes = it
+            refreshCount.value++
+        }
+
         Thread {
-            var connection: java.net.HttpURLConnection? = null
-            try {
-                connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-                connection.connectTimeout = 5000
-                connection.readTimeout = 5000
-                connection.requestMethod = "GET"
-                connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Android; Ava)")
-                
-                if (connection.responseCode == 200) {
-                    val jsonString = connection.inputStream.bufferedReader().use { it.readText() }
-                    val scenes = parseRemoteJson(jsonString)
-                    if (scenes.isNotEmpty()) {
-                        _customScenes = scenes
-                        refreshCount.value++
-                        
-                        onComplete?.invoke()
+            val maxAttempts = 3
+            var attempt = 0
+            var delayMs = 2000L
+
+            while (attempt < maxAttempts) {
+                attempt++
+                var connection: java.net.HttpURLConnection? = null
+                try {
+                    connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                    connection.connectTimeout = 5000
+                    connection.readTimeout = 5000
+                    connection.requestMethod = "GET"
+                    connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Android; Ava)")
+
+                    if (connection.responseCode == 200) {
+                        val jsonString = connection.inputStream.bufferedReader().use { it.readText() }
+                        val scenes = parseRemoteJson(jsonString)
+                        if (scenes.isNotEmpty()) {
+                            _customScenes = scenes
+                            saveCustomCache(jsonString)
+                            refreshCount.value++
+
+                            onComplete?.invoke()
+                        }
+                        return@Thread
+                    } else {
+                        Log.e(TAG, "Failed to load custom scenes: HTTP ${connection.responseCode} (attempt $attempt/$maxAttempts)")
                     }
-                } else {
-                    Log.e(TAG, "Failed to load custom scenes: HTTP ${connection.responseCode}")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error loading custom scenes from URL (attempt $attempt/$maxAttempts)", e)
+                } finally {
+                    connection?.disconnect()
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error loading custom scenes from URL", e)
-            } finally {
-                connection?.disconnect()
+
+                if (attempt < maxAttempts) {
+                    Thread.sleep(delayMs)
+                    delayMs *= 2
+                }
             }
         }.start()
     }
