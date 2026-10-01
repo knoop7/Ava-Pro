@@ -1801,20 +1801,22 @@
       "animation": ""
     },
     {
-      "id": "reset",
-      "icon": "fa-circle",
-      "iconColor": "#000000",
-      "title": "...",
+      "id": "timer_done",
+      "icon": "fa-stopwatch",
+      "iconColor": "text-teal-300",
+      "title": "{{input_text.timer_alarm_text}}定时器已结束",
+      "desc": "定时器",
+      "subDesc": "设定的时间到了",
       "themeColors": [
-        "#000000",
-        "#000000",
-        "#000000",
-        "#000000"
+        "#2dd4bf",
+        "#14b8a6",
+        "#0d9488",
+        "#0f766e"
       ],
-      "beamColor": "rgba(0, 0, 0, 0)",
-      "dividerColor": "rgba(0, 0, 0, 0)",
-      "dotColor": "bg-black",
-      "animation": ""
+      "beamColor": "rgba(45, 212, 191, 0.8)",
+      "dividerColor": "rgba(45, 212, 191, 0.8)",
+      "dotColor": "bg-teal-400",
+      "animation": "bell-ring 0.5s ease-in-out infinite"
     }
   ]
 }
