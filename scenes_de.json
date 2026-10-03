@@ -199,6 +199,24 @@
       "animation": "spin-slow 8s linear infinite"
     },
     {
+      "id": "laundry_started",
+      "icon": "fa-shirt",
+      "iconColor": "text-blue-300",
+      "title": "Waschmaschine gestartet",
+      "desc": "Waschmaschine",
+      "subDesc": "Der Waschgang läuft",
+      "themeColors": [
+        "#60a5fa",
+        "#3b82f6",
+        "#2563eb",
+        "#1d4ed8"
+      ],
+      "beamColor": "rgba(96, 165, 250, 0.8)",
+      "dividerColor": "rgba(96, 165, 250, 0.8)",
+      "dotColor": "bg-blue-400",
+      "animation": "pulse 2s infinite"
+    },    
+    {
       "id": "laundry_done",
       "icon": "fa-shirt",
       "iconColor": "text-lime-300",
@@ -1639,6 +1657,24 @@
       "animation": "pulse 1.5s infinite"
     },
     {
+      "id": "dryer_started",
+      "icon": "fa-wind",
+      "iconColor": "text-rose-300",
+      "title": "Trockner gestartet",
+      "desc": "Wäschetrockner",
+      "subDesc": "Der Trockengang läuft",
+      "themeColors": [
+        "#fda4af",
+        "#fb7185",
+        "#f43f5e",
+        "#e11d48"
+      ],
+      "beamColor": "rgba(253, 164, 175, 0.8)",
+      "dividerColor": "rgba(253, 164, 175, 0.8)",
+      "dotColor": "bg-rose-400",
+      "animation": "spin-slow 4s linear infinite"
+    },
+    {
       "id": "dryer_done",
       "icon": "fa-wind",
       "iconColor": "text-orange-300",
@@ -1817,6 +1853,24 @@
       "dividerColor": "rgba(45, 212, 191, 0.8)",
       "dotColor": "bg-teal-400",
       "animation": "bell-ring 0.5s ease-in-out infinite"
-    }
+    },
+    {
+      "id": "shower_hot_warning",
+      "icon": "fa-temperature-high",
+      "iconColor": "text-red-400",
+      "title": "Achtung, Wasser wird heiß",
+      "desc": "Warmwasser",
+      "subDesc": "Das Duschwasser wird gleich heiß",
+      "themeColors": [
+        "#ef4444",
+        "#dc2626",
+        "#b91c1c",
+        "#991b1b"
+      ],
+      "beamColor": "rgba(239, 68, 68, 0.8)",
+      "dividerColor": "rgba(239, 68, 68, 0.8)",
+      "dotColor": "bg-red-500",
+      "animation": "pulse 0.8s infinite"
+    }    
   ]
 }
