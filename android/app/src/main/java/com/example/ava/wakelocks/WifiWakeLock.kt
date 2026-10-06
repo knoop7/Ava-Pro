@@ -23,6 +23,10 @@ class WifiWakeLock {
         
         wakeLock = (context.getSystemService(POWER_SERVICE) as PowerManager)
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$tag::Wakelock")
+            .apply {
+                // Repeated acquire() must extend the timeout instead of stacking a refcount.
+                setReferenceCounted(false)
+            }
 
         
         
@@ -37,7 +41,9 @@ class WifiWakeLock {
         wifiLock = (context.getSystemService(WIFI_SERVICE) as WifiManager).createWifiLock(
             wifiLockType,
             "$tag::WifiLock"
-        )
+        ).apply {
+            setReferenceCounted(false)
+        }
     }
 
     private val WAKELOCK_TIMEOUT_MS = 30 * 60 * 1000L
@@ -51,15 +57,19 @@ class WifiWakeLock {
         Log.d(TAG, "Acquired wake locks with ${WAKELOCK_TIMEOUT_MS}ms timeout")
     }
     
+    /**
+     * Extend the timeout BEFORE it expires. Renewing only after expiry never works: once
+     * the lock lapses the CPU suspends and the uptime-based renewal handler freezes, so
+     * the re-acquire never runs. Extending while held keeps the chain unbroken; the
+     * 30-minute timeout stays as a safety net if the service dies without release().
+     */
     fun renewIfNeeded() {
         if (!::wakeLock.isInitialized || !::wifiLock.isInitialized) return
-        if (!wakeLock.isHeld) {
-            wakeLock.acquire(WAKELOCK_TIMEOUT_MS)
-            if (!wifiLock.isHeld) {
-                wifiLock.acquire()
-            }
-            Log.d(TAG, "Renewed wake locks")
+        wakeLock.acquire(WAKELOCK_TIMEOUT_MS)
+        if (!wifiLock.isHeld) {
+            wifiLock.acquire()
         }
+        Log.d(TAG, "Wake lock timeout extended")
     }
 
     fun release() {

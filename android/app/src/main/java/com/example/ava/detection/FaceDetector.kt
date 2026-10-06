@@ -266,10 +266,12 @@ private fun iou(a: FaceDetection, b: FaceDetection): Float {
 }
 
 private fun loadFaceModelFile(context: Context): MappedByteBuffer {
-    val fd = context.assets.openFd(MODEL_FILE)
-    val input = FileInputStream(fd.fileDescriptor)
-    val channel = input.channel
-    return channel.map(FileChannel.MapMode.READ_ONLY, fd.startOffset, fd.declaredLength)
+    context.assets.openFd(MODEL_FILE).use { fd ->
+        FileInputStream(fd.fileDescriptor).use { input ->
+            val channel = input.channel
+            return channel.map(FileChannel.MapMode.READ_ONLY, fd.startOffset, fd.declaredLength)
+        }
+    }
 }
 
 private fun faceToByteBuffer(bitmap: Bitmap): ByteBuffer {

@@ -18,42 +18,22 @@ object DeviceCapabilities {
     
     private var _hasCamera: Boolean? = null
     private var _hasLightSensor: Boolean? = null
+    private var _hasMagneticSensor: Boolean? = null
+    private var _hasMicrophone: Boolean? = null
     private var _hasProximitySensor: Boolean? = null
     private var _hasTemperatureSensor: Boolean? = null
     private var _hasHumiditySensor: Boolean? = null
     private var _hasPressureSensor: Boolean? = null
-    private var _isA64Device: Boolean? = null
-    
-    
-    fun isA64Device(): Boolean {
-        if (_isA64Device != null) return _isA64Device!!
-        
-        _isA64Device = try {
-            val cpuInfo = File("/proc/cpuinfo").readText()
-            val cpuInfoLower = cpuInfo.lowercase()
-            val modelLower = (Build.MODEL ?: "").lowercase()
-            val boardLower = (Build.BOARD ?: "").lowercase()
-            val hardwareLower = (Build.HARDWARE ?: "").lowercase()
-            cpuInfoLower.contains("a64") ||
-            cpuInfoLower.contains("sun50i") ||
-            cpuInfoLower.contains("allwinner") ||
-            modelLower.contains("a64") ||
-            modelLower.contains("ococci") ||
-            boardLower.contains("a64") ||
-            boardLower.contains("sun50i") ||
-            hardwareLower.contains("a64") ||
-            hardwareLower.contains("sun50i") ||
-            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && Build.VERSION.SDK_INT <= Build.VERSION_CODES.O)
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to read cpuinfo", e)
-            false
-        }
-        return _isA64Device!!
-    }
     
     
     fun hasCamera(context: Context): Boolean {
-        
+        if (_hasCamera != null) return _hasCamera!!
+
+        _hasCamera = detectCameraHardware(context)
+        return _hasCamera!!
+    }
+
+    private fun detectCameraHardware(context: Context): Boolean {
         try {
             val devDir = File("/dev")
             if (devDir.exists()) {
@@ -65,50 +45,32 @@ object DeviceCapabilities {
         } catch (e: Exception) {
             Log.w(TAG, "Failed to check /dev/video*", e)
         }
-        
-        
+
         try {
             val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
-            val cameraIds = cameraManager.cameraIdList
-            if (cameraIds.isNotEmpty()) {
+            if (cameraManager.cameraIdList.isNotEmpty()) {
                 return true
             }
+        } catch (e: android.hardware.camera2.CameraAccessException) {
+            // Camera service busy or unavailable — fall through to PackageManager.
         } catch (e: Exception) {
             Log.w(TAG, "Failed to check CameraManager", e)
         }
-        
-        
-        try {
+
+        return try {
             val pm = context.packageManager
-            if (pm.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY) ||
+            pm.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY) ||
                 pm.hasSystemFeature(PackageManager.FEATURE_CAMERA) ||
-                pm.hasSystemFeature(PackageManager.FEATURE_CAMERA_FRONT)) {
-                return true
-            }
+                pm.hasSystemFeature(PackageManager.FEATURE_CAMERA_FRONT)
         } catch (e: Exception) {
             Log.w(TAG, "Failed to check PackageManager features", e)
+            false
         }
-        
-        return false
     }
     
     
     fun hasFrontCamera(context: Context): Boolean {
-        
-        try {
-            val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
-            for (id in cameraManager.cameraIdList) {
-                val characteristics = cameraManager.getCameraCharacteristics(id)
-                val facing = characteristics.get(CameraCharacteristics.LENS_FACING)
-                if (facing == CameraCharacteristics.LENS_FACING_FRONT) {
-                    return true
-                }
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to check front camera via CameraManager", e)
-        }
-        
-        
+        // 先用 PackageManager 快速检测，避免不必要的相机访问
         try {
             if (context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_FRONT)) {
                 return true
@@ -117,32 +79,64 @@ object DeviceCapabilities {
             Log.w(TAG, "Failed to check FEATURE_CAMERA_FRONT", e)
         }
         
+        // PackageManager 检测失败时，尝试 CameraManager（可能占用相机资源）
+        try {
+            val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+            val cameraIds = cameraManager.cameraIdList
+            if (cameraIds.isEmpty()) return false
+            
+            for (id in cameraIds) {
+                try {
+                    val characteristics = cameraManager.getCameraCharacteristics(id)
+                    val facing = characteristics.get(CameraCharacteristics.LENS_FACING)
+                    if (facing == CameraCharacteristics.LENS_FACING_FRONT) {
+                        return true
+                    }
+                } catch (e: android.hardware.camera2.CameraAccessException) {
+                    // 相机被占用或不可用，跳过此相机
+                    Log.w(TAG, "Camera $id not accessible: ${e.reason}", e)
+                    continue
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to check front camera via CameraManager", e)
+        }
+        
         return false
     }
     
     
     fun hasBackCamera(context: Context): Boolean {
-        
-        try {
-            val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
-            for (id in cameraManager.cameraIdList) {
-                val characteristics = cameraManager.getCameraCharacteristics(id)
-                val facing = characteristics.get(CameraCharacteristics.LENS_FACING)
-                if (facing == CameraCharacteristics.LENS_FACING_BACK) {
-                    return true
-                }
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to check back camera via CameraManager", e)
-        }
-        
-        
+        // 先用 PackageManager 快速检测，避免不必要的相机访问
         try {
             if (context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA)) {
                 return true
             }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to check FEATURE_CAMERA", e)
+        }
+        
+        // PackageManager 检测失败时，尝试 CameraManager（可能占用相机资源）
+        try {
+            val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+            val cameraIds = cameraManager.cameraIdList
+            if (cameraIds.isEmpty()) return false
+            
+            for (id in cameraIds) {
+                try {
+                    val characteristics = cameraManager.getCameraCharacteristics(id)
+                    val facing = characteristics.get(CameraCharacteristics.LENS_FACING)
+                    if (facing == CameraCharacteristics.LENS_FACING_BACK) {
+                        return true
+                    }
+                } catch (e: android.hardware.camera2.CameraAccessException) {
+                    // 相机被占用或不可用，跳过此相机
+                    Log.w(TAG, "Camera $id not accessible: ${e.reason}", e)
+                    continue
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to check back camera via CameraManager", e)
         }
         
         return false
@@ -174,6 +168,31 @@ object DeviceCapabilities {
             false
         }
         return _hasProximitySensor!!
+    }
+
+    fun hasMagneticSensor(context: Context): Boolean {
+        if (_hasMagneticSensor != null) return _hasMagneticSensor!!
+
+        _hasMagneticSensor = try {
+            val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+            sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD) != null
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to check magnetic sensor", e)
+            false
+        }
+        return _hasMagneticSensor!!
+    }
+
+    fun hasMicrophone(context: Context): Boolean {
+        if (_hasMicrophone != null) return _hasMicrophone!!
+
+        _hasMicrophone = try {
+            context.packageManager.hasSystemFeature(PackageManager.FEATURE_MICROPHONE)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to check microphone feature", e)
+            false
+        }
+        return _hasMicrophone!!
     }
     
     
@@ -220,20 +239,20 @@ object DeviceCapabilities {
     
     
     fun hasAnyEnvironmentSensor(context: Context): Boolean {
-        return hasLightSensor(context) || 
-               hasTemperatureSensor(context) || 
-               hasHumiditySensor(context) || 
-               hasPressureSensor(context)
+        return hasLightSensor(context) ||
+               hasMagneticSensor(context) ||
+               hasMicrophone(context)
     }
     
     
     fun clearCache() {
         _hasCamera = null
         _hasLightSensor = null
+        _hasMagneticSensor = null
+        _hasMicrophone = null
         _hasProximitySensor = null
         _hasTemperatureSensor = null
         _hasHumiditySensor = null
         _hasPressureSensor = null
-        _isA64Device = null
     }
 }

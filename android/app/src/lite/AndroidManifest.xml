@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Ava desktop widgets belong to the published launcher app only.
+             Do not expose them from the separate headless Gecko engine APK. -->
+        <activity
+            android:name=".widgets.AvaTitleDescriptionWidgetConfigureActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:label="@string/ava_widget_config_heading"
+            android:taskAffinity=""
+            android:theme="@style/Theme.Ava" />
+        <receiver
+            android:name=".widgets.AvaTitleDescriptionWidgetProvider"
+            android:enabled="true"
+            android:exported="false"
+            android:label="@string/ava_widget_title_description_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/ava_title_description_widget_info" />
+        </receiver>
+        <receiver
+            android:name=".widgets.AvaRestartWidgetProvider"
+            android:enabled="true"
+            android:exported="false"
+            android:label="@string/settings_device_control_restart">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.example.ava.widget.ACTION_TAP" />
+                <action android:name="com.example.ava.widget.ACTION_DISARM" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/ava_restart_widget_info" />
+        </receiver>
+        <receiver
+            android:name=".widgets.AvaExitWidgetProvider"
+            android:enabled="true"
+            android:exported="false"
+            android:label="@string/settings_device_control_kill">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.example.ava.widget.ACTION_TAP" />
+                <action android:name="com.example.ava.widget.ACTION_DISARM" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/ava_exit_widget_info" />
+        </receiver>
+        <receiver
+            android:name=".widgets.AvaServiceWidgetProvider"
+            android:enabled="true"
+            android:exported="false"
+            android:label="@string/ava_widget_service_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.example.ava.widget.ACTION_TAP" />
+                <action android:name="com.example.ava.widget.ACTION_DISARM" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/ava_service_widget_info" />
+        </receiver>
+        <receiver
+            android:name=".widgets.AvaDarkModeWidgetProvider"
+            android:enabled="true"
+            android:exported="false"
+            android:label="@string/ava_widget_dark_mode_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.example.ava.widget.ACTION_TAP" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/ava_dark_mode_widget_info" />
+        </receiver>
+        <receiver
+            android:name=".widgets.AvaMusicWidgetProvider"
+            android:enabled="true"
+            android:exported="false"
+            android:label="@string/ava_widget_music_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.example.ava.widget.ACTION_TAP" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/ava_music_widget_info" />
+        </receiver>
+        <receiver
+            android:name=".widgets.AvaNetworkWidgetProvider"
+            android:enabled="true"
+            android:exported="false"
+            android:label="@string/ava_widget_network_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.example.ava.widget.ACTION_TAP" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/ava_network_widget_info" />
+        </receiver>
+        <!-- Exported so the launcher's own widget-bind flow can hand off to the entity
+             picker; the activity takes nothing but an app widget id. -->
+        <activity
+            android:name=".widgets.AvaSensorWidgetConfigureActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:label="@string/ava_widget_sensor_config_heading"
+            android:taskAffinity=""
+            android:theme="@style/Theme.Ava" />
+        <receiver
+            android:name=".widgets.AvaSensorWidgetProvider"
+            android:enabled="true"
+            android:exported="false"
+            android:label="@string/ava_widget_sensor_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/ava_sensor_widget_info" />
+        </receiver>
+    </application>
+</manifest>

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The entity is per-card, so the picker hands off to the config activity before the card
+  lands. reconfigurable keeps that activity reachable afterwards, which is also what a
+  tap on the placed card opens.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:configure="com.example.ava.widgets.AvaSensorWidgetConfigureActivity"
+    android:description="@string/ava_widget_sensor_desc"
+    android:initialLayout="@layout/widget_ava_sensor"
+    android:minHeight="60dp"
+    android:minResizeHeight="64dp"
+    android:minResizeWidth="60dp"
+    android:minWidth="110dp"
+    android:previewLayout="@layout/widget_ava_sensor"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellHeight="1"
+    android:targetCellWidth="2"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen"
+    android:widgetFeatures="reconfigurable" />

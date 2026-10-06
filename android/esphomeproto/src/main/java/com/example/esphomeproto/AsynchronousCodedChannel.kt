@@ -48,7 +48,13 @@ class AsynchronousCodedChannel<T : AsynchronousByteChannel>(channel: T) :
         if (indicator != 0)
             error("Unsupported indicator: $indicator")
 
-        val length = readVarUInt().toInt()
+        // Bound before .toInt(): an unsigned length above 2 GiB wraps negative and
+        // ByteArray() then throws NegativeArraySizeException instead of a protocol error.
+        val declaredLength = readVarUInt()
+        if (declaredLength > MAX_MESSAGE_BYTES) {
+            error("Message length $declaredLength exceeds limit $MAX_MESSAGE_BYTES")
+        }
+        val length = declaredLength.toInt()
         val messageType = readVarUInt().toInt()
         val messageBytes = ByteArray(length)
         readFully(messageBytes, 0, length)
@@ -83,5 +89,10 @@ class AsynchronousCodedChannel<T : AsynchronousByteChannel>(channel: T) :
             shift += 7
         }
         error("VarUInt value too large")
+    }
+
+    companion object {
+        /** 16 MiB — generous ceiling for one ESPHome API frame; real ones are far smaller. */
+        private const val MAX_MESSAGE_BYTES = 16_777_216u
     }
 }

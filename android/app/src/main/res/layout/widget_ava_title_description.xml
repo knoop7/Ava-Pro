@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/ava_widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:layoutDirection="locale">
+
+    <!--
+      Text block is wrap_content and centered as a unit so compact / tall
+      widgets don't leave a weighted description stretching empty space
+      (overflow / drawing gap on some launchers).
+    -->
+    <LinearLayout
+        android:id="@+id/ava_widget_content"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="start|center_vertical"
+        android:gravity="start|center_vertical"
+        android:orientation="vertical"
+        android:padding="10dp">
+
+        <TextView
+            android:id="@+id/ava_widget_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="start"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:shadowColor="#B3000000"
+            android:shadowDx="0"
+            android:shadowDy="1"
+            android:shadowRadius="3"
+            android:text="@string/ava_widget_default_title"
+            android:textAlignment="viewStart"
+            android:textColor="#FFFFFFFF"
+            android:textDirection="locale"
+            android:textSize="20sp" />
+
+        <TextView
+            android:id="@+id/ava_widget_description"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif"
+            android:gravity="start|top"
+            android:includeFontPadding="false"
+            android:maxLines="3"
+            android:shadowColor="#B3000000"
+            android:shadowDx="0"
+            android:shadowDy="1"
+            android:shadowRadius="3"
+            android:text="@string/ava_widget_default_description"
+            android:textAlignment="viewStart"
+            android:textColor="#CCFFFFFF"
+            android:textDirection="locale"
+            android:textSize="13sp" />
+    </LinearLayout>
+</FrameLayout>

@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Build
 import com.example.ava.services.VoiceSatelliteService
 import com.example.ava.settings.playerSettingsStore
+import com.example.ava.utils.DirectBootHelper
 import com.example.ava.utils.KeepAliveHelper
 import com.example.ava.utils.RootHelper
 import kotlinx.coroutines.flow.first
@@ -16,6 +17,12 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 class BootReceiver : BroadcastReceiver() {
+    companion object {
+        private const val PREFS_NAME = "ava_prefs"
+        private const val KEY_PENDING_ACCESSIBILITY_AUTOSTART = "pending_accessibility_autostart"
+        private const val KEY_PENDING_ACCESSIBILITY_AUTOSTART_AT = "pending_accessibility_autostart_at"
+    }
+
     override fun onReceive(context: Context, intent: Intent) {
         
         when (intent.action) {
@@ -40,6 +47,10 @@ class BootReceiver : BroadcastReceiver() {
     }
     
     private fun handleBootComplete(context: Context) {
+        if (!DirectBootHelper.isUserUnlocked(context)) {
+            return
+        }
+
         val pendingResult = goAsync()
         
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -48,6 +59,7 @@ class BootReceiver : BroadcastReceiver() {
                 val settings = context.playerSettingsStore.data.first()
                 
                 if (settings.enableAutoRestart) {
+                    markAccessibilityAutoStartPending(context)
                     val delayMs = getBootDelayForManufacturer()
                     
                     android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
@@ -60,6 +72,8 @@ class BootReceiver : BroadcastReceiver() {
                 } else {
                     pendingResult.finish()
                 }
+                com.example.ava.clock.ClockAlertScheduler.restore(context)
+                com.example.ava.services.ClockAlertOverlayService.sync(context)
             } catch (e: Exception) {
                 pendingResult.finish()
             } finally {
@@ -90,7 +104,9 @@ class BootReceiver : BroadcastReceiver() {
             
             val rootSuccess = RootHelper.startServiceWithRoot(packageName, serviceName)
             
-            if (!rootSuccess) {
+            if (rootSuccess) {
+                clearAccessibilityAutoStartPending(context)
+            } else {
                 try {
                     val serviceIntent = Intent(context, VoiceSatelliteService::class.java)
                     
@@ -99,6 +115,7 @@ class BootReceiver : BroadcastReceiver() {
                     } else {
                         context.startService(serviceIntent)
                     }
+                    clearAccessibilityAutoStartPending(context)
                 } catch (e: Exception) {
                     retryCount++
                     if (retryCount < maxRetries) {
@@ -111,5 +128,21 @@ class BootReceiver : BroadcastReceiver() {
         }
         
         tryStart()
+    }
+
+    private fun markAccessibilityAutoStartPending(context: Context) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_PENDING_ACCESSIBILITY_AUTOSTART, true)
+            .putLong(KEY_PENDING_ACCESSIBILITY_AUTOSTART_AT, System.currentTimeMillis())
+            .apply()
+    }
+
+    private fun clearAccessibilityAutoStartPending(context: Context) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .remove(KEY_PENDING_ACCESSIBILITY_AUTOSTART)
+            .remove(KEY_PENDING_ACCESSIBILITY_AUTOSTART_AT)
+            .apply()
     }
 }

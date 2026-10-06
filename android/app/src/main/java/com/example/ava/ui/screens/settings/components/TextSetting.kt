@@ -1,27 +1,25 @@
 package com.example.ava.ui.screens.settings.components
 
-import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.text.input.InputTransformation
-import androidx.compose.foundation.text.input.TextFieldState
-import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.flow.map
-import androidx.compose.runtime.remember
 import com.example.ava.ui.prefs.rememberBooleanPreference
 import com.example.ava.ui.screens.home.KEY_DARK_MODE
 import com.example.ava.ui.screens.home.PREFS_NAME
+import com.example.ava.ui.screens.settings.getSettingsDescriptionColor
+import com.example.ava.ui.screens.settings.settingsFilledFieldColors
 
 @Composable
 fun TextSetting(
@@ -29,28 +27,27 @@ fun TextSetting(
     description: String = "",
     dialogHint: String = "",
     value: String,
+    rowValue: String? = null,
     placeholder: String = "",
     enabled: Boolean = true,
     validation: ((String) -> String?)? = null,
-    inputTransformation: InputTransformation? = null,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     onConfirmRequest: (String) -> Unit = {}
 ) {
     DialogSettingItem(
-        name = name,
-        description = description,
-        value = value,
+        name = name.safeText(),
+        description = description.safeText(),
+        value = (rowValue ?: value).safeText(),
         enabled = enabled
     ) {
         TextDialog(
-            title = name,
-            description = dialogHint,
-            value = value,
-            placeholder = placeholder,
+            title = name.safeText(),
+            description = dialogHint.safeText(),
+            value = value.safeText(),
+            placeholder = placeholder.safeText(),
             onConfirmRequest = onConfirmRequest,
             validation = validation,
-            inputTransformation = inputTransformation,
-            keyboardOptions = keyboardOptions
+            keyboardOptions = keyboardOptions,
         )
     }
 }
@@ -63,80 +60,71 @@ fun DialogScope.TextDialog(
     placeholder: String = "",
     onConfirmRequest: (String) -> Unit,
     validation: ((String) -> String?)? = null,
-    inputTransformation: InputTransformation? = null,
-    keyboardOptions: KeyboardOptions = KeyboardOptions.Default
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
 ) {
-    val textFieldState = rememberTextFieldState(value)
-    val validationState by snapshotFlow { textFieldState.text }
-        .map { validation?.invoke(it.toString()) }
-        .collectAsStateWithLifecycle(null)
+    var textValue by remember { mutableStateOf(value.safeText()) }
+    val validationState = remember(textValue) { validation?.invoke(textValue) }
+
     ActionDialog(
         title = title,
-        description = description,
+        description = description.safeText(),
         confirmEnabled = validationState.isNullOrBlank(),
         onConfirmRequest = {
-            onConfirmRequest(textFieldState.text.toString())
+            onConfirmRequest(textValue)
         }
     ) {
         ValidatedTextField(
-            state = textFieldState,
-            placeholder = placeholder,
+            value = textValue,
+            onValueChange = { textValue = it },
+            placeholder = placeholder.safeText(),
             isValid = validationState.isNullOrBlank(),
             validationText = validationState ?: "",
-            inputTransformation = inputTransformation,
-            keyboardOptions = keyboardOptions
+            keyboardOptions = keyboardOptions,
         )
     }
 }
 
 @Composable
 fun ValidatedTextField(
-    state: TextFieldState,
+    value: String,
+    onValueChange: (String) -> Unit,
     label: String = "",
     placeholder: String = "",
     isValid: Boolean = true,
     validationText: String = "",
-    inputTransformation: InputTransformation? = null,
-    keyboardOptions: KeyboardOptions = KeyboardOptions.Default
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    modifier: Modifier = Modifier.fillMaxWidth(),
 ) {
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE) }
     val isDarkMode by rememberBooleanPreference(prefs, KEY_DARK_MODE, false)
-    
-    val accentColor = if (isDarkMode) Color(0xFFA78B73) else Color(0xFF0417E0) 
+
     val labelColor = if (isDarkMode) Color(0xFFF1F5F9) else Color(0xFF334155)
-    val subLabelColor = Color(0xFF94A3B8)
-    val containerColor = if (isDarkMode) Color(0xFF2D2D2D) else Color(0xFFF8FAFC)
-    
+
     TextField(
-        modifier = Modifier.fillMaxWidth(),
-        state = state,
+        modifier = modifier.fillMaxWidth(),
+        value = value,
+        onValueChange = onValueChange,
         placeholder = {
             Text(
-                text = placeholder,
-                color = subLabelColor,
-                fontSize = 14.sp
+                text = placeholder.safeText(),
+                color = getSettingsDescriptionColor(),
+                fontSize = settingsTitleTextSize()
             )
         },
         isError = !isValid,
         supportingText = if (validationText.isNotEmpty()) {
-             @Composable { Text(text = validationText, fontSize = 12.sp) }
+             @Composable { Text(text = validationText, fontSize = settingsBodyTextSize()) }
         } else null,
-        inputTransformation = inputTransformation,
+        singleLine = true,
         keyboardOptions = keyboardOptions,
-        lineLimits = androidx.compose.foundation.text.input.TextFieldLineLimits.SingleLine,
-        textStyle = androidx.compose.ui.text.TextStyle(
-            fontSize = 14.sp,
+        textStyle = TextStyle(
+            fontSize = settingsTitleTextSize(),
             color = labelColor
         ),
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
-        colors = TextFieldDefaults.colors(
-            focusedContainerColor = containerColor,
-            unfocusedContainerColor = containerColor,
-            errorContainerColor = Color(0xFFFEF2F2),
-            focusedIndicatorColor = Color.Transparent,
-            unfocusedIndicatorColor = Color.Transparent,
-            cursorColor = accentColor
-        )
+        shape = RoundedCornerShape(12.dp),
+        colors = settingsFilledFieldColors()
     )
 }
+
+private fun String?.safeText(): String = this.orEmpty()

@@ -1,0 +1,25 @@
+{
+  "manifest_version": 2,
+  "name": "Ava Web Console Bridge",
+  "version": "1.2.0",
+  "description": "Connects the Gecko page console to Ava's in-app console and injects document-start page scripts.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "ava-web-console@ava.local"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["console-bridge.js"],
+      "run_at": "document_start",
+      "all_frames": false,
+      "match_about_blank": true
+    }
+  ],
+  "permissions": [
+    "nativeMessaging",
+    "nativeMessagingFromContent",
+    "geckoViewAddons"
+  ]
+}

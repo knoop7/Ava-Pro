@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Adaptive so the tile wears the same silhouette as the real app icons beside it:
+  the platform mask applies in SYSTEM shape, and applyIconShape() can re-mask the
+  full-bleed layers when the user picks a custom icon shape.
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/minimal_launcher_tile_background" />
+    <foreground android:drawable="@drawable/ic_minimal_launcher_all_apps_fg" />
+</adaptive-icon>

@@ -1,10 +1,10 @@
 package com.example.ava.esphome.voicesatellite
 
 import android.content.Context
-import android.util.Log
 import com.example.ava.R
 import com.example.ava.esphome.EspHomeDevice
 import com.example.ava.esphome.entities.SensorEntity
+import com.example.ava.esphome.entities.TextSensorEntity
 import com.example.ava.settings.ExperimentalSettingsStore
 import com.example.esphomeproto.api.EntityCategory
 import kotlinx.coroutines.CoroutineScope
@@ -22,16 +22,33 @@ class VoiceSatelliteSensors(
     private var lightSensorEntity: SensorEntity? = null
     private var magneticSensorEntity: SensorEntity? = null
     private var sensorUpdateJob: Job? = null
+    private var currentSensorInterval = 0
 
-    companion object {
-        private const val TAG = "VoiceSatelliteSensors"
+    val audioEventEntity = TextSensorEntity(
+        key = 43,
+        name = context.getString(R.string.entity_audio_event),
+        objectId = "audio_event",
+        icon = "mdi:microphone-outline",
+        entityCategory = EntityCategory.ENTITY_CATEGORY_DIAGNOSTIC,
+        initialState = "idle",
+    )
+
+    fun registerAudioEventEntity() {
+        device.addEntity(audioEventEntity)
+        audioEventEntity.forceUpdateState("idle")
     }
 
-    fun init() {
-        environmentSensorManager = com.example.ava.sensor.EnvironmentSensorManager(context)
-        val sensorManager = environmentSensorManager ?: return
-        
-        if (sensorManager.hasLightSensor) {
+    fun unregisterAudioEventEntity() {
+        device.removeEntity(audioEventEntity)
+        audioEventEntity.updateState("idle")
+    }
+
+    fun ensureEntitiesRegistered(settings: com.example.ava.settings.ExperimentalSettings) {
+        val sensorManager = environmentSensorManager ?: com.example.ava.sensor.EnvironmentSensorManager(context).also {
+            environmentSensorManager = it
+        }
+
+        if (sensorManager.hasLightSensor && settings.environmentLightSensorEnabled && lightSensorEntity == null) {
             lightSensorEntity = SensorEntity(
                 key = 20,
                 name = context.getString(R.string.entity_light_sensor),
@@ -44,8 +61,8 @@ class VoiceSatelliteSensors(
             )
             lightSensorEntity?.let { device.addEntity(it) }
         }
-        
-        if (sensorManager.hasMagneticSensor) {
+
+        if (sensorManager.hasMagneticSensor && settings.environmentMagneticSensorEnabled && magneticSensorEntity == null) {
             magneticSensorEntity = SensorEntity(
                 key = 21,
                 name = context.getString(R.string.entity_magnetic_sensor),
@@ -57,49 +74,64 @@ class VoiceSatelliteSensors(
             )
             magneticSensorEntity?.let { device.addEntity(it) }
         }
-        
+    }
+
+    fun init() {
+        val settings = experimentalSettingsStore.getCached()
+        ensureEntitiesRegistered(settings)
+        val sensorManager = environmentSensorManager ?: return
         sensorManager.startListening()
         startSensorUpdateLoop()
     }
-    
+
     private fun startSensorUpdateLoop() {
         sensorUpdateJob?.cancel()
         sensorUpdateJob = scope.launch {
-            delay(500)
-            updateSensorValuesFiltered()
-            
+            val settings = experimentalSettingsStore.get()
+            currentSensorInterval = settings.sensorUpdateInterval.coerceIn(5, 60)
             while (true) {
-                val settings = experimentalSettingsStore.get()
-                val intervalMs = settings.sensorUpdateInterval.coerceIn(10, 60) * 1000L
-                delay(intervalMs)
-                updateSensorValues()
+                updateSensorValuesFiltered()
+                delay(currentSensorInterval * 1000L)
             }
         }
     }
     
+    fun updateSensorInterval(intervalSeconds: Int) {
+        val interval = intervalSeconds.coerceIn(5, 60)
+        if (interval == currentSensorInterval) return
+        currentSensorInterval = interval
+        
+        if (sensorUpdateJob?.isActive != true) return
+        
+        sensorUpdateJob?.cancel()
+        sensorUpdateJob = scope.launch {
+            while (true) {
+                updateSensorValuesFiltered()
+                delay(currentSensorInterval * 1000L)
+            }
+        }
+    }
+
     private suspend fun updateSensorValuesFiltered() {
         val manager = environmentSensorManager ?: return
-        
+
         val lightSamples = mutableListOf<Float>()
         val magneticSamples = mutableListOf<Float>()
-        
+
         repeat(3) {
-            lightSamples.add(manager.lightLevel.value)
-            magneticSamples.add(manager.magneticField.value)
+            if (lightSensorEntity != null) {
+                lightSamples.add(manager.lightLevel.value)
+            }
+            if (magneticSensorEntity != null) {
+                magneticSamples.add(manager.magneticField.value)
+            }
             delay(100)
         }
-        
-        lightSensorEntity?.updateState(lightSamples.sorted()[1])
-        magneticSensorEntity?.updateState(magneticSamples.sorted()[1])
+
+        lightSamples.takeIf { it.isNotEmpty() }?.let { lightSensorEntity?.updateState(it.sorted()[it.size / 2]) }
+        magneticSamples.takeIf { it.isNotEmpty() }?.let { magneticSensorEntity?.updateState(it.sorted()[it.size / 2]) }
     }
-    
-    private fun updateSensorValues() {
-        environmentSensorManager?.let { manager ->
-            lightSensorEntity?.updateState(manager.lightLevel.value)
-            magneticSensorEntity?.updateState(manager.magneticField.value)
-        }
-    }
-    
+
     fun stop() {
         sensorUpdateJob?.cancel()
         sensorUpdateJob = null

@@ -2,22 +2,34 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <uses-sdk tools:overrideLibrary="rikka.shizuku.provider, rikka.shizuku.api, rikka.shizuku.shared, rikka.shizuku.aidl" />
+
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.WRITE_SETTINGS" tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.READ_LOGS" tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.TRANSMIT_IR" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.BATTERY_STATS" tools:ignore="ProtectedPermissions" />
 
@@ -32,41 +44,81 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" tools:ignore="QueryAllPackagesPermission" />
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="com.android.permission.GET_INSTALLED_APPS" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- BiometricAuth mod / secure HA actions (API 28+). USE_FINGERPRINT kept for API 23–28. -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <uses-permission android:name="android.permission.USE_FINGERPRINT" android:maxSdkVersion="28" />
 
     <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.consumerir" android:required="false" />
+
+    <!-- Lite host must see the separate gecko engine pack even when QUERY_ALL_PACKAGES is ignored. -->
+    <queries>
+        <package android:name="com.example.ava.gecko" />
+        <!-- API 30+: resolve the system KeyChain chooser used for mTLS. -->
+        <package android:name="com.android.keychain" />
+    </queries>
 
     <application
         android:name=".AvaApplication"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
+        android:extractNativeLibs="true"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:roundIcon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Ava"
-        android:usesCleartextTraffic="true">
+        android:usesCleartextTraffic="true"
+        tools:replace="android:extractNativeLibs">
         
         <activity
             android:name=".UnlockActivity"
             android:excludeFromRecents="true"
             android:exported="false"
             android:noHistory="true"
-            android:theme="@android:style/Theme.NoDisplay" />
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!-- Freeform keep-alive. Android 7.0–8.1: off-screen anchor so a lone
+             floating window doesn't collapse. Android 10+: non-focusable sliver
+             while the voice satellite is running, and only if freeform support
+             is already enabled, so a uid with no visible activity is not mic-
+             silenced. Not exported. -->
+        <activity
+            android:name=".appwindow.FreeformKeepAliveActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:resizeableActivity="true"
+            android:launchMode="singleInstance"
+            android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|screenLayout|fontScale|uiMode|orientation|screenSize|smallestScreenSize|layoutDirection"
+            android:theme="@style/FreeformKeepAlive" />
         
+        <!--
+            location is here for the BLE presence scanner, not for any positioning feature.
+            BLUETOOTH_SCAN is declared without neverForLocation, so the platform gates scan
+            result delivery on the location app op; that op is granted "while in use", and
+            without this type the foreground service carries no FOREGROUND_LOCATION
+            capability. The moment the activity stops being top — i.e. every screen-off — the
+            op evaluates to ignored and GattService drops every result silently, with no
+            callback and no error, which is indistinguishable from an empty room.
+            Requested at runtime only when a location permission is actually held; see
+            VoiceSatelliteService.voiceSatelliteForegroundServiceTypes.
+        -->
         <service
             android:name=".services.VoiceSatelliteService"
             android:enabled="true"
             android:exported="true"
-            android:foregroundServiceType="microphone|mediaPlayback|camera|connectedDevice"
+            android:foregroundServiceType="microphone|mediaPlayback|camera|connectedDevice|location"
             android:stopWithTask="false" />
-        
-        
+
+
         <provider
             android:name="rikka.shizuku.ShizukuProvider"
             android:authorities="${applicationId}.shizuku"
@@ -95,7 +147,19 @@
             android:enabled="true"
             android:exported="false" />
         <service
+            android:name=".services.QuickWakeFabService"
+            android:enabled="true"
+            android:exported="false" />
+        <service
+            android:name=".services.AppWindowService"
+            android:enabled="true"
+            android:exported="false" />
+        <service
             android:name=".services.VolumeControlService"
+            android:enabled="true"
+            android:exported="false" />
+        <service
+            android:name=".services.ClockAlertOverlayService"
             android:enabled="true"
             android:exported="false" />
         <service
@@ -107,7 +171,19 @@
             android:enabled="true"
             android:exported="false" />
         <service
+            android:name=".services.ScreensaverService"
+            android:enabled="true"
+            android:exported="false" />
+        <service
             android:name=".services.WeatherOverlayService"
+            android:enabled="true"
+            android:exported="false" />
+        <service
+            android:name=".services.VoiceMessageOverlayService"
+            android:enabled="true"
+            android:exported="false" />
+        <service
+            android:name=".services.VoiceMessagePlaybackOverlayService"
             android:enabled="true"
             android:exported="false" />
         <service
@@ -121,7 +197,29 @@
         <service
             android:name=".services.WebViewService"
             android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="specialUse"
+            android:stopWithTask="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Floating Home Assistant browser overlay" />
+        </service>
+        <service
+            android:name=".services.AiBrowserService"
+            android:enabled="true"
             android:exported="false" />
+        <service
+            android:name=".services.AvaAccessibilityService"
+            android:enabled="true"
+            android:exported="false"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/ava_accessibility_service" />
+        </service>
         <service
             android:name=".services.NotificationOverlayService"
             android:enabled="true"
@@ -131,19 +229,52 @@
             android:enabled="true"
             android:exported="false" />
         <service
+            android:name=".services.ChorusWakeBlurService"
+            android:enabled="true"
+            android:exported="false" />
+        <service
             android:name=".services.HaSwitchOverlayService"
             android:enabled="true"
+            android:exported="false" />
+        <service
+            android:name=".services.SatelliteSetupTipOverlayService"
+            android:enabled="true"
+            android:exported="false" />
+        <!-- Crash recovery: sticky restart of this empty service relaunches
+             Ava after a native crash; the heartbeat receiver is the OEM backstop. -->
+        <service
+            android:name=".crash.CrashGuardService"
+            android:exported="false"
+            android:stopWithTask="false" />
+        <receiver
+            android:name=".crash.CrashHeartbeatReceiver"
             android:exported="false" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.Ava">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="com.example.ava.action.SHOW_UPDATE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
         </activity>
+        <activity
+            android:name=".webcompat.WebViewFileChooserActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -153,6 +284,11 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+        <provider
+            android:name=".webcompat.HostSidebarSettingsProvider"
+            android:authorities="com.example.ava.browser_sidebar_settings"
+            android:exported="true"
+            android:grantUriPermissions="false" />
         <receiver
             android:name=".receivers.AvaControlReceiver"
             android:enabled="true"
@@ -166,8 +302,47 @@
                 <action android:name="com.example.ava.ACTION_STOP" />
                 <action android:name="com.example.ava.ACTION_START_SERVICE" />
                 <action android:name="com.example.ava.ACTION_STOP_SERVICE" />
+                <action android:name="com.example.ava.ACTION_GRANT_RECORD_AUDIO" />
+                <action android:name="com.example.ava.ACTION_GRANT_CAMERA" />
+                <action android:name="com.example.ava.ACTION_GRANT_LOCATION" />
+                <action android:name="com.example.ava.ACTION_GRANT_BLUETOOTH" />
+                <action android:name="com.example.ava.ACTION_GRANT_NOTIFICATIONS" />
+                <action android:name="com.example.ava.ACTION_GRANT_OVERLAY" />
+                <action android:name="com.example.ava.ACTION_GRANT_WRITE_SETTINGS" />
+                <action android:name="com.example.ava.ACTION_GRANT_SECURE_SETTINGS" />
+                <action android:name="com.example.ava.ACTION_GRANT_READ_LOGS" />
+                <action android:name="com.example.ava.ACTION_GRANT_INSTALL_PACKAGES" />
+                <action android:name="com.example.ava.ACTION_ACTIVATE_DEVICE_ADMIN" />
+                <action android:name="com.example.ava.ACTION_CHECK_UPDATE" />
+                <action android:name="com.example.ava.ACTION_APPLY_SETTINGS" />
+                <action android:name="com.example.ava.ACTION_SET_MOD_ENABLED" />
+                <action android:name="com.example.ava.ACTION_RELOAD_MOD" />
+                <action android:name="com.example.ava.ACTION_EXIT_FULLSCREEN_OVERLAYS" />
+                <action android:name="com.example.ava.ACTION_SHOW_TOAST" />
+                <action android:name="com.example.ava.ACTION_PRY_GECKO_CHILD" />
+                <action android:name="com.example.ava.action.SYNC_BROWSER_VISIBLE" />
+                <action android:name="com.example.ava.action.REASSERT_FOREGROUND_OVERLAYS" />
+                <action android:name="com.example.ava.action.REQUEST_SIDEBAR_SETTINGS" />
+                <action android:name="com.example.ava.action.SIDEBAR_COMMAND" />
+                <!-- @debug-onboarding — remove these three actions when shipping final -->
+                <action android:name="com.example.ava.ACTION_ONBOARDING_RESET" />
+                <action android:name="com.example.ava.ACTION_ONBOARDING_SET_SCALE" />
+                <action android:name="com.example.ava.ACTION_ONBOARDING_SHOW" />
             </intent-filter>
         </receiver>
+        <receiver
+            android:name=".receivers.FullscreenOverlayEscapeReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.ava.ACTION_EXIT_FULLSCREEN_OVERLAYS" />
+                <action android:name="com.example.ava.ACTION_RELOAD_FULLSCREEN_OVERLAY" />
+            </intent-filter>
+        </receiver>
+        <receiver
+            android:name=".clock.ClockAlertReceiver"
+            android:enabled="true"
+            android:exported="false" />
         <receiver
             android:name=".receivers.BootReceiver"
             android:enabled="true"

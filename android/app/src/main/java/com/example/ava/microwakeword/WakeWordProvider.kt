@@ -2,7 +2,11 @@ package com.example.ava.microwakeword
 
 import java.nio.ByteBuffer
 
-data class WakeWordWithId(val id: String, val wakeWord: WakeWord)
+data class WakeWordWithId(
+    val id: String,
+    val wakeWord: WakeWord,
+    val hasBuiltInVerifier: Boolean = false,
+)
 
 interface WakeWordProvider {
 

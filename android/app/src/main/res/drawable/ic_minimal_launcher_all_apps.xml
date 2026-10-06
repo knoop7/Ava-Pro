@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Pre-API-26 fallback for the All Apps tile. Nothing masks a plain drawable there, so the
+  rounded plate is baked in and the dots can sit wider than the adaptive safe zone — 1.5x
+  the foreground geometry, which is the ratio between the full 108 canvas and the 72 the
+  adaptive mask reveals.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="@color/minimal_launcher_tile_background"
+        android:pathData="M24,0 L84,0 A24,24 0 0 1 108,24 L108,84 A24,24 0 0 1 84,108
+                          L24,108 A24,24 0 0 1 0,84 L0,24 A24,24 0 0 1 24,0 Z" />
+    <path
+        android:fillColor="@color/minimal_launcher_tile_glyph"
+        android:pathData="M13.5,39 a10.5,10.5 0 1,0 21,0 a10.5,10.5 0 1,0 -21,0 Z
+                          M43.5,39 a10.5,10.5 0 1,0 21,0 a10.5,10.5 0 1,0 -21,0 Z
+                          M73.5,39 a10.5,10.5 0 1,0 21,0 a10.5,10.5 0 1,0 -21,0 Z
+                          M13.5,69 a10.5,10.5 0 1,0 21,0 a10.5,10.5 0 1,0 -21,0 Z
+                          M43.5,69 a10.5,10.5 0 1,0 21,0 a10.5,10.5 0 1,0 -21,0 Z
+                          M73.5,69 a10.5,10.5 0 1,0 21,0 a10.5,10.5 0 1,0 -21,0 Z" />
+</vector>

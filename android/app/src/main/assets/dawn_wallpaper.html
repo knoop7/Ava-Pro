@@ -1,0 +1,4055 @@
+<!DOCTYPE html>
+<html lang="auto">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Dawn · Magazine Screensaver</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;600;800&family=Noto+Serif+SC:wght@300;500;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.85);
+            --glass: rgba(22, 26, 34, 0.38);
+            --glass-edge: rgba(255, 255, 255, 0.14);
+            --glass-edge-inner: rgba(255, 255, 255, 0.06);
+            --glass-blur: 18px;
+            /*
+             * Phone + tablet first: px floors + vmin. Pure vw made date/quote ~5–7px
+             * on 360–430 phones. Compact scale only for tiny panels (not phone landscape).
+             * Declare plain fallbacks before clamp/min — old WebViews drop unsupported values.
+             */
+            --slots-gap: 16px;
+            --slots-gap: clamp(14px, 2.4vmin, 22px);
+            --slot-name: 15px;
+            --slot-name: clamp(13px, 2.8vmin, 18px);
+            --slot-state: 22px;
+            --slot-state: clamp(19px, 4.2vmin, 28px);
+            --slot-ico: 28px;
+            --slot-ico: clamp(24px, 4.6vmin, 32px);
+            --slot-gap-inner: 14px;
+            --slot-gap-inner: clamp(12px, 2.2vmin, 18px);
+            --slot-pad-y: 14px;
+            --slot-pad-y: clamp(12px, 2vmin, 18px);
+            --slot-pad-x: 22px;
+            --slot-pad-x: clamp(18px, 2.8vmin, 28px);
+            --slot-min-h: 64px;
+            --slot-min-h: clamp(56px, 9vmin, 76px);
+            --right-col-w: 280px;
+            --right-col-w: clamp(240px, 34vmin, 340px);
+            --date-size: 18px;
+            --date-size: clamp(15px, 3.2vmin, 22px);
+            --quote-size: 15px;
+            --quote-size: clamp(14px, 2.8vmin, 20px);
+            --quote-author: 12px;
+            --quote-author: clamp(11px, 2vmin, 14px);
+            --clock-size: 120px;
+            --clock-size: clamp(72px, 18vmin, 168px);
+            --clock-colon: 88px;
+            --clock-colon: clamp(52px, 13vmin, 120px);
+            --ampm-size: 20px;
+            --ampm-size: clamp(16px, 3.6vmin, 28px);
+            --hourly-w: 90vw;
+            --hourly-w: min(90vw, 720px);
+            --hourly-pad: 16px;
+            --hourly-pad: clamp(14px, 2.2vmin, 20px);
+            --hourly-bar-h: 44px;
+            --hourly-bar-h: clamp(36px, 6vmin, 52px);
+            --hourly-ico: 22px;
+            --hourly-ico: clamp(18px, 3.4vmin, 26px);
+            --hourly-label: 15px;
+            --hourly-label: clamp(13px, 2.6vmin, 18px);
+            --hourly-temp: 16px;
+            --hourly-temp: clamp(14px, 2.8vmin, 20px);
+            --hourly-radius: 20px;
+            --hourly-radius: clamp(16px, 2.6vmin, 24px);
+            --hourly-labels-gap: 10px;
+            --hourly-labels-gap: clamp(8px, 1.4vmin, 12px);
+        }
+
+        /* Tiny panels only — do NOT use phone landscape height alone */
+        @media (max-width: 360px) {
+            :root {
+                --slots-gap: 10px;
+                --slot-name: 11px;
+                --slot-state: 15px;
+                --slot-ico: 18px;
+                --slot-gap-inner: 8px;
+                --slot-pad-y: 9px;
+                --slot-pad-x: 12px;
+                --slot-min-h: 46px;
+                --right-col-w: 42vw;
+                --right-col-w: min(168px, 42vw);
+                --date-size: 13px;
+                --quote-size: 12px;
+                --quote-author: 10px;
+                --clock-size: 72px;
+                --clock-size: clamp(56px, 16vw, 96px);
+                --clock-colon: 52px;
+                --clock-colon: clamp(40px, 12vw, 72px);
+                --ampm-size: 14px;
+                --hourly-w: 94vw;
+                --hourly-w: min(94vw, 360px);
+                --hourly-pad: 10px;
+                --hourly-bar-h: 28px;
+                --hourly-ico: 14px;
+                --hourly-label: 11px;
+                --hourly-temp: 12px;
+                --hourly-radius: 14px;
+            }
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: #1a1a1a;
+            color: var(--text-primary);
+        }
+
+        /* Opacity-only crossfade — avoids size/blur jitter */
+        /* Note: avoid CSS inset shorthand — ignored on older Android WebViews (<87),
+           which shrinks absolute layers to content and parks UI top-left. */
+        .wallpaper-container {
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            z-index: 0;
+        }
+
+        .wallpaper-layer {
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            transition: opacity 1.6s ease-in-out;
+            will-change: opacity;
+            z-index: 1;
+        }
+
+        .wallpaper-layer.active {
+            opacity: 1;
+            z-index: 1;
+        }
+
+        .wallpaper-layer.exiting {
+            opacity: 0;
+            z-index: 2;
+        }
+
+        .wallpaper-layer .parallax {
+            position: absolute;
+            top: -6%;
+            left: -6%;
+            width: 112%;
+            height: 112%;
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            transform: translate3d(0, 0, 0);
+        }
+
+        /* The pan is stepped from JS once a second rather than run as a CSS
+           animation. A full 60s sweep travels ~12px, so per-vsync interpolation is
+           invisible, but it would keep the compositor producing frames forever. */
+
+        .gradient-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 60%;
+            background: linear-gradient(
+                to top,
+                rgba(0,0,0,0.7) 0%,
+                rgba(0,0,0,0.3) 50%,
+                transparent 100%
+            );
+            z-index: 2;
+            pointer-events: none;
+        }
+
+        .mist {
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            pointer-events: none;
+            display: none;
+            background:
+                linear-gradient(180deg, rgba(0, 0, 0, 0.12) 0%, transparent 40%),
+                linear-gradient(90deg, rgba(0,0,0,0.16), transparent 28%, transparent 72%, rgba(0,0,0,0.18));
+        }
+
+        .readability-veil {
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            pointer-events: none;
+            display: none;
+            opacity: 0.35;
+            background:
+                radial-gradient(ellipse 70% 55% at 18% 18%, rgba(0, 0, 0, 0.28), transparent 62%),
+                radial-gradient(ellipse 55% 60% at 88% 22%, rgba(0, 0, 0, 0.26), transparent 60%),
+                radial-gradient(ellipse 70% 45% at 50% 92%, rgba(0, 0, 0, 0.3), transparent 65%);
+            transition: opacity 0.6s ease;
+        }
+
+        body.slots-mode .mist,
+        body.slots-mode .readability-veil {
+            display: block;
+        }
+
+        body.bright-wallpaper .readability-veil {
+            opacity: 0.55;
+        }
+
+        /* —— Classic bottom-left poem layout —— */
+        .info-container {
+            position: absolute;
+            bottom: 8vh;
+            left: 5vw;
+            z-index: 3;
+            color: var(--text-primary);
+            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.15), 0 4px 20px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            max-width: 85%;
+            /* Hidden until classic-mode — avoids flash under slots splash / setConfig race */
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        .logo-badge {
+            position: absolute;
+            top: 32px;
+            right: 32px;
+            width: 48px;
+            height: 48px;
+            object-fit: contain;
+            opacity: 0;
+            visibility: hidden;
+            z-index: 3;
+            pointer-events: none;
+        }
+
+        /* Classic poem wallpaper only (slots disabled) */
+        body.classic-mode .info-container {
+            opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
+        }
+
+        body.classic-mode .logo-badge {
+            opacity: 0.25;
+            visibility: visible;
+        }
+
+        /* Slots / splash: scrub classic chrome completely (no bottom-left / top-right residue) */
+        body.slots-mode .info-container,
+        body.slots-mode .logo-badge,
+        body.slots-mode #classic-ui,
+        body.slots-mode #logo-badge {
+            display: none !important;
+            opacity: 0 !important;
+            visibility: hidden !important;
+            pointer-events: none !important;
+        }
+
+        .time-display {
+            display: flex;
+            align-items: baseline;
+            line-height: 0.8;
+            margin-left: -6px;
+            position: relative;
+            font-feature-settings: "tnum" 1;
+        }
+
+        .hour {
+            font-size: 10vw;
+            font-weight: 800;
+            letter-spacing: -0.3vw;
+            position: relative;
+            z-index: 2;
+        }
+
+        .colon {
+            font-size: 7.5vw;
+            font-weight: 600;
+            margin: 0 0.5vw;
+            opacity: 0.8;
+            position: relative;
+            top: -1.6vw;
+            z-index: 2;
+        }
+
+        .minute {
+            font-size: 10vw;
+            font-weight: 800;
+            letter-spacing: -0.3vw;
+            opacity: 0.65;
+            position: relative;
+            z-index: 2;
+        }
+
+        .ampm {
+            display: none;
+            font-size: 2.4vw;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            margin-left: 0.8vw;
+            opacity: 0.85;
+            position: relative;
+            top: -0.35em;
+            z-index: 2;
+        }
+
+        body.slots-mode .ampm {
+            display: inline;
+        }
+
+        body.slots-mode.iso-time .ampm {
+            display: none;
+        }
+
+        .date-display {
+            margin-top: 1vh;
+            margin-left: 0.5vw;
+            font-size: 1.8vw;
+            font-weight: 300;
+            letter-spacing: 0.15vw;
+            display: flex;
+            align-items: center;
+            opacity: 0.85;
+            position: relative;
+            z-index: 2;
+        }
+
+        .date-divider {
+            width: 0.4vw;
+            height: 0.4vw;
+            background: #fff;
+            border-radius: 50%;
+            margin: 0 1.2vw;
+            opacity: 0.8;
+        }
+
+        .poem-wrapper {
+            margin-top: 1.5vh;
+            margin-left: 0.5vw;
+            padding-left: 2vw;
+            border-left: 0.3vw solid rgba(255,255,255,0.8);
+            animation: fadeIn 1s ease-out 0.5s forwards;
+            opacity: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            position: relative;
+            z-index: 2;
+        }
+
+        .poem-content {
+            font-family: 'Noto Serif SC', serif;
+            font-size: 1.6vw;
+            font-weight: 700;
+            line-height: 1.5;
+            margin-bottom: 1vh;
+            opacity: 1;
+        }
+
+        .poem-meta {
+            font-family: 'Noto Serif SC', serif;
+            font-size: 1.1vw;
+            font-weight: 400;
+            opacity: 0.8;
+            letter-spacing: 0.1vw;
+        }
+
+        /* —— Slots morphologies ——
+           - layout-corner: no weather ID & no capsules → bottom-left
+           - layout-center: weather-only OR capsules-only → center clock, dock bottom
+           - layout-dashboard: weather ID + capsules → top-left clock, right capsules, weather BOTTOM only
+        */
+        .slots-screen {
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            padding: 5.5vh 4vw 4.2vh;
+            display: none;
+            -webkit-box-orient: vertical;
+            -webkit-box-direction: normal;
+            -webkit-flex-direction: column;
+            flex-direction: column;
+            z-index: 3;
+            opacity: 0;
+            box-sizing: border-box;
+        }
+
+        body.slots-mode .slots-screen {
+            display: -webkit-box;
+            display: -webkit-flex;
+            display: flex;
+        }
+
+        body.slots-mode .slots-screen.reveal {
+            animation: uiReveal 1s ease 2.1s forwards;
+        }
+
+        body.slots-mode.no-splash .slots-screen {
+            opacity: 1;
+            animation: none;
+        }
+
+        @keyframes uiReveal {
+            from { opacity: 0; transform: translateY(6px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .top-row {
+            display: -webkit-box;
+            display: -webkit-flex;
+            display: flex;
+            -webkit-box-align: start;
+            -webkit-align-items: flex-start;
+            align-items: flex-start;
+            -webkit-box-pack: justify;
+            -webkit-justify-content: space-between;
+            justify-content: space-between;
+            width: 100%;
+            min-height: 0;
+            -webkit-box-flex: 1;
+            -webkit-flex: 1 1 auto;
+            flex: 1;
+        }
+
+        /* gap is Chromium 84+ — margins always; html.flex-gap (JS probe) upgrades to gap */
+        .top-row > .right-col {
+            margin-left: 3vw;
+        }
+
+        .slots-left {
+            z-index: 2;
+            max-width: 62%;
+            max-width: calc(100% - var(--right-col-w) - 16px);
+            min-width: 0;
+            text-shadow:
+                0 1px 2px rgba(0, 0, 0, 0.35),
+                0 2px 10px rgba(0, 0, 0, 0.28),
+                0 6px 22px rgba(0, 0, 0, 0.18);
+        }
+
+        body.bright-wallpaper .slots-left {
+            text-shadow:
+                0 1px 2px rgba(0, 0, 0, 0.35),
+                0 2px 10px rgba(0, 0, 0, 0.28),
+                0 6px 22px rgba(0, 0, 0, 0.18);
+        }
+
+        .slots-date {
+            margin-top: 14px;
+            margin-top: clamp(10px, 1.8vh, 18px);
+            margin-left: 0;
+            font-size: var(--date-size);
+            font-weight: 600;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.9);
+            opacity: 0.9;
+            white-space: nowrap;
+            text-shadow:
+                0 1px 2px rgba(0, 0, 0, 0.35),
+                0 3px 12px rgba(0, 0, 0, 0.25);
+        }
+
+        .quote {
+            margin-top: 12px;
+            margin-top: clamp(10px, 1.6vh, 16px);
+            margin-left: 0;
+            /* Hard px cap first — old WebViews ignore min() and 52vw blows up on TVs */
+            max-width: 420px;
+            max-width: min(48vw, 420px);
+            width: 100%;
+            box-sizing: border-box;
+            padding-left: 12px;
+            padding-left: clamp(10px, 1.4vw, 16px);
+            border-left: 2px solid rgba(255, 255, 255, 0.55);
+            opacity: 0;
+            transition: opacity 0.8s ease;
+            position: relative;
+            z-index: 2;
+        }
+
+        .quote.show { opacity: 1; }
+
+        .quote .quote-text {
+            font-family: "Source Serif 4", Georgia, "Times New Roman", serif;
+            font-size: var(--quote-size);
+            font-weight: 400;
+            line-height: 1.48;
+            letter-spacing: 0.015em;
+            color: rgba(255, 255, 255, 0.84);
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            max-width: 100%;
+            text-shadow:
+                0 1px 2px rgba(0, 0, 0, 0.35),
+                0 3px 12px rgba(0, 0, 0, 0.24);
+        }
+
+        .quote .quote-author {
+            font-family: "Source Serif 4", Georgia, "Times New Roman", serif;
+            margin-top: 0.55em;
+            font-size: var(--quote-author);
+            font-weight: 500;
+            letter-spacing: 0.08em;
+            color: rgba(255, 255, 255, 0.52);
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.32);
+        }
+
+        /* Capsules — phone/tablet readable (clamp), not pure-vw crumbs */
+        .slot {
+            display: -webkit-box;
+            display: -webkit-flex;
+            display: flex;
+            -webkit-box-align: center;
+            -webkit-align-items: center;
+            align-items: center;
+            min-height: var(--slot-min-h);
+            padding: var(--slot-pad-y) var(--slot-pad-x) var(--slot-pad-y) calc(var(--slot-pad-x) * 0.75);
+            border-radius: 999px;
+            background: rgba(22, 26, 34, 0.28);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow:
+                inset 0 0.5px 0 rgba(255, 255, 255, 0.05),
+                0 2px 14px rgba(0, 0, 0, 0.22);
+            backdrop-filter: blur(var(--glass-blur)) saturate(1.1);
+            -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.1);
+        }
+
+        .slot > .ico {
+            margin-right: 14px;
+            margin-right: var(--slot-gap-inner);
+        }
+
+        body.bright-wallpaper .slot {
+            background: rgba(16, 18, 24, 0.32);
+        }
+
+        .slot .ico {
+            width: var(--slot-ico);
+            height: var(--slot-ico);
+            -webkit-flex-shrink: 0;
+            flex-shrink: 0;
+            display: -webkit-box;
+            display: -webkit-flex;
+            display: flex;
+            -webkit-box-align: center;
+            -webkit-align-items: center;
+            align-items: center;
+            -webkit-box-pack: center;
+            -webkit-justify-content: center;
+            justify-content: center;
+            opacity: 0.95;
+            line-height: 1;
+        }
+
+        .slot .ico img,
+        .slot .ico svg {
+            width: calc(var(--slot-ico) * 0.9);
+            height: calc(var(--slot-ico) * 0.9);
+            object-fit: contain;
+            display: block;
+        }
+
+        .slot .text {
+            display: -webkit-box;
+            display: -webkit-flex;
+            display: flex;
+            -webkit-box-orient: vertical;
+            -webkit-box-direction: normal;
+            -webkit-flex-direction: column;
+            flex-direction: column;
+            min-width: 0;
+            -webkit-box-flex: 1;
+            -webkit-flex: 1 1 auto;
+            flex: 1;
+        }
+
+        .slot .name {
+            margin-bottom: 2px;
+            font-size: var(--slot-name);
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.55);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+        }
+
+        .slot .state {
+            font-size: var(--slot-state);
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-variant-numeric: tabular-nums;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+        }
+
+        /* Right column = capsules ONLY (never weather) */
+        .right-col {
+            display: none;
+            -webkit-box-orient: vertical;
+            -webkit-box-direction: normal;
+            -webkit-flex-direction: column;
+            flex-direction: column;
+            -webkit-box-align: stretch;
+            -webkit-align-items: stretch;
+            align-items: stretch;
+            width: var(--right-col-w);
+            -webkit-flex-shrink: 0;
+            flex-shrink: 0;
+            z-index: 2;
+            margin-top: 0.15vw;
+            -webkit-align-self: flex-start;
+            align-self: flex-start;
+        }
+
+        body.slots-mode.has-capsules .right-col {
+            display: -webkit-box;
+            display: -webkit-flex;
+            display: flex;
+        }
+
+        .slots {
+            display: -webkit-box;
+            display: -webkit-flex;
+            display: flex;
+            -webkit-box-orient: vertical;
+            -webkit-box-direction: normal;
+            -webkit-flex-direction: column;
+            flex-direction: column;
+            width: 100%;
+        }
+
+        .slots > .slot + .slot {
+            margin-top: 16px;
+            margin-top: var(--slots-gap);
+        }
+
+        .slots:empty,
+        .slots.hidden {
+            display: none;
+        }
+
+        /* Weather ALWAYS bottom dock — never top-right */
+        .bottom-dock {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 4.5%;
+            z-index: 4;
+            display: none;
+            -webkit-box-orient: vertical;
+            -webkit-box-direction: normal;
+            -webkit-flex-direction: column;
+            flex-direction: column;
+            -webkit-box-align: center;
+            -webkit-align-items: center;
+            align-items: center;
+            pointer-events: none;
+        }
+
+        .bottom-dock > * + * {
+            margin-top: 16px;
+            margin-top: var(--slots-gap);
+        }
+
+        .bottom-dock > * {
+            pointer-events: auto;
+        }
+
+        body.slots-mode.has-weather .bottom-dock {
+            display: -webkit-box;
+            display: -webkit-flex;
+            display: flex;
+        }
+
+        .hourly-wrap {
+            display: none;
+            width: var(--hourly-w);
+            z-index: 2;
+        }
+
+        body.slots-mode .hourly-wrap.has-data {
+            display: block;
+        }
+
+        .hourly {
+            border-radius: var(--hourly-radius);
+            padding: var(--hourly-pad);
+            background: rgba(22, 26, 34, 0.38);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            box-shadow:
+                inset 0 0.5px 0 rgba(255, 255, 255, 0.06),
+                0 3px 14px rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(18px) saturate(1.1);
+            -webkit-backdrop-filter: blur(18px) saturate(1.1);
+        }
+
+        .hourly-bar {
+            display: flex;
+            height: var(--hourly-bar-h);
+            border-radius: 999px;
+            overflow: hidden;
+        }
+
+        /* Per-hour cells are transparent — continuous sky lives on the bar gradient. */
+        .hourly-bar.has-sky-ramp .seg {
+            background: transparent !important;
+        }
+
+        .seg {
+            -webkit-flex: 1 1 0;
+            flex: 1 1 0;
+            display: -webkit-box;
+            display: -webkit-flex;
+            display: flex;
+            -webkit-box-align: center;
+            -webkit-align-items: center;
+            align-items: center;
+            -webkit-box-pack: center;
+            -webkit-justify-content: center;
+            justify-content: center;
+            min-width: 0;
+            position: relative;
+            z-index: 1;
+        }
+
+        .seg svg {
+            width: var(--hourly-ico);
+            height: var(--hourly-ico);
+            opacity: 0.95;
+            /* color only — do not set fill here or fill="none" stroke rays get solid-filled */
+            color: inherit;
+            position: relative;
+            z-index: 2;
+        }
+
+        /*
+         * Fallback solid chips (daily / unknown hour). Hourly strip uses a
+         * continuous bar gradient; daily strip stays solid per-day blocks.
+         */
+        .c-clear-night,
+        .c-partlycloudy-night,
+        .c-cloudy-night {
+            background: #0a0e16;
+            color: #ffffff;
+        }
+        .c-cloudy { background: #4a5566; color: #ffffff; }
+        .c-fog,
+        .c-foggy,
+        .c-exceptional { background: #5c6778; color: #ffffff; }
+        .c-rainy,
+        .c-pouring,
+        .c-pouring-rain,
+        .c-lightning,
+        .c-lightning-rainy,
+        .c-hail { background: #3a6288; color: #ffffff; }
+        .c-partlycloudy { background: #6eacd9; color: #102033; }
+        .c-sunny { background: #8ec8ff; color: #102033; }
+        .c-snowy,
+        .c-snowy-rainy { background: #9eb6d4; color: #102033; }
+        .c-windy,
+        .c-windy-variant { background: #4a5566; color: #ffffff; }
+
+        .seg.sky-dark { color: #ffffff; }
+        .seg.sky-light { color: #102033; }
+
+        /* Taller glyphs (rain/snow/fog) sit optically high — nudge down a hair */
+        .c-rainy svg,
+        .c-pouring-rain svg,
+        .c-snowy svg,
+        .c-snowy-rainy svg,
+        .c-fog svg,
+        .c-foggy svg {
+            -webkit-transform: translateY(2px);
+            transform: translateY(2px);
+        }
+
+        .hourly-labels {
+            display: flex;
+            margin-top: var(--hourly-labels-gap);
+            padding: 0 1px;
+        }
+
+        .hour-col {
+            -webkit-flex: 1 1 0;
+            flex: 1 1 0;
+            text-align: center;
+            min-width: 0;
+            display: -webkit-box;
+            display: -webkit-flex;
+            display: flex;
+            -webkit-box-orient: vertical;
+            -webkit-box-direction: normal;
+            -webkit-flex-direction: column;
+            flex-direction: column;
+        }
+
+        .hour-col .t {
+            margin-bottom: 3px;
+            font-size: var(--hourly-label);
+            font-weight: 650;
+            color: rgba(255,255,255,0.78);
+            white-space: nowrap;
+            letter-spacing: 0.02em;
+            text-shadow:
+                0 1px 2px rgba(0, 0, 0, 0.4),
+                0 2px 8px rgba(0, 0, 0, 0.28);
+        }
+
+        .hour-col .temp {
+            font-size: var(--hourly-temp);
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            text-shadow:
+                0 1px 2px rgba(0, 0, 0, 0.4),
+                0 2px 8px rgba(0, 0, 0, 0.28);
+        }
+
+        /* —— layout-corner: no weather & no capsules → classic bottom-left ——
+           Mirror .info-container (bottom/left absolute). Do NOT use flex:1 top-row
+           or flex:0 (parses as basis 0%) — that parks the clock mid/top-left. */
+        body.slots-mode.layout-corner .slots-screen {
+            justify-content: flex-start;
+            align-items: flex-start;
+            padding: 0;
+        }
+
+        body.slots-mode.layout-corner .top-row {
+            position: absolute;
+            left: 5vw;
+            bottom: 8vh;
+            top: auto;
+            right: auto;
+            width: auto;
+            max-width: 85%;
+            -webkit-flex: 0 0 auto;
+            flex: 0 0 auto;
+            -webkit-align-self: auto;
+            align-self: auto;
+            -webkit-box-pack: start;
+            -webkit-justify-content: flex-start;
+            justify-content: flex-start;
+            -webkit-box-align: start;
+            -webkit-align-items: flex-start;
+            align-items: flex-start;
+        }
+
+        body.slots-mode.layout-corner .top-row > .right-col {
+            margin-left: 0;
+        }
+
+        body.slots-mode.layout-corner .slots-left {
+            max-width: 100%;
+            text-align: left;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        body.slots-mode.layout-corner .slots-left .time-display {
+            margin-left: 3px;
+        }
+
+        body.slots-mode.layout-corner .slots-left .hour,
+        body.slots-mode.layout-corner .slots-left .minute {
+            font-size: 10vw;
+            letter-spacing: -0.3vw;
+        }
+
+        body.slots-mode.layout-corner .slots-left .colon {
+            font-size: 7.5vw;
+            top: -1.6vw;
+        }
+
+        body.slots-mode.layout-corner .slots-left .ampm {
+            font-size: 2.4vw;
+        }
+
+        body.slots-mode.layout-corner .slots-date {
+            margin-top: 1vh;
+            margin-left: 0.5vw;
+            font-size: 1.8vw;
+            font-size: clamp(14px, 1.8vw, 22px);
+            letter-spacing: 0.12em;
+            text-align: left;
+        }
+
+        body.slots-mode.layout-corner .quote {
+            margin-top: 1.5vh;
+            margin-left: 0.5vw;
+            max-width: 400px;
+            max-width: min(68vw, 400px);
+            padding-left: 12px;
+            padding-left: clamp(10px, 1.4vw, 16px);
+            border-left: 2px solid rgba(255, 255, 255, 0.55);
+            text-align: left;
+        }
+
+        body.slots-mode.layout-corner .quote .quote-text,
+        body.slots-mode.layout-corner .quote .quote-author {
+            text-align: left;
+        }
+
+        body.slots-mode.layout-corner .right-col,
+        body.slots-mode.layout-corner .bottom-dock {
+            display: none !important;
+        }
+
+        /* Portrait layout 5: bottom-left stack was tiny (10vw on narrow width) */
+        @media (orientation: portrait) {
+            body.slots-mode.layout-corner .top-row {
+                left: 6vw;
+                bottom: 7vh;
+                max-width: 90%;
+            }
+
+            body.slots-mode.layout-corner .slots-left .hour,
+            body.slots-mode.layout-corner .slots-left .minute {
+                font-size: 22vw;
+                font-size: clamp(96px, 22vw, 220px);
+                letter-spacing: -0.04em;
+            }
+
+            body.slots-mode.layout-corner .slots-left .colon {
+                font-size: 16vw;
+                font-size: clamp(70px, 16vw, 160px);
+                top: -0.18em;
+            }
+
+            body.slots-mode.layout-corner .slots-left .ampm {
+                font-size: 28px;
+                font-size: clamp(18px, 4.5vw, 34px);
+            }
+
+            body.slots-mode.layout-corner .slots-date {
+                margin-top: 1.2vh;
+                font-size: 22px;
+                font-size: clamp(16px, 3.8vw, 26px);
+                letter-spacing: 0.12em;
+            }
+
+            body.slots-mode.layout-corner .quote {
+                margin-top: 1.6vh;
+                max-width: 88vw;
+                max-width: min(88vw, 480px);
+            }
+
+            body.slots-mode.layout-corner .quote .quote-text {
+                font-size: 18px;
+                font-size: clamp(15px, 3.6vw, 24px);
+            }
+
+            body.slots-mode.layout-corner .quote .quote-author {
+                font-size: 13px;
+                font-size: clamp(12px, 2.8vw, 18px);
+            }
+        }
+
+        /* —— layout-center: weather-only OR capsules-only ——
+           Match mockup scheme1: hero truly centered; capsules/weather absolute bottom.
+           Requires .slots-screen to be full-bleed (top/right/bottom/left, not inset). */
+        body.slots-mode.layout-center .slots-screen {
+            -webkit-box-pack: center;
+            -webkit-justify-content: center;
+            justify-content: center;
+            -webkit-box-align: center;
+            -webkit-align-items: center;
+            align-items: center;
+            /* Extra bottom pad so optical center sits above the capsule strip */
+            padding: 4vh 4vw 20vh;
+        }
+
+        body.slots-mode.layout-center .top-row {
+            /* Must NOT flex-grow, or justify-content:center on the screen is defeated.
+               Keep position:static so absolute capsules pin to .slots-screen. */
+            position: static;
+            -webkit-flex: 0 0 auto;
+            flex: 0 0 auto;
+            width: auto;
+            max-width: 100%;
+            -webkit-box-pack: center;
+            -webkit-justify-content: center;
+            justify-content: center;
+            -webkit-box-align: center;
+            -webkit-align-items: center;
+            align-items: center;
+        }
+
+        body.slots-mode.layout-center .slots-left {
+            /* Cap the hero column so long quotes never span a whole TV/tablet */
+            max-width: 560px;
+            max-width: min(62vw, 560px);
+            width: 100%;
+            text-align: center;
+            display: -webkit-box;
+            display: -webkit-flex;
+            display: flex;
+            -webkit-box-orient: vertical;
+            -webkit-box-direction: normal;
+            -webkit-flex-direction: column;
+            flex-direction: column;
+            -webkit-box-align: center;
+            -webkit-align-items: center;
+            align-items: center;
+        }
+
+        body.slots-mode.layout-center .slots-left .time-display {
+            margin-left: 0; /* classic style uses -6px; kills true center */
+        }
+
+        body.slots-mode.layout-center .slots-left .hour,
+        body.slots-mode.layout-center .slots-left .minute {
+            /* vw fallback first — clamp ignored on WebView <79 drops the whole decl */
+            font-size: 18vw;
+            font-size: clamp(88px, 22vmin, 180px);
+            letter-spacing: -0.04em;
+        }
+
+        body.slots-mode.layout-center .slots-left .colon {
+            font-size: 13vw;
+            font-size: clamp(64px, 16vmin, 128px);
+            top: -0.18em;
+        }
+
+        body.slots-mode.layout-center .slots-left .ampm {
+            font-size: var(--ampm-size);
+        }
+
+        body.slots-mode.layout-center .slots-date {
+            margin-top: 14px;
+            margin-top: clamp(12px, 2.2vmin, 20px);
+            margin-left: 0;
+            font-size: var(--date-size);
+            text-align: center;
+        }
+
+        body.slots-mode.layout-center .quote {
+            margin-top: 14px;
+            margin-top: clamp(12px, 2vmin, 18px);
+            margin-left: auto;
+            margin-right: auto;
+            /* Shrink-wrap short quotes; cap long English lines under the hero clock */
+            width: auto;
+            width: -webkit-fit-content;
+            width: fit-content;
+            max-width: 440px;
+            max-width: min(48vw, 440px);
+            padding-left: 0;
+            border-left: none;
+            text-align: center;
+            -webkit-box-sizing: border-box;
+            box-sizing: border-box;
+        }
+
+        body.slots-mode.layout-center .quote .quote-text {
+            font-size: var(--quote-size);
+            -webkit-line-clamp: 2;
+            line-height: 1.4;
+            text-align: center;
+            margin-left: auto;
+            margin-right: auto;
+            max-width: 100%;
+        }
+
+        body.slots-mode.layout-center .quote .quote-author {
+            display: block;
+            font-size: var(--quote-author);
+            margin-top: 0.55em;
+            letter-spacing: 0.04em;
+            text-align: center;
+            max-width: 100%;
+            white-space: normal;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+
+        /*
+         * Capsules-only (layout 3): keep capsules in the hero stack under the quote,
+         * not pinned to the screen bottom. Clock scales with viewport like weather-only.
+         */
+        body.slots-mode.layout-center.has-capsules .slots-screen {
+            /* Less bottom pad — capsules sit under quote, not floating at dock */
+            padding: 4vh 4vw 0vh;
+        }
+
+        body.slots-mode.layout-center.has-capsules .top-row {
+            -webkit-box-orient: vertical;
+            -webkit-box-direction: normal;
+            -webkit-flex-direction: column;
+            flex-direction: column;
+            -webkit-box-align: center;
+            -webkit-align-items: center;
+            align-items: center;
+            width: auto;
+            max-width: 100%;
+        }
+
+        body.slots-mode.layout-center.has-capsules .slots-left {
+            max-width: 1100px;
+            max-width: min(78vw, 1100px);
+        }
+
+        body.slots-mode.layout-center.has-capsules .slots-left .hour,
+        body.slots-mode.layout-center.has-capsules .slots-left .minute {
+            font-size: 16vw;
+            font-size: clamp(120px, 16vw, 340px);
+        }
+
+        body.slots-mode.layout-center.has-capsules .slots-left .colon {
+            font-size: 12vw;
+            font-size: clamp(88px, 12vw, 250px);
+        }
+
+        body.slots-mode.layout-center.has-capsules .slots-left .ampm {
+            font-size: 28px;
+            font-size: clamp(20px, 2.4vw, 44px);
+        }
+
+        body.slots-mode.layout-center.has-capsules .slots-date {
+            font-size: 24px;
+            font-size: clamp(17px, 1.85vw, 34px);
+            letter-spacing: 0.14em;
+        }
+
+        body.slots-mode.layout-center.has-capsules .quote {
+            max-width: 720px;
+            max-width: min(58vw, 720px);
+        }
+
+        body.slots-mode.layout-center.has-capsules .quote .quote-text {
+            font-size: 20px;
+            font-size: clamp(15px, 1.4vw, 28px);
+        }
+
+        body.slots-mode.layout-center.has-capsules .quote .quote-author {
+            font-size: 15px;
+            font-size: clamp(12px, 1.05vw, 20px);
+        }
+
+        body.slots-mode.layout-center.has-capsules .right-col {
+            position: static;
+            left: auto;
+            right: auto;
+            top: auto;
+            bottom: auto;
+            -webkit-transform: none;
+            transform: none;
+            width: auto;
+            max-width: 94vw;
+            margin: 18px 0 0;
+            margin-top: clamp(16px, 2.4vmin, 28px);
+            margin-left: 0;
+            -webkit-box-align: center;
+            -webkit-align-items: center;
+            align-items: center;
+            -webkit-align-self: center;
+            align-self: center;
+            z-index: 5;
+        }
+
+        /* If both ever combine in center mode, lift capsules above the weather dock */
+        body.slots-mode.layout-center.has-capsules.has-weather .right-col {
+            position: absolute;
+            left: 50%;
+            bottom: 22%;
+            bottom: calc(5.5% + var(--hourly-bar-h) + var(--hourly-pad) + var(--hourly-pad) + 3.6em + var(--slots-gap));
+            -webkit-transform: translateX(-50%);
+            transform: translateX(-50%);
+            margin-top: 0;
+        }
+
+        body.slots-mode.layout-center.has-capsules .slots {
+            -webkit-box-orient: horizontal;
+            -webkit-box-direction: normal;
+            -webkit-flex-direction: row;
+            flex-direction: row;
+            -webkit-flex-wrap: wrap;
+            flex-wrap: wrap;
+            -webkit-box-pack: center;
+            -webkit-justify-content: center;
+            justify-content: center;
+            width: auto;
+        }
+
+        body.slots-mode.layout-center.has-capsules .slots > .slot {
+            margin-top: 0;
+            margin-left: 8px;
+            margin-right: 8px;
+            margin-bottom: 12px;
+            margin-left: calc(var(--slots-gap) / 2);
+            margin-right: calc(var(--slots-gap) / 2);
+            margin-bottom: var(--slots-gap);
+        }
+
+        body.slots-mode.layout-center.has-capsules .slots > .slot + .slot {
+            margin-top: 0;
+        }
+
+        /*
+         * Portrait layout 3: stack capsules, center the group, left-align starts
+         * (icons/text share one leading edge — not each pill independently centered).
+         */
+        @media (orientation: portrait) {
+            body.slots-mode.layout-center.has-capsules .right-col {
+                width: auto;
+                max-width: 86vw;
+                max-width: min(86vw, 420px);
+                -webkit-box-align: center;
+                -webkit-align-items: center;
+                align-items: center;
+            }
+
+            body.slots-mode.layout-center.has-capsules .slots {
+                -webkit-box-orient: vertical;
+                -webkit-box-direction: normal;
+                -webkit-flex-direction: column;
+                flex-direction: column;
+                -webkit-flex-wrap: nowrap;
+                flex-wrap: nowrap;
+                -webkit-box-align: stretch;
+                -webkit-align-items: stretch;
+                align-items: stretch;
+                -webkit-box-pack: start;
+                -webkit-justify-content: flex-start;
+                justify-content: flex-start;
+                width: 100%;
+                max-width: 360px;
+                max-width: min(78vw, 360px);
+            }
+
+            body.slots-mode.layout-center.has-capsules .slots > .slot {
+                width: 100%;
+                max-width: none;
+                margin-left: 0;
+                margin-right: 0;
+                margin-bottom: 12px;
+                margin-bottom: var(--slots-gap);
+                -webkit-box-pack: start;
+                -webkit-justify-content: flex-start;
+                justify-content: flex-start;
+                -webkit-box-sizing: border-box;
+                box-sizing: border-box;
+                text-align: left;
+            }
+
+            body.slots-mode.layout-center.has-capsules .slots > .slot .text {
+                -webkit-box-align: start;
+                -webkit-align-items: flex-start;
+                align-items: flex-start;
+            }
+
+            body.slots-mode.layout-center.has-capsules .slots > .slot .name,
+            body.slots-mode.layout-center.has-capsules .slots > .slot .state {
+                text-align: left;
+            }
+
+            html.flex-gap body.slots-mode.layout-center.has-capsules .slots > .slot {
+                margin-left: 0;
+                margin-right: 0;
+                margin-bottom: 0;
+            }
+        }
+
+        @media (min-width: 1600px) and (min-height: 700px) {
+            body.slots-mode.layout-center.has-capsules .slots-left .hour,
+            body.slots-mode.layout-center.has-capsules .slots-left .minute {
+                font-size: 17vw;
+                font-size: clamp(180px, 17vw, 400px);
+            }
+            body.slots-mode.layout-center.has-capsules .slots-left .colon {
+                font-size: 12.5vw;
+                font-size: clamp(130px, 12.5vw, 290px);
+            }
+            body.slots-mode.layout-center.has-capsules .slots-date {
+                font-size: 28px;
+                font-size: clamp(20px, 1.95vw, 40px);
+            }
+            body.slots-mode.layout-center.has-capsules .quote {
+                max-width: 920px;
+                max-width: min(52vw, 920px);
+            }
+            body.slots-mode.layout-center.has-capsules .quote .quote-text {
+                font-size: 24px;
+                font-size: clamp(18px, 1.45vw, 32px);
+            }
+        }
+
+        body.slots-mode.layout-center .bottom-dock {
+            bottom: 4.5%;
+        }
+
+        /*
+         * Weather-only: grow with viewport WIDTH (wide panels).
+         * Old 560px weather + vmin clock left huge empty side gutters.
+         * Side inset is fixed ~45dp — vw/% was too tight on phones and
+         * ignored by absolute .bottom-dock (left/right:0).
+         */
+        body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-screen {
+            /* Full shorthand so L/R cannot fall back to layout-center’s 4vw.
+             * Extra bottom pad lifts the optical center so clock/quote sit
+             * above the weather dock (not visually mid-low). */
+            padding: 2vh 45px 28vh;
+        }
+
+        @media (orientation: landscape) {
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-screen {
+                padding: 1.5vh 45px 20vh;
+            }
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .top-row {
+                -webkit-transform: translateY(-3vh);
+                transform: translateY(-3vh);
+            }
+        }
+
+        body.slots-mode.layout-center.has-weather:not(.has-capsules) .bottom-dock {
+            left: 45px;
+            right: 45px;
+            padding-left: 0;
+            padding-right: 0;
+            box-sizing: border-box;
+        }
+
+        body.slots-mode.layout-center.has-weather:not(.has-capsules) .hourly-wrap {
+            width: 100%;
+            max-width: 980px;
+            max-width: min(74vw, 980px);
+            margin-left: auto;
+            margin-right: auto;
+            /* Local tokens — strip scales with screen, not stuck on phone sizes */
+            --hourly-pad: 18px;
+            --hourly-pad: clamp(14px, 1.4vw, 28px);
+            --hourly-bar-h: 48px;
+            --hourly-bar-h: clamp(40px, 5.2vmin, 68px);
+            --hourly-ico: 24px;
+            --hourly-ico: clamp(20px, 2.4vw, 36px);
+            --hourly-label: 16px;
+            --hourly-label: clamp(13px, 1.25vw, 22px);
+            --hourly-temp: 17px;
+            --hourly-temp: clamp(14px, 1.35vw, 24px);
+            --hourly-radius: 22px;
+            --hourly-radius: clamp(18px, 1.6vw, 28px);
+            --hourly-labels-gap: 12px;
+            --hourly-labels-gap: clamp(8px, 1.1vw, 16px);
+        }
+
+        body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-left {
+            max-width: 1100px;
+            max-width: min(100%, 1100px);
+            box-sizing: border-box;
+        }
+
+        body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-left .time-display {
+            max-width: 100%;
+        }
+
+        body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-left .hour,
+        body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-left .minute {
+            /* Keep glyphs inside the 45px side inset (28vw portrait overflows) */
+            font-size: 14vw;
+            font-size: clamp(100px, 14vw, 300px);
+        }
+
+        body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-left .colon {
+            font-size: 10.5vw;
+            font-size: clamp(72px, 10.5vw, 220px);
+        }
+
+        body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-left .ampm {
+            font-size: 28px;
+            font-size: clamp(20px, 2.4vw, 44px);
+        }
+
+        body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-date {
+            font-size: 24px;
+            font-size: clamp(17px, 1.85vw, 34px);
+            letter-spacing: 0.14em;
+        }
+
+        body.slots-mode.layout-center.has-weather:not(.has-capsules) .quote {
+            max-width: 720px;
+            max-width: min(58vw, 720px);
+        }
+
+        body.slots-mode.layout-center.has-weather:not(.has-capsules) .quote .quote-text {
+            font-size: 20px;
+            font-size: clamp(15px, 1.4vw, 28px);
+            -webkit-line-clamp: 2;
+        }
+
+        body.slots-mode.layout-center.has-weather:not(.has-capsules) .quote .quote-author {
+            font-size: 15px;
+            font-size: clamp(12px, 1.05vw, 20px);
+        }
+
+        /* Portrait layout 1: clock + quote use more of the tall viewport */
+        @media (orientation: portrait) {
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-screen {
+                padding: 5vh 45px 24vh;
+            }
+
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-left {
+                max-width: 720px;
+                max-width: min(100%, 720px);
+            }
+
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-left .time-display {
+                max-width: 100%;
+                width: max-content;
+                margin-left: auto;
+                margin-right: auto;
+                box-sizing: border-box;
+            }
+
+            /*
+             * Size to the padded column (100vw − ~100px), not raw 22vw —
+             * four wide digits (10:28) + AM/PM were clipping the screen edge.
+             */
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-left .hour,
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-left .minute {
+                font-size: 17vw;
+                font-size: calc((100vw - 100px) / 4.8);
+                font-size: clamp(88px, calc((100vw - 100px) / 4.8), 220px);
+                letter-spacing: -0.05em;
+            }
+
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-left .colon {
+                font-size: 12vw;
+                font-size: calc((100vw - 100px) / 6.5);
+                font-size: clamp(64px, calc((100vw - 100px) / 6.5), 160px);
+            }
+
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-left .ampm {
+                font-size: 18px;
+                font-size: clamp(14px, 3.2vw, 26px);
+            }
+
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-date {
+                font-size: 26px;
+                font-size: clamp(18px, 4.2vw, 32px);
+                letter-spacing: 0.12em;
+            }
+
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .quote {
+                max-width: 92vw;
+                max-width: min(92vw, 560px);
+            }
+
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .quote .quote-text {
+                font-size: 20px;
+                font-size: clamp(16px, 4vw, 28px);
+                -webkit-line-clamp: 3;
+            }
+
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .quote .quote-author {
+                font-size: 14px;
+                font-size: clamp(13px, 3vw, 20px);
+            }
+
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .hourly-wrap {
+                max-width: 640px;
+                max-width: min(100%, 640px);
+            }
+        }
+
+        /*
+         * Compact square panels (480×480 etc.): portrait/vw boosts overshoot.
+         * Cap clock + quote so hero + weather still fit.
+         */
+        @media (max-width: 520px) and (max-height: 520px) {
+            body.slots-mode.layout-center .slots-screen,
+            body.slots-mode.layout-center.has-capsules .slots-screen {
+                padding: 2.5vh 3vw 16vh;
+            }
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-screen {
+                padding: 2.5vh 45px 16vh;
+            }
+
+            body.slots-mode.layout-center .slots-left .hour,
+            body.slots-mode.layout-center .slots-left .minute,
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-left .hour,
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-left .minute,
+            body.slots-mode.layout-center.has-capsules .slots-left .hour,
+            body.slots-mode.layout-center.has-capsules .slots-left .minute {
+                font-size: 16vw;
+                font-size: clamp(56px, 16vw, 88px);
+                letter-spacing: -0.03em;
+            }
+
+            body.slots-mode.layout-center .slots-left .colon,
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-left .colon,
+            body.slots-mode.layout-center.has-capsules .slots-left .colon {
+                font-size: 12vw;
+                font-size: clamp(40px, 12vw, 64px);
+                top: -0.14em;
+            }
+
+            body.slots-mode.layout-center .slots-left .ampm,
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-left .ampm,
+            body.slots-mode.layout-center.has-capsules .slots-left .ampm {
+                font-size: 14px;
+                font-size: clamp(12px, 3vw, 16px);
+            }
+
+            body.slots-mode.layout-center .slots-date,
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-date,
+            body.slots-mode.layout-center.has-capsules .slots-date {
+                margin-top: 8px;
+                font-size: 12px;
+                font-size: clamp(11px, 2.6vw, 14px);
+                letter-spacing: 0.1em;
+            }
+
+            body.slots-mode.layout-center .quote,
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .quote,
+            body.slots-mode.layout-center.has-capsules .quote {
+                margin-top: 8px;
+                max-width: 86vw;
+                max-width: min(86vw, 320px);
+            }
+
+            body.slots-mode.layout-center .quote .quote-text,
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .quote .quote-text,
+            body.slots-mode.layout-center.has-capsules .quote .quote-text {
+                font-size: 13px;
+                font-size: clamp(12px, 2.8vw, 15px);
+                -webkit-line-clamp: 2;
+                line-height: 1.35;
+            }
+
+            body.slots-mode.layout-center .quote .quote-author,
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .quote .quote-author,
+            body.slots-mode.layout-center.has-capsules .quote .quote-author {
+                font-size: 11px;
+                font-size: clamp(10px, 2.2vw, 13px);
+            }
+
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .hourly-wrap,
+            body.slots-mode.layout-dashboard .hourly-wrap {
+                max-width: 94vw;
+                max-width: min(94vw, 440px);
+                --hourly-bar-h: 28px;
+                --hourly-ico: 14px;
+                --hourly-label: 10px;
+                --hourly-temp: 11px;
+                --hourly-pad: 10px;
+            }
+
+            body.slots-mode.layout-corner .top-row {
+                left: 4vw;
+                bottom: 5vh;
+                max-width: 92%;
+            }
+
+            body.slots-mode.layout-corner .slots-left .hour,
+            body.slots-mode.layout-corner .slots-left .minute {
+                font-size: 16vw;
+                font-size: clamp(56px, 16vw, 88px);
+            }
+
+            body.slots-mode.layout-corner .slots-left .colon {
+                font-size: 12vw;
+                font-size: clamp(40px, 12vw, 64px);
+            }
+
+            body.slots-mode.layout-corner .slots-left .ampm {
+                font-size: 14px;
+                font-size: clamp(12px, 3vw, 16px);
+            }
+
+            body.slots-mode.layout-corner .slots-date {
+                font-size: 12px;
+                font-size: clamp(11px, 2.6vw, 14px);
+            }
+
+            body.slots-mode.layout-corner .quote {
+                max-width: 86vw;
+                max-width: min(86vw, 300px);
+            }
+
+            body.slots-mode.layout-corner .quote .quote-text {
+                font-size: 12px;
+                font-size: clamp(11px, 2.6vw, 14px);
+            }
+
+            body.slots-mode.layout-corner .quote .quote-author {
+                font-size: 10px;
+                font-size: clamp(10px, 2vw, 12px);
+            }
+        }
+
+        @media (min-width: 1280px) {
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .hourly-wrap {
+                max-width: 1100px;
+                max-width: min(82vw, 1100px);
+            }
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .quote {
+                max-width: 820px;
+                max-width: min(56vw, 820px);
+            }
+        }
+
+        @media (min-width: 1600px) and (min-height: 700px) {
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-left {
+                max-width: 1280px;
+                max-width: min(100%, 1280px);
+            }
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-left .hour,
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-left .minute {
+                font-size: 17vw;
+                font-size: clamp(180px, 17vw, 400px);
+            }
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-left .colon {
+                font-size: 12.5vw;
+                font-size: clamp(130px, 12.5vw, 290px);
+            }
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-left .ampm {
+                font-size: 34px;
+                font-size: clamp(24px, 2.5vw, 52px);
+            }
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-date {
+                font-size: 28px;
+                font-size: clamp(20px, 1.95vw, 40px);
+            }
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .quote {
+                max-width: 920px;
+                max-width: min(52vw, 920px);
+            }
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .quote .quote-text {
+                font-size: 24px;
+                font-size: clamp(18px, 1.45vw, 32px);
+            }
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .quote .quote-author {
+                font-size: 17px;
+                font-size: clamp(13px, 1.1vw, 22px);
+            }
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .hourly-wrap {
+                max-width: 1240px;
+                max-width: min(80vw, 1240px);
+                --hourly-bar-h: 56px;
+                --hourly-bar-h: clamp(48px, 5.5vmin, 76px);
+                --hourly-ico: 28px;
+                --hourly-ico: clamp(22px, 2.2vw, 40px);
+                --hourly-label: 18px;
+                --hourly-label: clamp(15px, 1.3vw, 24px);
+                --hourly-temp: 20px;
+                --hourly-temp: clamp(16px, 1.4vw, 28px);
+            }
+        }
+
+        @media (min-width: 2000px) and (min-height: 900px) {
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-left .hour,
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-left .minute {
+                font-size: 18vw;
+                font-size: clamp(220px, 18vw, 460px);
+            }
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-left .colon {
+                font-size: 13vw;
+                font-size: clamp(160px, 13vw, 330px);
+            }
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .hourly-wrap {
+                max-width: 1400px;
+                max-width: min(78vw, 1400px);
+            }
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .quote {
+                max-width: 1000px;
+                max-width: min(48vw, 1000px);
+            }
+        }
+
+        /* Phone / tablet: leave more air above weather + capsules */
+        @media (min-width: 361px) and (max-width: 1100px) {
+            body.slots-mode.layout-center .slots-screen {
+                padding-bottom: 26vh;
+            }
+            body.slots-mode.layout-dashboard .slots-screen {
+                padding: 4.5% 60px 16%;
+            }
+        }
+
+        /* —— layout-dashboard: weather + capsules —— */
+        body.slots-mode.layout-dashboard .slots-screen {
+            -webkit-box-pack: start;
+            -webkit-justify-content: flex-start;
+            justify-content: flex-start;
+            /* ~45dp side inset (vw/% was too edge-hugging on phones) */
+            padding: 5% 45px 14%;
+        }
+
+        body.slots-mode.layout-dashboard .top-row {
+            width: 100%;
+            -webkit-align-self: stretch;
+            align-self: stretch;
+            -webkit-box-align: start;
+            -webkit-align-items: flex-start;
+            align-items: flex-start;
+            -webkit-box-pack: justify;
+            -webkit-justify-content: space-between;
+            justify-content: space-between;
+        }
+
+        body.slots-mode.layout-dashboard .top-row > .right-col {
+            margin-left: 24px;
+            margin-left: clamp(16px, 3vmin, 36px);
+        }
+
+        body.slots-mode.layout-dashboard .slots-left {
+            max-width: 62%;
+            max-width: calc(100% - var(--right-col-w) - 16px);
+            text-align: left;
+        }
+
+        body.slots-mode.layout-dashboard .slots-left .hour,
+        body.slots-mode.layout-dashboard .slots-left .minute {
+            font-size: var(--clock-size);
+            letter-spacing: -0.04em;
+        }
+
+        body.slots-mode.layout-dashboard .slots-left .colon {
+            font-size: var(--clock-colon);
+            top: -0.16em;
+        }
+
+        body.slots-mode.layout-dashboard .slots-left .ampm {
+            font-size: var(--ampm-size);
+        }
+
+        body.slots-mode.layout-dashboard .right-col {
+            align-self: flex-start;
+            justify-content: flex-start;
+        }
+
+        /*
+         * Portrait dashboard (layout 4) → same hero stack as layout 3:
+         * centered clock / date / quote, capsules under quote, weather stays bottom.
+         */
+        @media (orientation: portrait) {
+            body.slots-mode.layout-dashboard .slots-screen {
+                -webkit-box-pack: center;
+                -webkit-justify-content: center;
+                justify-content: center;
+                -webkit-box-align: center;
+                -webkit-align-items: center;
+                align-items: center;
+                padding: 4vh 45px 22vh;
+            }
+
+            body.slots-mode.layout-dashboard .top-row {
+                width: auto;
+                max-width: 100%;
+                -webkit-align-self: center;
+                align-self: center;
+                -webkit-box-orient: vertical;
+                -webkit-box-direction: normal;
+                -webkit-flex-direction: column;
+                flex-direction: column;
+                -webkit-box-align: center;
+                -webkit-align-items: center;
+                align-items: center;
+                -webkit-box-pack: center;
+                -webkit-justify-content: center;
+                justify-content: center;
+            }
+
+            body.slots-mode.layout-dashboard .top-row > .right-col {
+                margin-left: 0;
+            }
+
+            body.slots-mode.layout-dashboard .slots-left {
+                max-width: 720px;
+                max-width: min(100%, 720px);
+                width: 100%;
+                text-align: center;
+                display: -webkit-box;
+                display: -webkit-flex;
+                display: flex;
+                -webkit-box-orient: vertical;
+                -webkit-box-direction: normal;
+                -webkit-flex-direction: column;
+                flex-direction: column;
+                -webkit-box-align: center;
+                -webkit-align-items: center;
+                align-items: center;
+            }
+
+            body.slots-mode.layout-dashboard .slots-left .time-display {
+                margin-left: 0;
+                max-width: 100%;
+                width: max-content;
+                margin-left: auto;
+                margin-right: auto;
+                box-sizing: border-box;
+            }
+
+            body.slots-mode.layout-dashboard .slots-left .hour,
+            body.slots-mode.layout-dashboard .slots-left .minute {
+                font-size: 17vw;
+                font-size: calc((100vw - 100px) / 4.8);
+                font-size: clamp(80px, calc((100vw - 100px) / 4.8), 200px);
+                letter-spacing: -0.05em;
+            }
+
+            body.slots-mode.layout-dashboard .slots-left .colon {
+                font-size: 12vw;
+                font-size: calc((100vw - 100px) / 6.5);
+                font-size: clamp(58px, calc((100vw - 100px) / 6.5), 150px);
+                top: -0.18em;
+            }
+
+            body.slots-mode.layout-dashboard .slots-left .ampm {
+                font-size: 16px;
+                font-size: clamp(13px, 3vw, 24px);
+            }
+
+            body.slots-mode.layout-dashboard .slots-date {
+                margin-top: 12px;
+                margin-left: 0;
+                font-size: 18px;
+                font-size: clamp(14px, 3.6vw, 24px);
+                letter-spacing: 0.12em;
+                text-align: center;
+            }
+
+            body.slots-mode.layout-dashboard .quote {
+                margin-top: 12px;
+                margin-left: auto;
+                margin-right: auto;
+                max-width: 88vw;
+                max-width: min(88vw, 480px);
+                width: auto;
+                width: -webkit-fit-content;
+                width: fit-content;
+                padding-left: 0;
+                border-left: none;
+                text-align: center;
+            }
+
+            body.slots-mode.layout-dashboard .quote .quote-text {
+                font-size: 14px;
+                font-size: clamp(13px, 3.2vw, 20px);
+                text-align: center;
+                -webkit-line-clamp: 2;
+            }
+
+            body.slots-mode.layout-dashboard .quote .quote-author {
+                font-size: 12px;
+                font-size: clamp(11px, 2.5vw, 14px);
+                text-align: center;
+                letter-spacing: 0.04em;
+            }
+
+            body.slots-mode.layout-dashboard .right-col {
+                position: static;
+                width: auto;
+                max-width: 86vw;
+                max-width: min(86vw, 420px);
+                margin: 16px 0 0;
+                margin-top: clamp(14px, 2.2vmin, 24px);
+                -webkit-box-align: center;
+                -webkit-align-items: center;
+                align-items: center;
+                -webkit-align-self: center;
+                align-self: center;
+                -webkit-flex-shrink: 0;
+                flex-shrink: 0;
+            }
+
+            body.slots-mode.layout-dashboard .slots {
+                -webkit-box-orient: vertical;
+                -webkit-box-direction: normal;
+                -webkit-flex-direction: column;
+                flex-direction: column;
+                -webkit-flex-wrap: nowrap;
+                flex-wrap: nowrap;
+                -webkit-box-align: stretch;
+                -webkit-align-items: stretch;
+                align-items: stretch;
+                -webkit-box-pack: start;
+                -webkit-justify-content: flex-start;
+                justify-content: flex-start;
+                width: 100%;
+                max-width: 360px;
+                max-width: min(78vw, 360px);
+            }
+
+            body.slots-mode.layout-dashboard .slots > .slot {
+                width: 100%;
+                margin-top: 0;
+                margin-left: 0;
+                margin-right: 0;
+                margin-bottom: 12px;
+                margin-bottom: var(--slots-gap);
+                -webkit-box-pack: start;
+                -webkit-justify-content: flex-start;
+                justify-content: flex-start;
+                -webkit-box-sizing: border-box;
+                box-sizing: border-box;
+                text-align: left;
+            }
+
+            body.slots-mode.layout-dashboard .slots > .slot + .slot {
+                margin-top: 0;
+            }
+
+            body.slots-mode.layout-dashboard .slots > .slot .text {
+                -webkit-box-align: start;
+                -webkit-align-items: flex-start;
+                align-items: flex-start;
+            }
+
+            body.slots-mode.layout-dashboard .slots > .slot .name,
+            body.slots-mode.layout-dashboard .slots > .slot .state {
+                text-align: left;
+            }
+
+            body.slots-mode.layout-dashboard .bottom-dock {
+                left: 45px;
+                right: 45px;
+                padding-left: 0;
+                padding-right: 0;
+            }
+
+            body.slots-mode.layout-dashboard .hourly-wrap {
+                max-width: 520px;
+                max-width: min(100%, 520px);
+            }
+
+            html.flex-gap body.slots-mode.layout-dashboard .top-row {
+                gap: 0;
+            }
+
+            html.flex-gap body.slots-mode.layout-dashboard .slots {
+                gap: var(--slots-gap);
+            }
+
+            html.flex-gap body.slots-mode.layout-dashboard .slots > .slot {
+                margin-left: 0;
+                margin-right: 0;
+                margin-bottom: 0;
+            }
+        }
+
+        /*
+         * Short landscape phones (e.g. 930×430 from 430×930 rotate):
+         * Default --right-col-w min 240px is too wide; previous 150px was too tight.
+         */
+        @media (orientation: landscape) and (max-height: 500px) {
+            body.slots-mode.layout-dashboard {
+                --right-col-w: 190px;
+                --right-col-w: min(32vw, 210px);
+                --slot-name: 12px;
+                --slot-state: 16px;
+                --slot-ico: 18px;
+                --slot-gap-inner: 9px;
+                --slot-pad-y: 8px;
+                --slot-pad-x: 12px;
+                --slot-min-h: 42px;
+                --slots-gap: 9px;
+                --clock-size: 64px;
+                --clock-size: clamp(52px, 16vh, 80px);
+                --clock-colon: 46px;
+                --clock-colon: clamp(38px, 12vh, 58px);
+                --ampm-size: 14px;
+                --date-size: 13px;
+                --quote-size: 12px;
+                --quote-author: 10px;
+            }
+
+            body.slots-mode.layout-dashboard .slots-screen {
+                /* ~45dp side inset — same as portrait / default dashboard */
+                padding: 3.5% 45px 17%;
+            }
+
+            body.slots-mode.layout-dashboard .top-row > .right-col {
+                margin-left: 12px;
+                margin-left: clamp(10px, 1.4vw, 14px);
+            }
+
+            body.slots-mode.layout-dashboard .slots-left {
+                max-width: calc(100% - var(--right-col-w) - 12px);
+                min-width: 0;
+            }
+
+            body.slots-mode.layout-dashboard .right-col {
+                width: var(--right-col-w);
+                max-width: 34vw;
+                -webkit-flex-shrink: 0;
+                flex-shrink: 0;
+                min-width: 0;
+            }
+
+            body.slots-mode.layout-dashboard .quote {
+                max-width: 100%;
+                max-width: min(100%, 400px);
+            }
+
+            body.slots-mode.layout-dashboard .quote .quote-text {
+                -webkit-line-clamp: 2;
+            }
+
+            body.slots-mode.layout-dashboard .hourly-wrap {
+                max-width: 92vw;
+                max-width: min(92vw, 760px);
+                --hourly-bar-h: 32px;
+                --hourly-ico: 16px;
+                --hourly-label: 11px;
+                --hourly-temp: 12px;
+                --hourly-pad: 11px;
+            }
+
+            body.slots-mode.layout-dashboard .bottom-dock {
+                left: 45px;
+                right: 45px;
+                padding-left: 0;
+                padding-right: 0;
+            }
+
+            html.flex-gap body.slots-mode.layout-dashboard .top-row {
+                gap: 12px;
+            }
+        }
+
+        body.slots-mode.layout-dashboard .bottom-dock {
+            display: -webkit-box;
+            display: -webkit-flex;
+            display: flex;
+            left: 45px;
+            right: 45px;
+            padding-left: 0;
+            padding-right: 0;
+            box-sizing: border-box;
+        }
+
+        /* Dashboard weather strip — same wide-screen growth as weather-only (was stuck at 720px) */
+        body.slots-mode.layout-dashboard .hourly-wrap {
+            width: 100%;
+            max-width: 980px;
+            max-width: min(84vw, 980px);
+            --hourly-pad: 18px;
+            --hourly-pad: clamp(14px, 1.4vw, 28px);
+            --hourly-bar-h: 48px;
+            --hourly-bar-h: clamp(40px, 5.2vmin, 68px);
+            --hourly-ico: 24px;
+            --hourly-ico: clamp(20px, 2.4vw, 36px);
+            --hourly-label: 16px;
+            --hourly-label: clamp(13px, 1.25vw, 22px);
+            --hourly-temp: 17px;
+            --hourly-temp: clamp(14px, 1.35vw, 24px);
+            --hourly-radius: 22px;
+            --hourly-radius: clamp(18px, 1.6vw, 28px);
+            --hourly-labels-gap: 12px;
+            --hourly-labels-gap: clamp(8px, 1.1vw, 16px);
+        }
+
+        @media (min-width: 1280px) {
+            body.slots-mode.layout-dashboard .hourly-wrap {
+                max-width: 1100px;
+                max-width: min(82vw, 1100px);
+            }
+        }
+
+        @media (min-width: 1600px) and (min-height: 700px) {
+            body.slots-mode.layout-dashboard .hourly-wrap {
+                max-width: 1240px;
+                max-width: min(80vw, 1240px);
+                --hourly-bar-h: 56px;
+                --hourly-bar-h: clamp(48px, 5.5vmin, 76px);
+                --hourly-ico: 28px;
+                --hourly-ico: clamp(22px, 2.2vw, 40px);
+                --hourly-label: 18px;
+                --hourly-label: clamp(15px, 1.3vw, 24px);
+                --hourly-temp: 20px;
+                --hourly-temp: clamp(16px, 1.4vw, 28px);
+            }
+        }
+
+        @media (min-width: 2000px) and (min-height: 900px) {
+            body.slots-mode.layout-dashboard .hourly-wrap {
+                max-width: 1400px;
+                max-width: min(78vw, 1400px);
+            }
+        }
+
+        /*
+         * DO NOT use @supports (gap: 1px) — Chromium 66–83 reports true (grid gap)
+         * but ignores gap on flex, and zeroing margin shims would collapse spacing.
+         * html.flex-gap is set by a JS layout probe (flex gap = Chromium ≥84).
+         */
+        html.flex-gap .top-row { gap: 3vw; }
+        html.flex-gap .top-row > .right-col { margin-left: 0; }
+        html.flex-gap .slot { gap: var(--slot-gap-inner); }
+        html.flex-gap .slot > .ico { margin-right: 0; }
+        html.flex-gap .slot .name { margin-bottom: 0; }
+        html.flex-gap .slot .text { gap: 2px; }
+        html.flex-gap .slots { gap: var(--slots-gap); }
+        html.flex-gap .slots > .slot + .slot { margin-top: 0; }
+        html.flex-gap .bottom-dock { gap: var(--slots-gap); }
+        html.flex-gap .bottom-dock > * + * { margin-top: 0; }
+        html.flex-gap .hour-col { gap: 3px; }
+        html.flex-gap .hour-col .t { margin-bottom: 0; }
+        html.flex-gap body.slots-mode.layout-center.has-capsules .slots { gap: var(--slots-gap); }
+        html.flex-gap body.slots-mode.layout-center.has-capsules .slots > .slot {
+            margin-left: 0;
+            margin-right: 0;
+            margin-bottom: 0;
+        }
+        html.flex-gap body.slots-mode.layout-dashboard .top-row {
+            gap: 24px;
+            gap: clamp(16px, 3vmin, 36px);
+        }
+        html.flex-gap body.slots-mode.layout-dashboard .top-row > .right-col { margin-left: 0; }
+
+        /*
+         * Center logo = fake preload veil (above wallpaper, above UI while running).
+         * Must not sit "between" clock layers — UI stays opacity:0 until reveal finishes.
+         * Entity setConfig must not interrupt this (see setSlotsMode).
+         */
+        .logo-splash {
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 5;
+            display: none;
+            pointer-events: none;
+            background: rgba(0, 0, 0, 0.04);
+            opacity: 0;
+            visibility: hidden;
+        }
+
+        body.slots-mode .logo-splash {
+            display: -webkit-box;
+            display: -webkit-flex;
+            display: flex;
+            -webkit-box-align: center;
+            -webkit-align-items: center;
+            align-items: center;
+            -webkit-box-pack: center;
+            -webkit-justify-content: center;
+            justify-content: center;
+        }
+
+        body.slots-mode .logo-splash.run {
+            visibility: visible;
+        }
+
+        .logo-splash img {
+            width: 18vw;
+            width: min(168px, 18vw);
+            height: auto;
+            object-fit: contain;
+            opacity: 0;
+            -webkit-transform: scale(0.94);
+            transform: scale(0.94);
+        }
+
+        .logo-splash.run {
+            animation: splashVeil 2.6s ease forwards;
+        }
+
+        .logo-splash.run img {
+            animation: splashMark 2.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+
+        /* After fake preload, keep splash fully out of the stack */
+        body.slots-mode.no-splash .logo-splash {
+            display: none !important;
+            animation: none !important;
+            opacity: 0 !important;
+            visibility: hidden !important;
+        }
+
+        @keyframes splashVeil {
+            0%   { opacity: 0; }
+            14%  { opacity: 1; }
+            58%  { opacity: 1; }
+            100% { opacity: 0; }
+        }
+
+        @keyframes splashMark {
+            0%   { opacity: 0; transform: scale(0.94); }
+            20%  { opacity: 0.2; transform: scale(1); }
+            58%  { opacity: 0.2; transform: scale(1); }
+            100% { opacity: 0; transform: scale(1.015); }
+        }
+
+        .loader {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(255,255,255,0.2);
+            border-radius: 50%;
+            border-top-color: #fff;
+            z-index: 4;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        /* Spin only while loading: opacity:0 does not stop a CSS animation, so an
+           always-on rule here would keep the whole page compositing at 60fps. */
+        .loader.active {
+            opacity: 1;
+            animation: spin 1s linear infinite;
+        }
+
+        body.slots-mode .loader {
+            display: none !important;
+            opacity: 0 !important;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @keyframes fadeIn {
+            from { transform: translateY(10px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        @media (max-width: 768px) {
+            .info-container {
+                bottom: 6vh;
+                left: 4vw;
+            }
+        }
+
+        /* Short landscape phones/tablets: keep readable, just tighten vertical rhythm */
+        @media (max-height: 420px) and (min-width: 361px) {
+            :root {
+                --slot-min-h: 52px;
+                --slot-min-h: clamp(48px, 12vh, 64px);
+                --slot-pad-y: 10px;
+                --slot-pad-y: clamp(8px, 1.6vh, 12px);
+                --slots-gap: 12px;
+                --slots-gap: clamp(10px, 2.2vh, 16px);
+                --hourly-bar-h: 32px;
+                --hourly-bar-h: clamp(28px, 8vh, 40px);
+            }
+            body.slots-mode.layout-center .slots-screen {
+                padding-bottom: 30vh;
+            }
+            body.slots-mode.layout-center .slots-left .hour,
+            body.slots-mode.layout-center .slots-left .minute {
+                font-size: 22vh;
+                font-size: clamp(64px, 28vh, 140px);
+            }
+            body.slots-mode.layout-center .slots-left .colon {
+                font-size: 16vh;
+                font-size: clamp(48px, 20vh, 100px);
+            }
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-left .hour,
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-left .minute {
+                font-size: 26vh;
+                font-size: clamp(72px, 32vh, 168px);
+            }
+            body.slots-mode.layout-center.has-weather:not(.has-capsules) .slots-left .colon {
+                font-size: 18vh;
+                font-size: clamp(52px, 24vh, 120px);
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="wallpaper-container">
+        <div class="wallpaper-layer" id="bg-1"><div class="parallax"></div></div>
+        <div class="wallpaper-layer" id="bg-2"><div class="parallax"></div></div>
+    </div>
+    <div class="gradient-overlay"></div>
+    <div class="mist" aria-hidden="true"></div>
+    <div class="readability-veil" aria-hidden="true"></div>
+
+    <!-- Fake preload logo: directly above wallpaper stack, never between clock sublayers -->
+    <div class="logo-splash" id="logo-splash" aria-hidden="true">
+        <img src="ha_logo.png" alt="" />
+    </div>
+
+    <div class="loader" id="loader" aria-hidden="true"></div>
+    <img src="ha_logo.png" alt="" class="logo-badge" id="logo-badge" aria-hidden="true">
+
+    <!-- Classic poem composition (hidden until classic-mode; scrubbed in slots-mode) -->
+    <div class="info-container" id="classic-ui" aria-hidden="true">
+        <div class="time-display">
+            <span class="hour" id="hour"></span>
+            <span class="colon">:</span>
+            <span class="minute" id="minute"></span>
+        </div>
+
+        <div class="date-display">
+            <span id="weekday"></span>
+            <div class="date-divider"></div>
+            <span id="date-full"></span>
+        </div>
+
+        <div class="poem-wrapper">
+            <div class="poem-content" id="poem-content"></div>
+            <div class="poem-meta" id="poem-author"></div>
+        </div>
+    </div>
+
+    <!-- Entity-slots dashboard -->
+    <div class="slots-screen" id="slots-ui">
+        <div class="top-row">
+            <div class="slots-left">
+                <div class="time-display">
+                    <span class="hour" id="slots-hour"></span>
+                    <span class="colon">:</span>
+                    <span class="minute" id="slots-minute"></span>
+                    <span class="ampm" id="slots-ampm">AM</span>
+                </div>
+                <div class="slots-date" id="slots-date"></div>
+                <div class="quote" id="quote">
+                    <div class="quote-text" id="quote-text"></div>
+                    <div class="quote-author" id="quote-author"></div>
+                </div>
+            </div>
+            <!-- Capsules only — weather never lives here -->
+            <div class="right-col" id="right-col">
+                <div class="slots" id="slots"></div>
+            </div>
+        </div>
+        <!-- Dedicated haWeatherEntity — always bottom, never top-right -->
+        <div class="bottom-dock" id="bottom-dock">
+            <div class="hourly-wrap" id="hourly-wrap" aria-hidden="true"></div>
+        </div>
+    </div>
+
+    <script>
+        /*
+         * Compat for older Android System WebViews:
+         * - Avoid optional chaining / nullish coalesce (parse-time SyntaxError kills ALL script)
+         * - Polyfill a few ES2015/2017 runtime helpers used below
+         * - Probe real flex gap (not @supports — grid gap false-positives on Chrome 66–83)
+         */
+        (function () {
+            // Modernizr-style flex gap probe — see bram.us / ishadeed.com
+            try {
+                var flex = document.createElement('div');
+                flex.style.display = 'flex';
+                flex.style.flexDirection = 'column';
+                flex.style.rowGap = '1px';
+                flex.appendChild(document.createElement('div'));
+                flex.appendChild(document.createElement('div'));
+                flex.style.position = 'absolute';
+                flex.style.visibility = 'hidden';
+                flex.style.pointerEvents = 'none';
+                document.documentElement.appendChild(flex);
+                var supported = flex.scrollHeight === 1;
+                document.documentElement.removeChild(flex);
+                if (supported) {
+                    document.documentElement.className +=
+                        (document.documentElement.className ? ' ' : '') + 'flex-gap';
+                }
+            } catch (e) {}
+
+            if (!String.prototype.padStart) {
+                String.prototype.padStart = function (targetLength, padString) {
+                    var str = String(this);
+                    var len = targetLength >> 0;
+                    var pad = padString !== undefined ? String(padString) : ' ';
+                    if (str.length >= len) return str;
+                    len = len - str.length;
+                    if (len > pad.length) {
+                        pad += pad.repeat ? pad.repeat(len / pad.length) : new Array(len + 1).join(pad);
+                    }
+                    return pad.slice(0, len) + str;
+                };
+            }
+            if (!String.prototype.startsWith) {
+                String.prototype.startsWith = function (search, pos) {
+                    pos = pos || 0;
+                    return this.substring(pos, pos + search.length) === search;
+                };
+            }
+            if (!String.prototype.includes) {
+                String.prototype.includes = function (search, start) {
+                    return this.indexOf(search, start || 0) !== -1;
+                };
+            }
+            if (!Array.prototype.includes) {
+                Array.prototype.includes = function (search) {
+                    return this.indexOf(search) !== -1;
+                };
+            }
+            if (!Array.prototype.findIndex) {
+                Array.prototype.findIndex = function (predicate) {
+                    for (var i = 0; i < this.length; i++) {
+                        if (predicate(this[i], i, this)) return i;
+                    }
+                    return -1;
+                };
+            }
+            if (typeof Object.assign !== 'function') {
+                Object.assign = function (target) {
+                    if (target == null) throw new TypeError('Object.assign');
+                    var to = Object(target);
+                    for (var i = 1; i < arguments.length; i++) {
+                        var src = arguments[i];
+                        if (src == null) continue;
+                        for (var key in src) {
+                            if (Object.prototype.hasOwnProperty.call(src, key)) to[key] = src[key];
+                        }
+                    }
+                    return to;
+                };
+            }
+            if (typeof window.requestAnimationFrame !== 'function') {
+                window.requestAnimationFrame = function (cb) {
+                    return setTimeout(function () { cb(Date.now()); }, 16);
+                };
+            }
+        })();
+
+        function withTimeoutSignal(ms) {
+            // AbortController missing on some old WebViews — omit signal, still clear timer.
+            if (typeof AbortController === 'undefined') {
+                var t = setTimeout(function () {}, ms);
+                return { signal: undefined, clear: function () { clearTimeout(t); } };
+            }
+            var controller = new AbortController();
+            var timer = setTimeout(function () {
+                try { controller.abort(); } catch (e) {}
+            }, ms);
+            return {
+                signal: controller.signal,
+                clear: function () { clearTimeout(timer); }
+            };
+        }
+
+        function safeFetch(url, options, timeoutMs) {
+            if (typeof fetch !== 'function') {
+                return Promise.reject(new Error('fetch unavailable'));
+            }
+            options = options || {};
+            var gate = withTimeoutSignal(timeoutMs || 10000);
+            var opts = {};
+            for (var k in options) {
+                if (Object.prototype.hasOwnProperty.call(options, k)) opts[k] = options[k];
+            }
+            if (gate.signal) opts.signal = gate.signal;
+            return fetch(url, opts).then(function (res) {
+                gate.clear();
+                return res;
+            }, function (err) {
+                gate.clear();
+                throw err;
+            });
+        }
+
+        // Older WebViews may lack classList.toggle(token, force).
+        function toggleClass(el, name, on) {
+            if (!el || !el.classList) return;
+            if (arguments.length < 3) {
+                el.classList.toggle(name);
+                return;
+            }
+            if (on) el.classList.add(name);
+            else el.classList.remove(name);
+        }
+
+        const DEFAULT_WALLPAPER_API = 'https://v2.xxapi.cn/api/wallpaper';
+        const CACHE_KEY_WALLPAPER = 'dawn_wallpaper_cache';
+        const CACHE_KEY_POETRY = 'dawn_poetry_cache';
+        const CACHE_KEY_QUOTE = 'dawn_quote_cache';
+
+        let currentBgIndex = 1;
+        let wallpaperSwapId = 0;
+        let wallpaperBusy = false;
+        let pendingWallpaperUrl = null;
+        let displayedWallpaperUrl = '';
+        let wallpaperSafetyTimer = 0;
+        /** Custom source from App; empty / whitespace → built-in default. */
+        let wallpaperSourceUrl = '';
+        let slotsEnabled = false;
+        let slotData = [];
+        let splashPlayed = false;
+        let splashRunning = false;
+        let weatherEntityId = '';
+        let hourlyHours = [];
+        let lastHourlyAxisHour = -1;
+        /**
+         * Upstream hourly is Now+future only. Cache recent hours locally so lookback
+         * (≤3) stays filled after those hours drop out of the HA payload.
+         * Key = epoch hour (Math.floor(ms / 3600000)).
+         */
+        var hourlyPastCache = {};
+        var HOURLY_PAST_CACHE_MAX_AGE = 6;
+        /** When true: slots clock is 00–23 (no AM/PM). Default false = 12h + AM/PM. */
+        let isoTimeEnabled = false;
+        /** When true: merge 3+ consecutive identical weather icons. Default off. */
+        let mergeWeatherIconsEnabled = false;
+
+        function resolveWallpaperSource() {
+            var s = String(wallpaperSourceUrl || '').trim();
+            return s || DEFAULT_WALLPAPER_API;
+        }
+
+        function looksLikeDirectImageUrl(url) {
+            var u = String(url || '').trim();
+            if (!u) return false;
+            if (u.indexOf('data:image/') === 0) return true;
+            return /\.(jpe?g|png|webp|gif|bmp|avif)(\?|#|$)/i.test(u);
+        }
+
+        function getCachedWallpaper() {
+            try {
+                return localStorage.getItem(CACHE_KEY_WALLPAPER)
+                    || localStorage.getItem('xiaomi_wallpaper_cache');
+            } catch (e) { return null; }
+        }
+
+        function setCachedWallpaper(url) {
+            try {
+                localStorage.setItem(CACHE_KEY_WALLPAPER, url);
+                localStorage.removeItem('xiaomi_wallpaper_cache');
+            } catch (e) {}
+        }
+
+        function getCachedPoetry() {
+            try {
+                const data = localStorage.getItem(CACHE_KEY_POETRY)
+                    || localStorage.getItem('xiaomi_poetry_cache');
+                return data ? JSON.parse(data) : null;
+            } catch (e) { return null; }
+        }
+
+        function setCachedPoetry(content, author, dynasty) {
+            try {
+                localStorage.setItem(CACHE_KEY_POETRY, JSON.stringify({ content, author, dynasty }));
+            } catch (e) {}
+        }
+
+        function isChinese() {
+            const lang = (navigator.language || navigator.userLanguage || 'en').toLowerCase();
+            var tz = '';
+            try {
+                if (typeof Intl !== 'undefined' && Intl.DateTimeFormat) {
+                    tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+                }
+            } catch (e) {}
+            const chinaTimezones = ['asia/shanghai', 'asia/chongqing', 'asia/hong_kong', 'asia/taipei', 'asia/macau'];
+            return lang.indexOf('zh') === 0 || chinaTimezones.indexOf(tz.toLowerCase()) !== -1;
+        }
+
+        function escapeHtml(text) {
+            return String(text || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function wallpaperNeedsDarkening(img) {
+            try {
+                const size = 48;
+                const c = document.createElement('canvas');
+                c.width = size;
+                c.height = size;
+                var ctx = null;
+                try { ctx = c.getContext('2d', { willReadFrequently: true }); } catch (e1) { ctx = c.getContext('2d'); }
+                if (!ctx) return false;
+                ctx.drawImage(img, 0, 0, size, size);
+                var imageData = ctx.getImageData(0, 0, size, size);
+                var data = imageData.data;
+                var regionLuma = function (x0, y0, x1, y1) {
+                    var sum = 0, n = 0;
+                    for (var y = y0; y < y1; y++) {
+                        for (var x = x0; x < x1; x++) {
+                            var i = (y * size + x) * 4;
+                            sum += 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+                            n++;
+                        }
+                    }
+                    return n ? sum / n / 255 : 0;
+                };
+                var zones = [
+                    regionLuma(0, 0, 22, 18),
+                    regionLuma(30, 0, 48, 22),
+                    regionLuma(10, 32, 38, 48),
+                ];
+                return Math.max.apply(null, zones) >= 0.58;
+            } catch (e) {
+                return document.body.classList.contains('bright-wallpaper');
+            }
+        }
+
+        function applyWallpaperContrast(img) {
+            if (!slotsEnabled) {
+                document.body.classList.remove('bright-wallpaper');
+                return;
+            }
+            toggleClass(document.body, 'bright-wallpaper', wallpaperNeedsDarkening(img));
+        }
+
+        // Stands in for the `parallaxPan` and `blink` CSS animations, which kept the
+        // compositor producing a frame every vsync for as long as the page was up.
+        // Sampling both on one 4Hz timer holds the pan under 0.35px per step and the
+        // colon pulse under 0.1 opacity per step, below what the eye resolves.
+        const AMBIENT_STEP_MS = 250;
+        const PARALLAX_PERIOD_MS = 60000;
+        const COLON_PERIOD_MS = 2000;
+
+        function stepAmbient() {
+            const now = Date.now();
+
+            // Same ellipse the parallaxPan keyframes traced.
+            const phase = (now % PARALLAX_PERIOD_MS) / PARALLAX_PERIOD_MS * Math.PI * 2;
+            const x = (-1.1 * Math.sin(phase)).toFixed(3);
+            const y = (-0.55 * (1 - Math.cos(phase))).toFixed(3);
+            const layers = document.querySelectorAll(
+                '.wallpaper-layer.active .parallax, .wallpaper-layer.exiting .parallax');
+            for (let i = 0; i < layers.length; i++) {
+                layers[i].style.transform = `translate3d(${x}%, ${y}%, 0)`;
+            }
+
+            // Same 0.8 -> 0.3 -> 0.8 curve the blink keyframes described.
+            const pulse = (now % COLON_PERIOD_MS) / COLON_PERIOD_MS * Math.PI * 2;
+            const colonOpacity = (0.55 + 0.25 * Math.cos(pulse)).toFixed(3);
+            const colons = document.querySelectorAll('.colon');
+            for (let i = 0; i < colons.length; i++) {
+                colons[i].style.opacity = colonOpacity;
+            }
+        }
+
+        function updateTime() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const h24 = now.getHours();
+            const minute = String(now.getMinutes()).padStart(2, '0');
+
+            if (slotsEnabled) {
+                var ampmEl = document.getElementById('slots-ampm');
+                if (isoTimeEnabled) {
+                    // ISO 24h: midnight 00:, no AM/PM
+                    document.getElementById('slots-hour').textContent = String(h24).padStart(2, '0');
+                    document.getElementById('slots-minute').textContent = minute;
+                    if (ampmEl) {
+                        ampmEl.textContent = '';
+                        ampmEl.setAttribute('aria-hidden', 'true');
+                    }
+                } else {
+                    // Standard 12h + AM/PM: midnight 12:xx AM, noon 12:xx PM
+                    var h12 = h24 % 12 || 12;
+                    var ampm = h24 < 12 ? 'AM' : 'PM';
+                    document.getElementById('slots-hour').textContent = String(h12);
+                    document.getElementById('slots-minute').textContent = minute;
+                    if (ampmEl) {
+                        ampmEl.textContent = ampm;
+                        ampmEl.removeAttribute('aria-hidden');
+                    }
+                }
+                const weekDays = ['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
+                const months = ['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE','JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'];
+                document.getElementById('slots-date').textContent =
+                    `${weekDays[now.getDay()]} ${now.getDate()} ${months[now.getMonth()]} ${year}`;
+                requestAnimationFrame(fitSlotsClock);
+                // Slide the hourly strip when the civil hour rolls (lookback ≤3, Now near center).
+                if (h24 !== lastHourlyAxisHour) {
+                    lastHourlyAxisHour = h24;
+                    if (weatherEntityId && hourlyHours.length) {
+                        try { renderHourly(); } catch (e) {}
+                    }
+                }
+            } else {
+                const hour = String(h24).padStart(2, '0');
+                document.getElementById('hour').textContent = hour;
+                document.getElementById('minute').textContent = minute;
+                if (isChinese()) {
+                    const weekDays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+                    document.getElementById('weekday').textContent = weekDays[now.getDay()];
+                    document.getElementById('date-full').textContent =
+                        `${year}年${now.getMonth() + 1}月${now.getDate()}日`;
+                } else {
+                    const weekDays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                    document.getElementById('weekday').textContent = weekDays[now.getDay()];
+                    document.getElementById('date-full').textContent =
+                        `${months[now.getMonth()]} ${now.getDate()}, ${year}`;
+                }
+            }
+        }
+
+        /**
+         * Portrait / wide-digit safety: if HH:MM(+AM/PM) still overflows the padded
+         * column, shrink the clock row (zoom prefers layout; transform is fallback).
+         */
+        function fitSlotsClock() {
+            if (!slotsEnabled) return;
+            var td = document.querySelector('#slots-ui .slots-left .time-display');
+            if (!td) return;
+            var col = td.parentElement;
+            if (!col) return;
+
+            td.style.zoom = '';
+            td.style.transform = '';
+            td.style.transformOrigin = '';
+
+            var avail = col.clientWidth;
+            if (avail >= 40) {
+                var need = td.scrollWidth;
+                if (need > avail + 1) {
+                    var scale = Math.max(0.55, (avail - 2) / need);
+                    var corner = document.body.classList.contains('layout-corner');
+                    try {
+                        td.style.zoom = String(scale);
+                        // If zoom ignored, scrollWidth stays huge — fall back to transform.
+                        if (td.scrollWidth > avail + 2) {
+                            td.style.zoom = '';
+                            td.style.transformOrigin = corner ? 'left center' : 'center center';
+                            td.style.transform = 'scale(' + scale + ')';
+                        }
+                    } catch (e) {
+                        td.style.transformOrigin = corner ? 'left center' : 'center center';
+                        td.style.transform = 'scale(' + scale + ')';
+                    }
+                }
+            }
+            scheduleWeatherFit();
+        }
+
+        function clearWeatherFit() {
+            var wrap = document.getElementById('hourly-wrap');
+            if (!wrap) return;
+            wrap.style.zoom = '';
+            wrap.style.transform = '';
+            wrap.style.transformOrigin = '';
+            wrap.style.maxWidth = '';
+            wrap.style.width = '';
+        }
+
+        /**
+         * Landscape weather-only: if the hourly bar covers the quote author,
+         * shrink HEIGHT carefully (bottom-anchored) and slightly LENGTHEN width
+         * so the bar stays readable — never aggressive.
+         */
+        function fitWeatherVsQuoteAuthor() {
+            if (!slotsEnabled) {
+                clearWeatherFit();
+                return;
+            }
+            var vw = window.innerWidth || 0;
+            var vh = window.innerHeight || 0;
+            var landscape = vw > vh;
+            var body = document.body;
+            var weatherOnly = body.classList.contains('layout-center')
+                && body.classList.contains('has-weather')
+                && !body.classList.contains('has-capsules');
+            var wrap = document.getElementById('hourly-wrap');
+            var author = document.getElementById('quote-author');
+            if (!landscape || !weatherOnly || !wrap || !wrap.classList.contains('has-data') || !author) {
+                clearWeatherFit();
+                return;
+            }
+            if (!String(author.textContent || '').trim()) {
+                clearWeatherFit();
+                return;
+            }
+
+            clearWeatherFit();
+
+            var gap = 12;
+            var minScaleY = 0.78;
+            var aRect = author.getBoundingClientRect();
+            var wRect = wrap.getBoundingClientRect();
+            if (!wRect.height || aRect.bottom + gap <= wRect.top) return;
+
+            var overlap = (aRect.bottom + gap) - wRect.top;
+            var scaleY = 1 - (overlap / wRect.height);
+            // Small extra so author isn't flush against the bar.
+            scaleY = Math.max(minScaleY, Math.min(0.98, scaleY - 0.02));
+            if (scaleY >= 0.995) return;
+
+            // Lengthen a bit as height shrinks (cap ~+10%, stay inside side insets).
+            var scaleX = Math.min(1.10, 1 + (1 - scaleY) * 0.55);
+            var baseW = wRect.width || 0;
+            var maxLen = Math.max(0, vw - 90); // ~45px side inset each side
+            if (baseW > 0 && scaleX > 1) {
+                var targetW = Math.min(maxLen, baseW * scaleX);
+                if (targetW > baseW + 1) {
+                    wrap.style.maxWidth = Math.round(targetW) + 'px';
+                    wrap.style.width = Math.round(targetW) + 'px';
+                    // Width already lengthened in layout — keep X scale ≈ 1.
+                    scaleX = 1;
+                }
+            }
+
+            wrap.style.transformOrigin = 'center bottom';
+            wrap.style.transform = 'scale(' + scaleX.toFixed(3) + ', ' + scaleY.toFixed(3) + ')';
+
+            try {
+                aRect = author.getBoundingClientRect();
+                wRect = wrap.getBoundingClientRect();
+                if (aRect.bottom + gap > wRect.top && scaleY > minScaleY) {
+                    scaleY = Math.max(minScaleY, scaleY - 0.04);
+                    wrap.style.transform = 'scale(' + scaleX.toFixed(3) + ', ' + scaleY.toFixed(3) + ')';
+                }
+            } catch (e) {}
+        }
+
+        function scheduleWeatherFit() {
+            requestAnimationFrame(function () {
+                requestAnimationFrame(fitWeatherVsQuoteAuthor);
+            });
+        }
+
+        function finishWallpaperSwap(swapId, loader) {
+            if (swapId !== wallpaperSwapId) return; // stale callback
+            clearTimeout(wallpaperSafetyTimer);
+            wallpaperBusy = false;
+            if (loader) loader.classList.remove('active');
+            const next = pendingWallpaperUrl;
+            pendingWallpaperUrl = null;
+            if (next && next.url && next.url !== displayedWallpaperUrl) {
+                showWallpaper(next.url, { showLoader: !!next.showLoader });
+            }
+        }
+
+        function showWallpaper(url, opts) {
+            opts = opts || {};
+            var showLoader = !!opts.showLoader;
+            var force = !!opts.force;
+            if (!url) return;
+            // Same URL already painted — skip unless forced (avoids busy-lock spin).
+            if (!force && url === displayedWallpaperUrl) {
+                var activeParallax = document.querySelector('.wallpaper-layer.active .parallax');
+                if (activeParallax && activeParallax.style && activeParallax.style.backgroundImage) {
+                    return;
+                }
+            }
+            if (wallpaperBusy) {
+                pendingWallpaperUrl = { url: url, showLoader: showLoader, force: force };
+                return;
+            }
+            wallpaperBusy = true;
+            const swapId = ++wallpaperSwapId;
+            const loader = document.getElementById('loader');
+            if (showLoader) loader.classList.add('active');
+            clearTimeout(wallpaperSafetyTimer);
+
+            const nextBgIndex = currentBgIndex === 1 ? 2 : 1;
+            const nextBgEl = document.getElementById(`bg-${nextBgIndex}`);
+            const currentBgEl = document.getElementById(`bg-${currentBgIndex}`);
+            const nextParallax = nextBgEl.querySelector('.parallax');
+            let settled = false;
+
+            const apply = (img) => {
+                if (settled || swapId !== wallpaperSwapId) return;
+                settled = true;
+                displayedWallpaperUrl = url;
+                if (img) applyWallpaperContrast(img);
+                // Prefer css url() without quotes issues
+                nextParallax.style.backgroundImage = 'url("' + String(url).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '")';
+                nextBgEl.classList.remove('active', 'exiting');
+                void nextBgEl.offsetWidth;
+                currentBgEl.classList.add('exiting');
+                currentBgEl.classList.remove('active');
+                nextBgEl.classList.add('active');
+                currentBgIndex = nextBgIndex;
+                setTimeout(() => {
+                    if (swapId !== wallpaperSwapId) return;
+                    currentBgEl.classList.remove('exiting');
+                    const oldParallax = currentBgEl.querySelector('.parallax');
+                    if (oldParallax) oldParallax.style.backgroundImage = '';
+                    finishWallpaperSwap(swapId, loader);
+                }, 1650);
+            };
+
+            // If Image() hangs (common with some CDNs in WebView), still paint & unlock.
+            wallpaperSafetyTimer = setTimeout(() => {
+                if (swapId !== wallpaperSwapId) return;
+                if (!settled) apply(null);
+            }, 6000);
+
+            const img = new Image();
+            img.onload = () => apply(img);
+            img.onerror = () => apply(null); // paint via CSS anyway; contrast probe optional
+            img.src = url;
+        }
+
+        async function fetchWallpaper(force, attempt) {
+            force = !!force;
+            attempt = attempt || 0;
+            const source = resolveWallpaperSource();
+            const cached = getCachedWallpaper();
+            // Cold start: paint cache immediately, then refresh from network.
+            if (force && cached && cached !== displayedWallpaperUrl) {
+                showWallpaper(cached, { showLoader: true });
+            }
+            // Direct image URL (or data URI) — use as-is, no JSON unwrap.
+            if (looksLikeDirectImageUrl(source)) {
+                setCachedWallpaper(source);
+                showWallpaper(source, { showLoader: force && !cached });
+                return;
+            }
+            try {
+                // Bust HTTP cache so the 5-minute rotator actually gets a new image URL.
+                const apiUrl = source + (source.indexOf('?') >= 0 ? '&' : '?') + '_ts=' + Date.now();
+                const response = await safeFetch(apiUrl, { cache: 'no-store' }, 10000);
+                const data = await response.json();
+                if (data.code === 200 && data.data) {
+                    const nextUrl = String(data.data);
+                    setCachedWallpaper(nextUrl);
+                    // New URL → swap. Same URL → showWallpaper no-ops (no busy-lock spin).
+                    showWallpaper(nextUrl, { showLoader: force && !cached });
+                    return;
+                }
+            } catch (error) {}
+            // Only retry when we still have nothing on screen (avoid fighting the rotator).
+            if (!displayedWallpaperUrl && attempt < 3) {
+                setTimeout(function () { fetchWallpaper(true, attempt + 1); }, 1500 * (attempt + 1));
+                return;
+            }
+            if (!cached && !displayedWallpaperUrl) {
+                var loaderEl = document.getElementById('loader');
+                if (loaderEl) loaderEl.classList.remove('active');
+            }
+        }
+
+        async function fetchPoetry() {
+            const wrap = document.querySelector('.poem-wrapper');
+            if (!wrap) return;
+            if (slotsEnabled || !isChinese()) {
+                wrap.style.display = 'none';
+                return;
+            }
+            wrap.style.display = '';
+
+            const showPoetry = function (content, author, dynasty) {
+                const contentEl = document.getElementById('poem-content');
+                const authorEl = document.getElementById('poem-author');
+                contentEl.style.opacity = 0;
+                authorEl.style.opacity = 0;
+                setTimeout(function () {
+                    contentEl.textContent = content;
+                    authorEl.textContent = dynasty + ' · ' + author;
+                    contentEl.style.opacity = 1;
+                    authorEl.style.opacity = 1;
+                    contentEl.style.transition = 'opacity 1s';
+                    authorEl.style.transition = 'opacity 1s';
+                }, 500);
+            };
+
+            try {
+                const response = await safeFetch('https://v2.jinrishici.com/one.json', {}, 10000);
+                const data = await response.json();
+                if (data.status === 'success') {
+                    const content = data.data.content;
+                    const author = data.data.origin.author;
+                    const dynasty = data.data.origin.dynasty;
+                    setCachedPoetry(content, author, dynasty);
+                    showPoetry(content, author, dynasty);
+                    return;
+                }
+            } catch (err) {}
+            const cached = getCachedPoetry();
+            if (cached) showPoetry(cached.content, cached.author, cached.dynasty);
+        }
+
+        /**
+         * Wider screens get a longer quote budget so we rarely inject "…".
+         * Period / second-comma cuts already shorten long quotes first.
+         */
+        function quoteMaxChars() {
+            var w = window.innerWidth || document.documentElement.clientWidth || 360;
+            if (w >= 1600) return 220;
+            if (w >= 1280) return 180;
+            if (w >= 900) return 150;
+            if (w >= 600) return 125;
+            return 110;
+        }
+
+        /** Soft char cap — prefer natural wrap / CSS line-clamp over "…" on wide panels. */
+        function truncateQuote(text, maxChars) {
+            var s = String(text || '').replace(/\s+/g, ' ').trim();
+            var limit = maxChars || quoteMaxChars();
+            if (s.length <= limit) return s;
+            var cut = s.slice(0, limit);
+            var sp = cut.lastIndexOf(' ');
+            if (sp > Math.floor(limit * 0.55)) cut = cut.slice(0, sp);
+            return cut.replace(/[,\.;:!?\-—–\s]+$/, '') + '…';
+        }
+
+        /**
+         * All layouts: if a sentence period appears (. or 。), drop everything after it.
+         * ASCII '.' only counts when followed by whitespace (avoids U.S. / 3.14).
+         */
+        function cutQuoteAtFirstPeriod(text) {
+            var s = String(text || '').replace(/\s+/g, ' ').trim();
+            if (!s) return s;
+            for (var i = 0; i < s.length; i++) {
+                var ch = s.charAt(i);
+                if (ch === '\u3002') {
+                    return s.slice(0, i + 1).trim();
+                }
+                if (ch === '.' && i < s.length - 1 && /\s/.test(s.charAt(i + 1))) {
+                    return s.slice(0, i + 1).trim();
+                }
+            }
+            return s;
+        }
+
+        /**
+         * Long quotes with 2+ commas: cut at the 2nd comma (, / ，),
+         * replace it with '.', drop the rest — avoids "…" mid-sentence.
+         */
+        function cutQuoteAtSecondComma(text) {
+            var s = String(text || '').replace(/\s+/g, ' ').trim();
+            if (!s) return s;
+            var count = 0;
+            for (var i = 0; i < s.length; i++) {
+                var ch = s.charAt(i);
+                if (ch === ',' || ch === '\uFF0C') {
+                    count++;
+                    if (count === 2) {
+                        // Keep a usable first clause; ignore tiny "a, b, …" stubs.
+                        if (i < 16) return s;
+                        return s.slice(0, i).replace(/[\s,;\uFF0C\uFF1B]+$/, '') + '.';
+                    }
+                }
+            }
+            return s;
+        }
+
+        function shapeQuoteText(text) {
+            return truncateQuote(
+                cutQuoteAtSecondComma(cutQuoteAtFirstPeriod(text)),
+                quoteMaxChars()
+            );
+        }
+
+        /** English words, or CJK character count when the line is mostly Chinese. */
+        function quoteWordCount(text) {
+            var s = String(text || '').replace(/\s+/g, ' ').trim();
+            if (!s) return 0;
+            var parts = s.split(/\s+/).filter(Boolean);
+            if (parts.length === 1 && /[\u4e00-\u9fff]/.test(parts[0])) {
+                return parts[0].replace(/[^\u4e00-\u9fffA-Za-z0-9]/g, '').length;
+            }
+            return parts.length;
+        }
+
+        /** ≤10 words after shaping → too short, discard and re-fetch. */
+        function isQuoteTooShort(rawQuote) {
+            return quoteWordCount(shapeQuoteText(rawQuote)) <= 10;
+        }
+
+        var quotePrefetch = null;
+        var quotePrefetchPromise = null;
+
+        async function requestRandomQuote() {
+            const res = await safeFetch('https://dummyjson.com/quotes/random', {}, 8000);
+            if (!res.ok) throw new Error('quote http ' + res.status);
+            const data = await res.json();
+            const quote = String(data.quote || '').trim();
+            const author = String(data.author || '').trim();
+            if (!quote) throw new Error('empty quote');
+            return { quote: quote, author: author };
+        }
+
+        /** Pull next quote in the background so the 5-minute rotator feels instant. */
+        function prefetchQuote() {
+            if (!slotsEnabled) return;
+            if (quotePrefetch || quotePrefetchPromise) return;
+            quotePrefetchPromise = requestRandomQuote()
+                .then(function (item) {
+                    quotePrefetchPromise = null;
+                    if (isQuoteTooShort(item.quote)) {
+                        return requestRandomQuote().then(function (item2) {
+                            quotePrefetch = item2;
+                            return item2;
+                        }).catch(function () {
+                            quotePrefetch = item;
+                            return item;
+                        });
+                    }
+                    quotePrefetch = item;
+                    return item;
+                })
+                .catch(function () {
+                    quotePrefetchPromise = null;
+                });
+        }
+
+        async function takeQuoteCandidate(allowRetry) {
+            var item = null;
+            if (quotePrefetch) {
+                item = quotePrefetch;
+                quotePrefetch = null;
+            } else if (quotePrefetchPromise) {
+                try {
+                    await quotePrefetchPromise;
+                } catch (e) {}
+                quotePrefetchPromise = null;
+                if (quotePrefetch) {
+                    item = quotePrefetch;
+                    quotePrefetch = null;
+                }
+            }
+            if (!item) item = await requestRandomQuote();
+
+            if (allowRetry && isQuoteTooShort(item.quote)) {
+                item = await requestRandomQuote();
+            }
+            return item;
+        }
+
+        function applyQuote(text, author) {
+            var wrap = document.getElementById('quote');
+            var textEl = document.getElementById('quote-text');
+            var authorEl = document.getElementById('quote-author');
+            if (!wrap || !textEl || !authorEl) return;
+            textEl.textContent = shapeQuoteText(text);
+            authorEl.textContent = author ? ('— ' + String(author).trim()) : '';
+            requestAnimationFrame(function () {
+                wrap.classList.add('show');
+                scheduleWeatherFit();
+            });
+        }
+
+        async function fetchQuote() {
+            if (!slotsEnabled) return;
+            const wrap = document.getElementById('quote');
+            const textEl = document.getElementById('quote-text');
+            const authorEl = document.getElementById('quote-author');
+            if (!wrap || !textEl || !authorEl) return;
+            wrap.classList.remove('show');
+            try {
+                const item = await takeQuoteCandidate(true);
+                try {
+                    localStorage.setItem(
+                        CACHE_KEY_QUOTE,
+                        JSON.stringify({ quote: item.quote, author: item.author })
+                    );
+                } catch (e) {}
+                applyQuote(item.quote, item.author);
+                prefetchQuote();
+            } catch (err) {
+                var fallbackQuote = 'The only way to do great work is to love what you do.';
+                var fallbackAuthor = 'Steve Jobs';
+                try {
+                    var cached = JSON.parse(localStorage.getItem(CACHE_KEY_QUOTE) || 'null');
+                    if (cached && cached.quote && !isQuoteTooShort(cached.quote)) {
+                        fallbackQuote = cached.quote;
+                        fallbackAuthor = cached.author || 'Ava';
+                    }
+                } catch (e) {}
+                applyQuote(fallbackQuote, fallbackAuthor);
+                prefetchQuote();
+            }
+        }
+
+        function normalizeSlots(raw) {
+            if (!Array.isArray(raw)) return [];
+            return raw
+                .filter((s) => s && String(s.entityId || '').trim())
+                .slice(0, 4)
+                .map((s) => ({
+                    entityId: String(s.entityId).trim(),
+                    icon: s.icon || 'mdi:home-assistant',
+                    // Built-in app icon as data URI from Kotlin (no CDN webfont)
+                    iconSrc: s.iconSrc || '',
+                    name: s.name || '',
+                    state: s.state || '--',
+                }));
+        }
+
+        function slotIconHtml(s) {
+            if (s.iconSrc) {
+                return `<img src="${s.iconSrc}" alt="" />`;
+            }
+            // Fallback glyph if native icon encode failed
+            return '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="8"/><path d="M12 8v4M12 16h.01"/></svg>';
+        }
+
+        /**
+         * Morphologies (weather ID never top-right):
+         * - corner: no weather ID, no capsules
+         * - center: weather-only OR capsules-only → center clock + bottom dock
+         * - dashboard: weather ID + capsules → top-left clock, right capsules, weather bottom
+         */
+        function syncLayoutClasses() {
+            const hasCapsules = slotData.length > 0;
+            // Layout follows configured weather entity ID (not only whether hours arrived).
+            const hasWeather = !!weatherEntityId;
+            const hasHourly = hasWeather && hourlyHours.length > 0;
+            toggleClass(document.body, 'has-capsules', hasCapsules);
+            toggleClass(document.body, 'has-weather', hasWeather);
+            toggleClass(document.body, 'has-hourly', hasHourly);
+
+            const isDash = slotsEnabled && hasWeather && hasCapsules;
+            const isCenter = slotsEnabled && (hasWeather !== hasCapsules); // XOR
+            const isCorner = slotsEnabled && !hasWeather && !hasCapsules;
+
+            toggleClass(document.body, 'layout-dashboard', isDash);
+            toggleClass(document.body, 'layout-center', isCenter);
+            toggleClass(document.body, 'layout-corner', isCorner);
+        }
+
+        function renderSlots() {
+            const slotsEl = document.getElementById('slots');
+            if (!slotsEl) return;
+            slotsEl.innerHTML = '';
+            // Only configured entity IDs — empty slots stay hidden (no placeholders)
+            slotData.forEach(function (s) {
+                if (!s.entityId) return;
+                const el = document.createElement('div');
+                el.className = 'slot';
+                el.setAttribute('data-entity-id', s.entityId);
+                el.innerHTML =
+                    '<div class="ico" aria-hidden="true">' + slotIconHtml(s) + '</div>' +
+                    '<div class="text">' +
+                    '<div class="name">' + escapeHtml(s.name || '') + '</div>' +
+                    '<div class="state">' + escapeHtml(s.state || '--') + '</div>' +
+                    '</div>';
+                slotsEl.appendChild(el);
+            });
+            toggleClass(slotsEl, 'hidden', slotData.length === 0);
+            slotsEl.setAttribute('aria-hidden', slotData.length === 0 ? 'true' : 'false');
+            syncLayoutClasses();
+        }
+
+        function hideHourly() {
+            hourlyHours = [];
+            clearHourlyPastCache();
+            const wrap = document.getElementById('hourly-wrap');
+            if (wrap) {
+                wrap.classList.remove('has-data');
+                wrap.setAttribute('aria-hidden', 'true');
+                wrap.innerHTML = '';
+            }
+            clearWeatherFit();
+            syncLayoutClasses();
+        }
+
+        const WEATHER_ICONS = {
+            moon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#ffffff" d="M12 2.2a9.8 9.8 0 1 0 9.5 12.4A7.6 7.6 0 0 1 12 2.2z"/></svg>',
+            cloud: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7.5 19a5.5 5.5 0 0 1-.4-11 7 7 0 0 1 13.4 2.1A4.5 4.5 0 0 1 19.5 19z"/></svg>',
+            fog: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 15h16v2H4zm2 4h12v2H6zM7.5 13a5.5 5.5 0 0 1-.4-11 7 7 0 0 1 13.4 2.1A4.5 4.5 0 0 1 19.5 13z"/></svg>',
+            partly: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle fill="currentColor" cx="8" cy="8" r="3.2"/><path fill="currentColor" d="M6.5 18a4.5 4.5 0 0 1-.3-9 5.8 5.8 0 0 1 11.1 1.7A3.7 3.7 0 0 1 16.5 18z"/></svg>',
+            /* Night partly: moon + cloud (never a sun disc after dusk) */
+            partlyNight: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#ffffff" d="M9 3.4a7.2 7.2 0 0 0 9.1 9.3A6.2 6.2 0 1 1 9 3.4z"/><path fill="currentColor" d="M5.5 19a4.5 4.5 0 0 1-.3-9 5.8 5.8 0 0 1 11.1 1.7A3.7 3.7 0 0 1 15.5 19z"/></svg>',
+            sun: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle fill="currentColor" cx="12" cy="12" r="4"/><g stroke="currentColor" stroke-width="1.6" fill="none"><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></g></svg>',
+            rain: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7.5 15a5.5 5.5 0 0 1-.4-11 7 7 0 0 1 13.4 2.1A4.5 4.5 0 0 1 19.5 15z"/><g stroke="currentColor" stroke-width="1.6" fill="none"><path d="M8 17v3M12 16v3M16 17v3"/></g></svg>',
+            snow: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" stroke="currentColor" stroke-width="1.4" d="M12 3v18M5 7l14 10M19 7 5 17"/><circle fill="currentColor" cx="12" cy="12" r="1.6"/></svg>',
+        };
+
+        function weatherIconFor(condition, opts) {
+            const c = String(condition || '').toLowerCase().replace(/_/g, '-');
+            const daily = !!(opts && opts.daily);
+            // Daily forecast: always day icons (sun / cloud) — never moon / night.
+            if (daily) {
+                if (c.indexOf('night') >= 0) {
+                    if (c.indexOf('partly') >= 0) return WEATHER_ICONS.partly;
+                    if (c.indexOf('cloud') >= 0) return WEATHER_ICONS.cloud;
+                    return WEATHER_ICONS.sun;
+                }
+                if (c === 'clearnight') return WEATHER_ICONS.sun;
+            }
+            // Night first — never fall through to sun via "clear" substring.
+            if (c.indexOf('night') >= 0) {
+                if (c.indexOf('partly') >= 0) return WEATHER_ICONS.partlyNight;
+                if (c.indexOf('cloud') >= 0) return WEATHER_ICONS.cloud;
+                return WEATHER_ICONS.moon;
+            }
+            if (c === 'clearnight') return WEATHER_ICONS.moon;
+            if (c.indexOf('partly') >= 0) return WEATHER_ICONS.partly;
+            if (c.indexOf('lightning') >= 0 || c.indexOf('thunder') >= 0 || c.indexOf('hail') >= 0) {
+                return WEATHER_ICONS.rain;
+            }
+            if (c.indexOf('rain') >= 0 || c.indexOf('pour') >= 0) return WEATHER_ICONS.rain;
+            if (c.indexOf('snow') >= 0) return WEATHER_ICONS.snow;
+            if (c.indexOf('fog') >= 0 || c.indexOf('haze') >= 0 || c.indexOf('mist') >= 0) {
+                return WEATHER_ICONS.fog;
+            }
+            if (c.indexOf('cloud') >= 0 || c.indexOf('wind') >= 0 || c.indexOf('exceptional') >= 0) {
+                return WEATHER_ICONS.cloud;
+            }
+            if (c.indexOf('sunny') >= 0 || c === 'clear' || c.indexOf('sun') >= 0) {
+                return WEATHER_ICONS.sun;
+            }
+            return WEATHER_ICONS.cloud;
+        }
+
+        /* Day-endpoint RGB for condition tint; night depth comes from skyBrightness. */
+        var SKY_DAY_RGB = {
+            sunny: [142, 200, 255],
+            partlycloudy: [110, 172, 217],
+            cloudy: [74, 85, 102],
+            fog: [92, 103, 120],
+            rainy: [58, 98, 136],
+            snowy: [158, 182, 212],
+            windy: [90, 101, 120],
+            exceptional: [92, 103, 120]
+        };
+        var SKY_DEEP_NIGHT = [10, 14, 22];
+
+        /**
+         * Mid-latitude (CN ~30–40°N) civil dusk/dawn — northern hemisphere.
+         * Summer: deepen starts ~19:00, deep by ~22:30, dawn lift ~04:30→07:00.
+         * Winter: deepen starts ~16:30 (still afternoon), deep by ~19:30,
+         *         dawn stays dark until ~07:00 and only reaches day-blue ~09:00.
+         * Shoulder (Mar–Apr / Sep–Oct): between the two.
+         */
+        function seasonSkyWindows(month) {
+            var m = month || (new Date().getMonth() + 1);
+            if (m >= 5 && m <= 8) {
+                return { dusk0: 19, dusk1: 22.5, dawn0: 4.5, dawn1: 7 };
+            }
+            if (m === 11 || m === 12 || m <= 2) {
+                return { dusk0: 16.5, dusk1: 19.5, dawn0: 6.5, dawn1: 9 };
+            }
+            return { dusk0: 17.5, dusk1: 21, dawn0: 5.5, dawn1: 8 };
+        }
+
+        /** 1 = full day blue, 0 = deepest night. Continuous across dusk → night → dawn. */
+        function skyBrightness(hour, month) {
+            var w = seasonSkyWindows(month);
+            // Sample mid-hour so e.g. summer 19:00 already starts dipping (not still full day).
+            var h = ((Number(hour) % 24) + 24) % 24 + 0.5;
+            if (h >= w.dawn1 && h < w.dusk0) return 1;
+            if (h >= w.dusk0 && h < w.dusk1) {
+                return 1 - (h - w.dusk0) / (w.dusk1 - w.dusk0);
+            }
+            if (h >= w.dawn0 && h < w.dawn1) {
+                return (h - w.dawn0) / (w.dawn1 - w.dawn0);
+            }
+            return 0;
+        }
+
+        function conditionDayRgb(condition) {
+            var c = String(condition || '').toLowerCase().replace(/_/g, '-');
+            // Night condition names still resolve to the daytime palette endpoint.
+            if (c.indexOf('night') >= 0) {
+                if (c.indexOf('partly') >= 0) return SKY_DAY_RGB.partlycloudy;
+                if (c.indexOf('cloud') >= 0) return SKY_DAY_RGB.cloudy;
+                return SKY_DAY_RGB.sunny;
+            }
+            if (c.indexOf('snow') >= 0) return SKY_DAY_RGB.snowy;
+            if (c.indexOf('rain') >= 0 || c.indexOf('pour') >= 0 ||
+                c.indexOf('lightning') >= 0 || c.indexOf('hail') >= 0) {
+                return SKY_DAY_RGB.rainy;
+            }
+            if (c.indexOf('fog') >= 0 || c.indexOf('haze') >= 0 || c.indexOf('mist') >= 0) {
+                return SKY_DAY_RGB.fog;
+            }
+            if (c.indexOf('partly') >= 0) return SKY_DAY_RGB.partlycloudy;
+            if (c.indexOf('wind') >= 0) return SKY_DAY_RGB.windy;
+            if (c.indexOf('exceptional') >= 0) return SKY_DAY_RGB.exceptional;
+            if (c.indexOf('cloud') >= 0) return SKY_DAY_RGB.cloudy;
+            if (c.indexOf('sunny') >= 0 || c === 'clear' || c.indexOf('sun') >= 0) {
+                return SKY_DAY_RGB.sunny;
+            }
+            return SKY_DAY_RGB.cloudy;
+        }
+
+        function isDailyForecastHours(hours) {
+            if (!hours || !hours.length) return false;
+            for (var i = 0; i < hours.length; i++) {
+                var e = hours[i];
+                if (e && (e.daily === true || e.daily === 1 || e.mode === 'daily')) return true;
+            }
+            // Heuristic: weekday / Today labels and no clock hours → daily strip.
+            var withHour = 0;
+            for (var j = 0; j < hours.length; j++) {
+                if (hourFromEntry(hours[j]) != null) withHour++;
+            }
+            return withHour === 0 && hours.length <= 7;
+        }
+
+        function rgbCssFromTriplet(rgb) {
+            return 'rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ')';
+        }
+
+        function dayPaletteStyle(condition) {
+            var rgb = conditionDayRgb(condition);
+            var lum = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+            return {
+                background: rgbCssFromTriplet(rgb),
+                dark: lum < 148
+            };
+        }
+
+        function lerpRgb(a, b, t) {
+            var u = Math.max(0, Math.min(1, t));
+            return [
+                Math.round(a[0] + (b[0] - a[0]) * u),
+                Math.round(a[1] + (b[1] - a[1]) * u),
+                Math.round(a[2] + (b[2] - a[2]) * u)
+            ];
+        }
+
+        function parseHourLabel(label) {
+            var s = String(label || '').trim();
+            var m24 = s.match(/^(\d{1,2})(?::(\d{2}))?$/);
+            if (m24 && s.indexOf('M') < 0 && s.indexOf('m') < 0) {
+                var h24 = parseInt(m24[1], 10);
+                if (h24 >= 0 && h24 <= 23) return h24;
+            }
+            var m12 = s.match(/^(\d{1,2})(?::\d{2})?\s*(AM|PM|am|pm|a\.m\.|p\.m\.)/);
+            if (m12) {
+                var h = parseInt(m12[1], 10) % 12;
+                var ap = m12[2].charAt(0).toUpperCase();
+                if (ap === 'P') h += 12;
+                return h;
+            }
+            return null;
+        }
+
+        function hourFromEntry(entry) {
+            if (!entry) return null;
+            if (typeof entry.hour === 'number' && isFinite(entry.hour)) return entry.hour;
+            if (entry.hour != null && entry.hour !== '') {
+                var n = Number(entry.hour);
+                if (isFinite(n)) return n;
+            }
+            return parseHourLabel(entry.t);
+        }
+
+        function monthFromEntry(entry) {
+            if (entry && typeof entry.month === 'number' && entry.month >= 1 && entry.month <= 12) {
+                return entry.month;
+            }
+            if (entry && entry.month != null) {
+                var m = Number(entry.month);
+                if (m >= 1 && m <= 12) return m;
+            }
+            return new Date().getMonth() + 1;
+        }
+
+        /**
+         * Continuous solid sky color for one hour cell.
+         * Summer: from ~19:00 keep deepening to midnight, then lift back to day blue.
+         * Floor tint keeps rainy/cloudy nights slightly distinct ("多种夜晚").
+         */
+        function skyStyleForHour(hour, condition, month) {
+            var bright = skyBrightness(hour, month);
+            var mix = 0.1 + 0.9 * bright;
+            var rgb = lerpRgb(SKY_DEEP_NIGHT, conditionDayRgb(condition), mix);
+            var lum = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+            return {
+                background: 'rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ')',
+                dark: lum < 148
+            };
+        }
+
+        function skyRgbCss(entry, condition, daily) {
+            var cond = condition || (entry && entry.condition) || 'cloudy';
+            // Daily forecast: solid day blue / cloudy gray — never night darkening.
+            if (daily || (entry && (entry.daily === true || entry.daily === 1))) {
+                return dayPaletteStyle(cond).background;
+            }
+            var hour = hourFromEntry(entry);
+            if (hour == null || !isFinite(hour)) {
+                return dayPaletteStyle(cond).background;
+            }
+            return skyStyleForHour(hour, cond, monthFromEntry(entry)).background;
+        }
+
+        /** One continuous ramp on the bar — no hard vertical cuts between hours. */
+        function applyBarSkyRamp(bar, hours, daily) {
+            if (!bar || !hours || !hours.length) return;
+            // Daily forecast: solid per-day chips — never a continuous bar gradient.
+            if (daily) {
+                bar.style.backgroundImage = '';
+                bar.classList.remove('has-sky-ramp');
+                return;
+            }
+            var parts = [];
+            var n = hours.length;
+            for (var i = 0; i < n; i++) {
+                var entry = hours[i] || {};
+                var color = skyRgbCss(entry, entry.condition, false);
+                var pct = n === 1 ? 0 : (i / (n - 1)) * 100;
+                parts.push(color + ' ' + pct.toFixed(2) + '%');
+            }
+            bar.style.backgroundImage = 'linear-gradient(to right, ' + parts.join(', ') + ')';
+            bar.classList.add('has-sky-ramp');
+        }
+
+        function applySegSky(el, entry, condition, daily) {
+            var style;
+            if (daily || (entry && (entry.daily === true || entry.daily === 1))) {
+                style = dayPaletteStyle(condition);
+                // Solid day chip (sunny blue / cloudy gray) — no transparent + bar ramp.
+                el.style.background = style.background;
+            } else {
+                var hour = hourFromEntry(entry);
+                if (hour == null || !isFinite(hour)) {
+                    style = dayPaletteStyle(condition);
+                    el.style.background = style.background;
+                } else {
+                    style = skyStyleForHour(hour, condition, monthFromEntry(entry));
+                    el.style.background = 'transparent';
+                }
+            }
+            el.classList.add(style.dark ? 'sky-dark' : 'sky-light');
+            el.classList.remove(style.dark ? 'sky-light' : 'sky-dark');
+        }
+
+        /**
+         * Dynamic hourly axis (not fixed "always previous hour"):
+         *   - Look back at most 3 hours so Now sits near the middle of ≤8 slots
+         *   - Left → right chronological; window slides as the clock advances
+         *   - Labels: "Now" / 12h AM·PM / 24h (isoTime)
+         * Summer/winter colors follow each slot's hour + month.
+         */
+        var HOURLY_LOOKBACK_MAX = 3;
+
+        function epochHourKey(ms) {
+            return Math.floor((ms != null ? ms : Date.now()) / 3600000);
+        }
+
+        function epochHourKeyForClockHour(hourOfDay, nowMs) {
+            var now = new Date(nowMs != null ? nowMs : Date.now());
+            var nowH = now.getHours();
+            var nowEpoch = epochHourKey(now.getTime());
+            var h = ((Number(hourOfDay) % 24) + 24) % 24;
+            var deltaPast = (nowH - h + 24) % 24;
+            if (deltaPast <= 12) return nowEpoch - deltaPast;
+            return nowEpoch + ((h - nowH + 24) % 24);
+        }
+
+        function pruneHourlyPastCache() {
+            var nowEpoch = epochHourKey(Date.now());
+            var minKey = nowEpoch - HOURLY_PAST_CACHE_MAX_AGE;
+            var maxKey = nowEpoch + 16;
+            Object.keys(hourlyPastCache).forEach(function (k) {
+                var n = Number(k);
+                if (n < minKey || n > maxKey) delete hourlyPastCache[k];
+            });
+        }
+
+        /** Remember every hour we see (esp. Now) so it survives after upstream drops it. */
+        function ingestHourlyPastCache(hours) {
+            if (!hours || !hours.length) return;
+            var nowMs = Date.now();
+            for (var i = 0; i < hours.length; i++) {
+                var entry = hours[i];
+                if (!entry || entry.daily === true || entry.daily === 1) continue;
+                var h = hourFromEntry(entry);
+                if (h == null || !isFinite(h)) continue;
+                h = ((h % 24) + 24) % 24;
+                var key = epochHourKeyForClockHour(h, nowMs);
+                var copy = {};
+                for (var k in entry) {
+                    if (Object.prototype.hasOwnProperty.call(entry, k)) copy[k] = entry[k];
+                }
+                copy.hour = h;
+                hourlyPastCache[key] = copy;
+            }
+            pruneHourlyPastCache();
+        }
+
+        /**
+         * Merge ≤3h local past with upstream Now+future.
+         * Fresh upstream wins on conflict.
+         */
+        function mergeHourlyWithPastCache(upstream) {
+            var list = Array.isArray(upstream) ? upstream : [];
+            ingestHourlyPastCache(list);
+            var nowMs = Date.now();
+            var nowEpoch = epochHourKey(nowMs);
+            var byEpoch = {};
+            var d;
+            for (d = HOURLY_LOOKBACK_MAX; d >= 1; d--) {
+                var pk = nowEpoch - d;
+                if (hourlyPastCache[pk]) byEpoch[pk] = hourlyPastCache[pk];
+            }
+            for (var i = 0; i < list.length; i++) {
+                var entry = list[i];
+                if (!entry || entry.daily === true || entry.daily === 1) continue;
+                var h = hourFromEntry(entry);
+                if (h == null || !isFinite(h)) continue;
+                h = ((h % 24) + 24) % 24;
+                byEpoch[epochHourKeyForClockHour(h, nowMs)] = entry;
+            }
+            for (d = 0; d <= 15; d++) {
+                var fk = nowEpoch + d;
+                if (!byEpoch[fk] && hourlyPastCache[fk]) byEpoch[fk] = hourlyPastCache[fk];
+            }
+            return Object.keys(byEpoch).map(Number).sort(function (a, b) { return a - b; })
+                .map(function (key) { return byEpoch[key]; });
+        }
+
+        function clearHourlyPastCache() {
+            hourlyPastCache = {};
+        }
+
+        function hourAxisLabel(hour24) {
+            var h = ((Number(hour24) % 24) + 24) % 24;
+            var nowH = new Date().getHours();
+            if (h === nowH) return 'Now';
+            if (isoTimeEnabled) {
+                return (h < 10 ? '0' : '') + String(h);
+            }
+            var ap = h >= 12 ? 'PM' : 'AM';
+            var h12 = h % 12;
+            if (h12 === 0) h12 = 12;
+            return h12 + ' ' + ap;
+        }
+
+        function stampTimelineEntry(entry, hour24) {
+            var e = {};
+            if (entry) {
+                for (var k in entry) {
+                    if (Object.prototype.hasOwnProperty.call(entry, k)) e[k] = entry[k];
+                }
+            }
+            e.hour = ((Number(hour24) % 24) + 24) % 24;
+            if (e.month == null) e.month = new Date().getMonth() + 1;
+            e.t = hourAxisLabel(e.hour);
+            return e;
+        }
+
+        /** Cap display at 8 hours. */
+        function hourlyDisplayLimit() {
+            const w = window.innerWidth || 0;
+            if (w < 400) return 6;
+            return 8;
+        }
+
+        /** Start hour for the rolling band: now − lookback (≤3), so Now is mid-strip. */
+        function hourlyAxisStartHour(nowH, maxSlots) {
+            var lookback = Math.min(HOURLY_LOOKBACK_MAX, Math.max(0, maxSlots - 1));
+            return (nowH - lookback + 24) % 24;
+        }
+
+        /**
+         * Build the live rolling window on a civil-time axis.
+         * Up to 3 hours before Now (transition context), Now near center, then future.
+         */
+        function selectHourlyWindow(allHours, limit) {
+            var max = Math.min(limit || 8, 8);
+            if (!allHours || !allHours.length) return [];
+
+            var nowH = new Date().getHours();
+            var startH = hourlyAxisStartHour(nowH, max);
+
+            var byHour = {};
+            var sequential = [];
+            for (var i = 0; i < allHours.length; i++) {
+                var entry = allHours[i];
+                var h = hourFromEntry(entry);
+                if (h == null || !isFinite(h)) continue;
+                h = ((h % 24) + 24) % 24;
+                sequential.push({ hour: h, entry: entry, index: i });
+                if (byHour[h] == null) byHour[h] = entry;
+            }
+
+            // No hour metadata — keep list order (daily-ish / legacy).
+            if (!sequential.length) {
+                return allHours.slice(0, max);
+            }
+
+            // Ideal dense axis from startH for max slots (Now at lookback index).
+            var ideal = [];
+            for (var s = 0; s < max; s++) {
+                var want = (startH + s) % 24;
+                if (byHour[want] != null) {
+                    ideal.push(stampTimelineEntry(byHour[want], want));
+                }
+            }
+            if (ideal.length >= Math.min(max, 6) || ideal.length === Object.keys(byHour).length) {
+                return ideal.slice(0, max);
+            }
+
+            // Sparse forecast: consecutive slice from startH (else Now) in list order.
+            var startIdx = 0;
+            var foundStart = false;
+            var foundNow = false;
+            for (var j = 0; j < sequential.length; j++) {
+                if (!foundStart && sequential[j].hour === startH) {
+                    startIdx = j;
+                    foundStart = true;
+                    break;
+                }
+                if (!foundNow && sequential[j].hour === nowH) {
+                    startIdx = j;
+                    foundNow = true;
+                }
+            }
+            if (!foundStart && !foundNow) startIdx = 0;
+            if (startIdx > sequential.length - max) {
+                startIdx = Math.max(0, sequential.length - max);
+            }
+            var out = [];
+            for (var k = startIdx; k < sequential.length && out.length < max; k++) {
+                out.push(stampTimelineEntry(sequential[k].entry, sequential[k].hour));
+            }
+            return out;
+        }
+
+        /**
+         * Collapse consecutive identical weather icons when a run is longer than 2
+         * (3+ same → one icon on the center hour). Color cells stay one-per-hour
+         * so the dusk→night→dawn ramp stays continuous.
+         */
+        function buildHourlyIconRuns(hours, daily) {
+            var runs = [];
+            for (var i = 0; i < hours.length; ) {
+                var cond = String(hours[i].condition || 'cloudy').replace(/\s+/g, '-');
+                var iconHtml = hours[i].iconHtml || weatherIconFor(cond, { daily: daily });
+                var j = i + 1;
+                while (j < hours.length) {
+                    var next = String(hours[j].condition || 'cloudy').replace(/\s+/g, '-');
+                    if (next !== cond) break;
+                    j++;
+                }
+                var len = j - i;
+                runs.push({ condition: cond, iconHtml: iconHtml, start: i, length: len });
+                i = j;
+            }
+            return runs;
+        }
+
+        function renderHourly() {
+            const wrap = document.getElementById('hourly-wrap');
+            // Weather entity + real rows only — never a demo bar
+            if (!wrap || !slotsEnabled || !weatherEntityId || !hourlyHours.length) {
+                hideHourly();
+                return;
+            }
+            const daily = isDailyForecastHours(hourlyHours);
+            const source = daily ? hourlyHours : mergeHourlyWithPastCache(hourlyHours);
+            const hours = daily
+                ? source.slice(0, 7)
+                : selectHourlyWindow(source, hourlyDisplayLimit());
+            wrap.innerHTML =
+                '<div class="hourly frost">' +
+                '<div class="hourly-bar" id="hourly-bar"></div>' +
+                '<div class="hourly-labels" id="hourly-labels"></div>' +
+                '</div>';
+            const bar = document.getElementById('hourly-bar');
+            const labels = document.getElementById('hourly-labels');
+            if (!bar || !labels) return;
+
+            applyBarSkyRamp(bar, hours, daily);
+
+            var runs = buildHourlyIconRuns(hours, daily);
+            runs.forEach(function (run) {
+                var showIconAt = -1;
+                if (mergeWeatherIconsEnabled && run.length > 2) {
+                    showIconAt = run.start + Math.floor((run.length - 1) / 2);
+                }
+                for (var k = 0; k < run.length; k++) {
+                    var idx = run.start + k;
+                    var entry = hours[idx] || {};
+                    var cell = document.createElement('div');
+                    cell.className = 'seg c-' + run.condition;
+                    if (showIconAt < 0 || idx === showIconAt) {
+                        cell.innerHTML = run.iconHtml;
+                    } else {
+                        cell.innerHTML = '';
+                    }
+                    applySegSky(cell, entry, run.condition, daily);
+                    bar.appendChild(cell);
+                }
+            });
+
+            hours.forEach(function (h) {
+                const col = document.createElement('div');
+                col.className = 'hour-col';
+                col.innerHTML =
+                    '<div class="t">' + escapeHtml(h.t || '') + '</div>' +
+                    '<div class="temp">' + escapeHtml(h.temp != null ? String(h.temp) : '') + '</div>';
+                labels.appendChild(col);
+            });
+            wrap.classList.add('has-data');
+            wrap.setAttribute('aria-hidden', 'false');
+            syncLayoutClasses();
+            scheduleWeatherFit();
+        }
+
+        function scrubClassicChrome() {
+            document.body.classList.remove('classic-mode');
+            var classic = document.getElementById('classic-ui');
+            var badge = document.getElementById('logo-badge');
+            var loader = document.getElementById('loader');
+            if (classic) {
+                classic.setAttribute('aria-hidden', 'true');
+                classic.style.display = 'none';
+            }
+            if (badge) {
+                badge.setAttribute('aria-hidden', 'true');
+                badge.style.display = 'none';
+            }
+            if (loader) {
+                loader.classList.remove('active');
+                loader.style.display = 'none';
+            }
+        }
+
+        function restoreClassicChrome() {
+            document.body.classList.add('classic-mode');
+            document.body.classList.remove('slots-mode', 'no-splash');
+            var classic = document.getElementById('classic-ui');
+            var badge = document.getElementById('logo-badge');
+            var loader = document.getElementById('loader');
+            if (classic) {
+                classic.removeAttribute('aria-hidden');
+                classic.style.removeProperty('display');
+            }
+            if (badge) {
+                badge.removeAttribute('aria-hidden');
+                badge.style.removeProperty('display');
+            }
+            if (loader) {
+                loader.style.removeProperty('display');
+            }
+        }
+
+        function playSplashOnce() {
+            if (splashPlayed || !slotsEnabled) return;
+            splashPlayed = true;
+            splashRunning = true;
+            scrubClassicChrome();
+            const splash = document.getElementById('logo-splash');
+            const ui = document.getElementById('slots-ui');
+            document.body.classList.remove('no-splash');
+            splash.classList.remove('run');
+            ui.classList.remove('reveal');
+            ui.style.removeProperty('opacity');
+            void splash.offsetWidth;
+            void ui.offsetWidth;
+            splash.classList.add('run');
+            ui.classList.add('reveal');
+            const finishSplash = () => {
+                if (!splashRunning && !splash.classList.contains('run')) return;
+                splashRunning = false;
+                splash.classList.remove('run');
+                // Pull logo fully out of the layer stack after fake preload.
+                document.body.classList.add('no-splash');
+                scrubClassicChrome();
+            };
+            const onEnd = (ev) => {
+                if (ev && ev.target !== splash) return;
+                splash.removeEventListener('animationend', onEnd);
+                finishSplash();
+            };
+            splash.addEventListener('animationend', onEnd);
+            // Fallback if animationend is dropped by WebView pause.
+            setTimeout(finishSplash, 2800);
+        }
+
+        function setSlotsMode(enabled) {
+            const wasEnabled = slotsEnabled;
+            slotsEnabled = !!enabled;
+            toggleClass(document.body, 'slots-mode', slotsEnabled);
+            if (slotsEnabled) {
+                scrubClassicChrome();
+                // Entering slots mode once → fake preload splash. Later setConfig
+                // (entity ID edits / HA pushes) must NOT touch clock opacity or splash.
+                if (!wasEnabled) {
+                    splashPlayed = false;
+                    playSplashOnce();
+                    prefetchQuote();
+                    fetchQuote();
+                }
+            } else {
+                splashRunning = false;
+                document.body.classList.remove(
+                    'bright-wallpaper', 'no-splash',
+                    'layout-corner', 'layout-center', 'layout-dashboard',
+                    'has-capsules', 'has-weather', 'has-hourly'
+                );
+                const splash = document.getElementById('logo-splash');
+                splash.classList.remove('run');
+                document.getElementById('slots-ui').classList.remove('reveal');
+                document.getElementById('slots-ui').style.removeProperty('opacity');
+                hideHourly();
+                restoreClassicChrome();
+                fetchPoetry();
+            }
+            syncLayoutClasses();
+            updateTime();
+        }
+
+        window.AvaDawn = {
+            setConfig: function (cfg) {
+                try {
+                    cfg = cfg || {};
+                    const enable = !!cfg.enabled;
+                    // Mode / splash only when the enabled bit flips — entity edits stay data-only.
+                    if (enable !== slotsEnabled) {
+                        setSlotsMode(enable);
+                    } else if (enable) {
+                        document.body.classList.add('slots-mode');
+                        scrubClassicChrome();
+                    } else {
+                        document.body.classList.remove('slots-mode');
+                        restoreClassicChrome();
+                    }
+                    var prevWeatherId = weatherEntityId;
+                    weatherEntityId = String(cfg.weatherEntityId || '').trim();
+                    slotData = normalizeSlots(cfg.slots);
+                    // Flags before paint so hourly / clock use the latest values.
+                    isoTimeEnabled = !!cfg.isoTime;
+                    toggleClass(document.body, 'iso-time', isoTimeEnabled);
+                    mergeWeatherIconsEnabled = !!cfg.mergeWeatherIcons;
+                    renderSlots();
+                    // Capsules: only filled entity IDs. Hourly: weather entity + real hours.
+                    // Important: empty/missing cfg.hourly must NOT wipe a strip that setHourly
+                    // already painted — Kotlin often re-injects setConfig while forecast is in flight.
+                    if (!weatherEntityId) {
+                        hourlyHours = [];
+                        clearHourlyPastCache();
+                        hideHourly();
+                    } else if (Array.isArray(cfg.hourly) && cfg.hourly.length) {
+                        hourlyHours = cfg.hourly;
+                        ingestHourlyPastCache(hourlyHours);
+                        renderHourly();
+                    } else if (prevWeatherId && prevWeatherId !== weatherEntityId) {
+                        // Weather entity changed — drop stale hours for the old ID.
+                        hourlyHours = [];
+                        clearHourlyPastCache();
+                        hideHourly();
+                    } else if (hourlyHours.length) {
+                        renderHourly();
+                    } else {
+                        syncLayoutClasses();
+                    }
+                    // Keep clock digits alive across entity-id reconfigs.
+                    if (slotsEnabled) updateTime();
+                    // Wallpaper source: empty / whitespace → built-in default.
+                    var nextSrc = String(cfg.wallpaperSource || '').trim();
+                    if (nextSrc !== wallpaperSourceUrl) {
+                        wallpaperSourceUrl = nextSrc;
+                        try {
+                            localStorage.removeItem(CACHE_KEY_WALLPAPER);
+                            localStorage.removeItem('xiaomi_wallpaper_cache');
+                        } catch (e2) {}
+                        fetchWallpaper(true);
+                    }
+                } catch (e) {}
+            },
+            updateEntity: function (patch) {
+                try {
+                    // Only refresh slots the user actually configured — never invent capsules
+                    if (!patch || !String(patch.entityId || '').trim()) return;
+                    const entityId = String(patch.entityId).trim();
+                    const idx = slotData.findIndex(function (s) { return s.entityId === entityId; });
+                    if (idx < 0) {
+                        // Entity id was rewritten in settings — full slot list comes via setConfig.
+                        return;
+                    }
+                    slotData[idx] = Object.assign({}, slotData[idx], patch, { entityId: entityId });
+                    renderSlots();
+                } catch (e) {}
+            },
+            setHourly: function (payload) {
+                try {
+                    payload = payload || {};
+                    const entityId = String(payload.weatherEntityId || weatherEntityId || '').trim();
+                    const hours = Array.isArray(payload.hours) ? payload.hours : [];
+                    weatherEntityId = entityId;
+                    if (!entityId || !hours.length) {
+                        hideHourly();
+                        return;
+                    }
+                    hourlyHours = hours;
+                    ingestHourlyPastCache(hours);
+                    renderHourly();
+                } catch (e) {}
+            },
+            /** Seed ≤3h past cache (HA upstream is Now+future only). */
+            ingestHourlyPastCache: ingestHourlyPastCache,
+            clearHourlyPastCache: clearHourlyPastCache
+        };
+
+        function init() {
+            try {
+                scrubClassicChrome();
+                updateTime();
+                stepAmbient();
+                fetchWallpaper(true);
+                // Classic poem only if App never enables slots (standalone / classic wallpaper).
+                setTimeout(function () {
+                    if (!slotsEnabled) {
+                        restoreClassicChrome();
+                        fetchPoetry();
+                    }
+                }, 900);
+                setInterval(updateTime, 1000);
+                setInterval(stepAmbient, AMBIENT_STEP_MS);
+                setInterval(function () { fetchWallpaper(false); }, 60000 * 5);
+                setInterval(fetchPoetry, 60000 * 5);
+                setInterval(function () { if (slotsEnabled) fetchQuote(); }, 60000 * 5);
+                var resizeTimer = 0;
+                window.addEventListener('resize', function () {
+                    clearTimeout(resizeTimer);
+                    resizeTimer = setTimeout(function () {
+                        if (slotsEnabled) fitSlotsClock();
+                        if (slotsEnabled && weatherEntityId && hourlyHours.length) renderHourly();
+                        else scheduleWeatherFit();
+                    }, 120);
+                });
+            } catch (e) {
+                try { updateTime(); } catch (e2) {}
+            }
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+    </script>
+</body>
+</html>

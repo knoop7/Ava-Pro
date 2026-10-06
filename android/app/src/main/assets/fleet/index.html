@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark" id="colorSchemeMeta" />
+  <title>Ava Cluster</title>
+  <!-- Apply saved theme before CSS paint — prevents dark↔light flash on refresh. -->
+  <script>
+    (function () {
+      var theme = "dark";
+      try {
+        var raw = localStorage.getItem("ava.fleet.console.prefs");
+        if (raw) {
+          var p = JSON.parse(raw);
+          var pref = p && p.theme;
+          if (pref === "light") theme = "light";
+          else if (pref === "system") {
+            theme = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+          } else {
+            theme = "dark";
+          }
+        } else {
+          var old = localStorage.getItem("ava-fleet-theme");
+          if (old === "light" || old === "dark") theme = old;
+        }
+      } catch (e) {}
+      var root = document.documentElement;
+      root.setAttribute("data-theme", theme);
+      root.style.colorScheme = theme;
+      var meta = document.getElementById("colorSchemeMeta");
+      if (meta) meta.setAttribute("content", theme);
+      // Already unlocked this tab and not explicitly locked — skip lock gate first paint.
+      try {
+        var locked = sessionStorage.getItem("ava.fleet.console.locked") === "1";
+        var unlocked = sessionStorage.getItem("ava.fleet.console.unlocked") === "1";
+        if (unlocked && !locked) {
+          root.classList.add("auth-resume");
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="/app.css" />
+  <link rel="stylesheet" href="/xterm.css" />
+</head>
+<body class="view-overview" data-theme="dark">
+<script>
+  /* Mirror html theme onto body before first paint of shell. */
+  (function () {
+    var t = document.documentElement.getAttribute("data-theme") || "dark";
+    document.body.setAttribute("data-theme", t);
+  })();
+</script>
+  <div class="shell">
+    <aside class="sidebar" aria-label="nav">
+      <div class="brand">
+        <img class="mark mark-dark" src="/ava-icon.webp" alt="Ava" width="30" height="30" />
+        <img class="mark mark-light" src="/ava-icon-light.webp" alt="Ava" width="30" height="30" />
+        <div>
+          <div class="brand-title" data-i18n="brandTitle">Ava Cluster</div>
+          <div class="brand-sub" data-i18n="brandSub">Remote console</div>
+        </div>
+      </div>
+      <nav class="nav">
+        <div class="nav-sec" data-i18n="navPlatform">Platform</div>
+        <button type="button" class="nav-item on" data-view="overview">
+          <span class="nav-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="20" height="20"><rect x="3" y="3" width="8" height="8" rx="2" fill="currentColor" opacity=".9"/><rect x="13" y="3" width="8" height="8" rx="2" fill="currentColor" opacity=".55"/><rect x="3" y="13" width="8" height="8" rx="2" fill="currentColor" opacity=".55"/><rect x="13" y="13" width="8" height="8" rx="2" fill="currentColor" opacity=".9"/></svg>
+          </span>
+          <span class="nav-label" data-i18n="navOverview">Overview</span>
+        </button>
+        <div class="nav-sec" data-i18n="navOps">Ops</div>
+        <button type="button" class="nav-item" data-view="settings">
+          <span class="nav-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+          </span>
+          <span class="nav-label" data-i18n="navSettings">Settings</span>
+        </button>
+        <button type="button" class="nav-item" data-view="files">
+          <span class="nav-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+          </span>
+          <span class="nav-label" data-i18n="navFiles">Files</span>
+        </button>
+        <button type="button" class="nav-item" data-view="apps">
+          <span class="nav-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"/><path d="M12 22V12"/><path d="m3.3 7 7.703 4.734a2 2 0 0 0 1.994 0L20.7 7"/><path d="m7.5 4.27 9 5.15"/></svg>
+          </span>
+          <span class="nav-label" data-i18n="navApps">Apps</span>
+        </button>
+        <button type="button" class="nav-item" data-view="activity">
+          <span class="nav-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+          </span>
+          <span class="nav-label" data-i18n="navActivity">Device logs</span>
+        </button>
+        <button type="button" class="nav-item" data-view="console">
+          <span class="nav-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/></svg>
+          </span>
+          <span class="nav-label" data-i18n="navConsole">Interface</span>
+        </button>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <h1 id="pageTitle">Overview</h1>
+          <p class="top-sub" id="pageSub"></p>
+        </div>
+        <div class="top-actions">
+          <span class="live" id="liveBadge" data-tour="live-status" data-state="connecting">
+            <span class="pulse"></span>
+            <span class="live-label">Connecting…</span>
+          </span>
+        </div>
+      </header>
+
+      <div class="auth-banner hidden" id="authBanner" role="alert">
+        <div class="auth-banner-text">
+          <strong data-i18n="authBannerTitle">Access password required</strong>
+          <span data-i18n="authBannerBody">Enter the password set in Ava → Cluster. It becomes the API token for this browser.</span>
+        </div>
+        <button type="button" class="btn primary" id="authBannerGoBtn" data-i18n="authBannerGo">Enter password</button>
+      </div>
+
+      <section class="content" id="view-overview">
+        <div class="wall-chrome filters devices-toolbar" data-tour="devices-list">
+          <div class="apps-search wall-search">
+            <svg class="apps-search-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M21 21l-4.3-4.3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <input class="input" id="deviceFilter" data-i18n-placeholder="filterPlaceholder" placeholder="Search…" />
+          </div>
+          <div class="wall-chrome-actions">
+            <div class="view-toggle" role="group" aria-label="view mode">
+              <button type="button" class="view-toggle-btn on" data-view-mode="grid" aria-label="Grid" title="Grid">
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="2" fill="currentColor"/><rect x="13" y="3" width="8" height="8" rx="2" fill="currentColor"/><rect x="3" y="13" width="8" height="8" rx="2" fill="currentColor"/><rect x="13" y="13" width="8" height="8" rx="2" fill="currentColor"/></svg>
+              </button>
+              <button type="button" class="view-toggle-btn" data-view-mode="list" aria-label="List" title="List">
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="3" y="4" width="18" height="3" rx="1.5" fill="currentColor"/><rect x="3" y="10.5" width="18" height="3" rx="1.5" fill="currentColor"/><rect x="3" y="17" width="18" height="3" rx="1.5" fill="currentColor"/></svg>
+              </button>
+            </div>
+            <button type="button" class="btn primary devices-add-btn" id="devicesAddBtn" data-adb-add data-i18n="fleetWallAddDevice">Add device</button>
+          </div>
+        </div>
+
+        <div class="fleet-wall-panel" id="fleetGridPanel">
+          <div class="fleet-wall" id="fleetWall" data-tour="fleet-wall">
+            <div class="fleet-wall-loading" role="status" aria-live="polite" aria-busy="true">
+              <div class="fleet-wall-spinner" aria-hidden="true"></div>
+              <span class="sr-only" data-i18n="loadingStatus">Loading…</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-wrap hidden" id="devicesTableWrap" data-tour="devices-table">
+          <table class="devices">
+            <thead>
+              <tr>
+                <th data-i18n="colDevice">Device</th>
+                <th data-i18n="colStatus">Status</th>
+                <th data-i18n="colMeta">Network</th>
+                <th data-i18n="colActions">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="deviceRows"></tbody>
+          </table>
+        </div>
+      </section>
+      <section class="content hidden" id="view-devices">
+      </section>
+
+      <section class="content hidden" id="view-device">
+        <div class="device-toolbar">
+          <button type="button" class="btn" id="deviceBackBtn" data-i18n="deviceBack">← Devices</button>
+          <div class="device-toolbar-title">
+            <div class="device-toolbar-name">
+              <strong id="deviceFocusName">—</strong>
+              <span class="status-star" id="deviceLocalBadge" hidden title="Local" aria-label="Local">
+                <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true" focusable="false">
+                  <path fill="currentColor" d="M12 2.8l2.72 5.52 6.09.89-4.4 4.29 1.04 6.06L12 16.7l-5.45 2.86 1.04-6.06-4.4-4.29 6.09-.89L12 2.8z"/>
+                </svg>
+              </span>
+            </div>
+            <span class="mono hidden" id="deviceFocusId"></span>
+          </div>
+          <div class="device-tabs" role="tablist">
+            <button type="button" class="chip on" data-device-tab="params" data-i18n="deviceTabParams">Params</button>
+            <button type="button" class="chip" data-device-tab="screen" data-i18n="deviceTabScreen">Screen</button>
+            <button type="button" class="chip" data-device-tab="terminal" data-i18n="deviceTabTerminal">ADB Shell</button>
+          </div>
+        </div>
+
+        <div id="deviceTabParams" class="params-stack">
+          <p class="tab-lead" data-i18n="paramsLead">Model, discovery, capabilities, metrics, and modules.</p>
+
+          <div class="panel identity-panel">
+            <div class="panel-h">
+              <h2 data-i18n="deviceIdentityTitle">Identity</h2>
+            </div>
+            <div class="panel-b">
+              <div class="detail-grid info-panel" id="localDetail">
+                <div class="muted" data-i18n="loadingStatus">Loading…</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-h">
+              <h2 data-i18n="metricsTitle">Live metrics</h2>
+              <button type="button" class="btn" id="telemetryDeepBtn" data-i18n="telemetryDeep">Refresh</button>
+            </div>
+            <div class="panel-b">
+              <div class="metric-kpis" id="metricKpis"></div>
+              <div class="charts">
+                <div class="chart-card">
+                  <div class="chart-label" data-i18n="chartCpu">CPU %</div>
+                  <canvas id="cpuChart" width="640" height="160" aria-label="CPU chart"></canvas>
+                </div>
+                <div class="chart-card">
+                  <div class="chart-label" data-i18n="chartMem">Memory %</div>
+                  <canvas id="memChart" width="640" height="160" aria-label="Memory chart"></canvas>
+                </div>
+              </div>
+              <div class="detail-grid info-panel" id="telemetryDetail" style="margin-top:16px"></div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-h">
+              <h2 data-i18n="thermalTitle">Thermal</h2>
+            </div>
+            <div class="panel-b">
+              <div class="table-wrap">
+                <table class="devices">
+                  <thead>
+                    <tr>
+                      <th data-i18n="colZone">Zone</th>
+                      <th data-i18n="colType">Type</th>
+                      <th data-i18n="colTemp">°C</th>
+                    </tr>
+                  </thead>
+                  <tbody id="thermalRows"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel modules-panel">
+            <div class="panel-h">
+              <div class="panel-h-text">
+                <h2 data-i18n="modulesTitle">Modules</h2>
+                <p class="panel-sub" data-i18n="modulesSub">From ModManager</p>
+              </div>
+              <span class="badge neutral" id="modulesCount">0</span>
+            </div>
+            <div class="panel-b">
+              <div class="mod-grid" id="modGridFull">
+                <div class="mod-empty muted" data-i18n="noModules">No modules</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <div id="deviceTabScreen" class="hidden">
+          <div class="panel screen-control-panel">
+            <div class="panel-h screen-h">
+              <div class="panel-h-text">
+                <h2 data-i18n="screenControlTitle">Remote control</h2>
+              </div>
+              <div class="screen-actions">
+                <button type="button" class="btn primary" id="screenStartBtn" data-i18n="screenStart">Start</button>
+                <button type="button" class="btn" id="screenStopBtn" data-i18n="screenStop" disabled>Stop</button>
+                <button type="button" class="btn hidden" id="screenEnableA11yBtn" data-i18n="screenEnableA11y">Enable Accessibility</button>
+              </div>
+            </div>
+            <div class="panel-b screen-panel-b">
+              <div class="screen-stage" id="screenStage" data-state="idle">
+                <div class="screen-surface" id="screenSurface">
+                  <!-- Live MJPEG image is inserted here on Start; removed on Stop
+                       so the browser closes the multipart connection. -->
+                </div>
+                <div class="screen-overlay" id="screenOverlay" hidden>
+                  <span class="screen-overlay-text" id="screenOverlayText"></span>
+                  <span class="screen-overlay-text screen-meta" id="screenMeta"></span>
+                </div>
+                <div class="screen-placeholder" id="screenPlaceholder">
+                  <div class="screen-empty" aria-hidden="true">
+                    <svg class="screen-empty-svg" viewBox="0 0 160 160" width="96" height="96" focusable="false">
+                      <rect x="34" y="20" width="92" height="120" rx="16" fill="none" stroke="currentColor" stroke-opacity="0.6" stroke-width="2.4" />
+                      <rect x="46" y="34" width="68" height="86" rx="6" fill="none" stroke="currentColor" stroke-opacity="0.28" stroke-width="1.6" stroke-dasharray="4 5" />
+                      <circle cx="80" cy="130" r="3.5" fill="currentColor" fill-opacity="0.55" />
+                    </svg>
+                  </div>
+                  <div class="screen-empty-title" data-i18n="screenEmptyTitle">No frame yet</div>
+                  <div class="screen-empty-text" id="screenPlaceholderText" data-i18n="screenWaiting">Waiting…</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="deviceTabTerminal" class="hidden">
+          <div class="panel shell-panel">
+            <div class="panel-h screen-h">
+              <div class="panel-h-text">
+                <h2 data-i18n="shellTitle">ADB Terminal</h2>
+                <p class="panel-sub" data-i18n="shellLead">Interactive shell via Shizuku/root; peers use the cluster proxy.</p>
+              </div>
+              <div class="screen-actions">
+                <button type="button" class="btn" id="shellClearBtn" data-i18n="shellClear">Clear</button>
+                <button type="button" class="btn" id="shellFocusBtn" data-i18n="shellFocus">Focus</button>
+              </div>
+            </div>
+            <div class="panel-b">
+              <div class="xterm-wrap" id="shellXtermWrap">
+                <div class="xterm-host" id="shellXterm"></div>
+              </div>
+              <div class="screen-status" id="shellStatus">
+                <span id="shellMeta"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="content hidden" id="view-settings">
+        <div class="files-bar" id="settingsToolsBar" data-tour="settings-tools">
+          <div class="files-bar-actions">
+            <button type="button" class="btn files-bar-btn" id="settingsExportBtn" data-i18n="settingsExport">Export</button>
+            <button type="button" class="btn files-bar-btn" id="settingsImportBtn" data-i18n="settingsImport">Import</button>
+            <button type="button" class="btn files-bar-btn" id="settingsTransferBtn" data-i18n="settingsTransfer">Transfer</button>
+            <button type="button" class="btn files-bar-btn" id="settingsToggleBtn" data-i18n="settingsExpandAll">Expand</button>
+          </div>
+        </div>
+
+        <div class="settings-body" id="settingsCatalogPanel" data-tour="settings-catalog">
+          <div id="settingsCatalog" class="settings-catalog">
+            <div class="muted" data-i18n="settingsLoading">Loading settings…</div>
+          </div>
+        </div>
+
+        <div class="settings-main">
+        <details class="panel settings-accordion" id="settingsHaPanel">
+          <summary class="panel-h settings-summary">
+            <h2 data-i18n="settingsHaTitle">Home Assistant switches</h2>
+            <span class="badge info">HA</span>
+          </summary>
+          <div class="panel-b">
+            <div id="settingsHaList">
+              <div class="muted" data-i18n="settingsLoading">Loading…</div>
+            </div>
+          </div>
+        </details>
+
+        <details class="panel settings-accordion" id="jsonEditorPanel" data-tour="settings-json">
+          <summary class="panel-h json-editor-h settings-summary">
+            <h2 data-i18n="settingsJsonEditor">Device JSON</h2>
+            <span class="json-sync-status" id="jsonSyncStatus" data-state="synced" data-i18n="settingsJsonSynced">Synced</span>
+          </summary>
+          <div class="panel-b">
+            <div class="settings-bar json-editor-actions" style="margin-bottom:12px">
+              <button type="button" class="btn files-bar-btn" id="jsonFormatBtn" data-i18n="settingsJsonFormat">Format</button>
+              <button type="button" class="btn files-bar-btn" id="jsonReloadBtn" data-i18n="settingsJsonReload">Reload from form</button>
+            </div>
+            <textarea id="jsonEditor" class="json-editor" rows="16" spellcheck="false"></textarea>
+          </div>
+        </details>
+        </div>
+
+        <span id="settingsStatus" class="hidden" hidden aria-hidden="true"></span>
+
+        <div class="settings-modal hidden" id="importModal">
+          <div class="settings-modal-content">
+            <div class="settings-modal-header">
+              <h3 data-i18n="settingsImportTitle">Import settings</h3>
+              <button type="button" class="btn" id="importCloseBtn">&times;</button>
+            </div>
+            <div class="settings-modal-body">
+              <p class="muted" data-i18n="settingsImportHint">Accepts full ava-backup files or a settings template (partition map).</p>
+              <div class="import-section">
+                <label class="btn import-file-label" id="importFileLabel">
+                  <span data-i18n="settingsImportFile">Choose file</span>
+                  <input type="file" id="importFileInput" accept=".json,application/json" hidden />
+                </label>
+                <span id="importFileName" class="muted"></span>
+              </div>
+              <div class="import-section">
+                <label class="import-label" data-i18n="settingsImportPaste">Or paste JSON below</label>
+                <textarea id="importPasteArea" class="json-editor" rows="10" spellcheck="false"></textarea>
+              </div>
+              <div class="import-section">
+                <button type="button" class="btn primary" id="importApplyBtn" data-i18n="settingsImportApply">Apply import</button>
+                <span id="importStatus" class="muted"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-modal hidden" id="transferModal" data-tour="settings-transfer">
+          <div class="settings-modal-content transfer-modal-content">
+            <div class="settings-modal-header">
+              <h3 data-i18n="settingsTransferTitle">Transfer settings</h3>
+              <button type="button" class="btn files-bar-btn settings-modal-close" id="transferCloseBtn" aria-label="Close">&times;</button>
+            </div>
+            <div class="settings-modal-body">
+              <p class="muted" data-i18n="settingsTransferSub">Copy settings to another device</p>
+              <div class="transfer-controls">
+                <div class="transfer-row">
+                  <label data-i18n="settingsTransferPeer">Select peer device</label>
+                  <select id="transferPeerSelect" class="input transfer-select"></select>
+                </div>
+                <div class="transfer-row">
+                  <input class="input" id="transferHost" placeholder="192.168.1.x" data-i18n-placeholder="clusterProbeHost" />
+                  <input class="input transfer-port" id="transferPort" placeholder="8888" data-i18n-placeholder="clusterProbePort" />
+                </div>
+                <div class="transfer-row transfer-actions">
+                  <button type="button" class="btn files-bar-btn" id="transferProbeBtn" data-i18n="settingsTransferProbe">Probe</button>
+                  <button type="button" class="btn files-bar-btn" id="transferPullBtn" disabled data-i18n="settingsTransferPull">Pull from peer</button>
+                  <button type="button" class="btn files-bar-btn" id="transferPushBtn" disabled data-i18n="settingsTransferPush">Push to peer</button>
+                </div>
+                <label class="transfer-row transfer-backup-label">
+                  <input type="checkbox" id="transferBackupChk" checked />
+                  <span data-i18n="settingsTransferBackup">Back up current settings before push</span>
+                </label>
+                <div id="transferStatus" class="muted"></div>
+              </div>
+              <div class="hidden" id="transferReviewArea">
+                <h3 data-i18n="settingsTransferReview">Review settings before applying</h3>
+                <textarea id="transferReviewJson" class="json-editor" rows="10" readonly spellcheck="false"></textarea>
+                <div class="settings-bar" style="margin-top:10px">
+                  <button type="button" class="btn primary files-bar-btn" id="transferApplyBtn" data-i18n="settingsTransferApply">Apply pulled settings</button>
+                  <button type="button" class="btn files-bar-btn" id="transferCancelBtn" data-i18n="reviewCancel">Cancel</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="content hidden" id="view-files">
+        <div class="files-bar" data-tour="files-toolbar">
+          <label class="files-bar-device">
+            <select id="filesDeviceSelect" class="input" data-i18n-aria-label="filesDevice"></select>
+          </label>
+          <div class="files-bar-actions">
+            <button type="button" class="btn files-bar-btn" id="filesRefreshBtn" data-i18n="filesRefresh">Refresh</button>
+            <label class="btn files-bar-btn files-upload-label">
+              <span data-i18n="filesUpload">Upload</span>
+              <input type="file" id="filesUploadInput" multiple hidden />
+            </label>
+            <button type="button" class="btn files-bar-btn" id="filesMkdirBtn" data-i18n="filesMkdir">New folder</button>
+            <button type="button" class="btn files-bar-btn" id="filesHomeBtn" data-i18n="filesHome">Home</button>
+          </div>
+        </div>
+        <div class="files-host" id="filesHost">
+          <nav class="files-breadcrumb" id="filesBreadcrumb" aria-label="breadcrumb"></nav>
+          <div class="files-list-wrap">
+            <table class="files-table">
+              <thead>
+                <tr>
+                  <th class="files-th-icon"></th>
+                  <th class="files-th-name files-th-sort" data-sort="name" data-i18n="filesColName">Name</th>
+                  <th class="files-th-time files-th-sort" data-sort="time" data-i18n="filesColTime">Time</th>
+                  <th class="files-th-size files-th-sort" data-sort="size" data-i18n="filesColSize">Size</th>
+                  <th class="files-th-actions" data-i18n="filesColActions"></th>
+                </tr>
+              </thead>
+              <tbody id="filesTableBody"></tbody>
+            </table>
+            <div class="files-empty hidden" id="filesEmpty" data-i18n="filesEmpty">This folder is empty</div>
+          </div>
+          <div class="files-loading hidden" id="filesLoading">
+            <div class="files-spinner"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="content hidden" id="view-apps">
+        <div class="filters apps-toolbar" data-tour="apps-toolbar">
+          <div class="apps-toolbar-row apps-toolbar-query">
+            <label class="apps-device-label">
+              <select id="appsDeviceSelect" class="input" data-i18n-aria-label="appsDevice"></select>
+            </label>
+            <div class="apps-search">
+              <svg class="apps-search-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M21 21l-4.3-4.3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              <input class="input" id="appsFilter" data-i18n-placeholder="appsSearchPh" placeholder="Search package…" />
+            </div>
+          </div>
+          <div class="apps-toolbar-row apps-toolbar-ctrl">
+            <div class="apps-chips apps-segmented" role="group" aria-label="filter">
+              <button type="button" class="chip on" data-apps-filter="user" data-i18n="appsFilterUser">User</button>
+              <button type="button" class="chip" data-apps-filter="system" data-i18n="appsFilterSystem">System</button>
+              <button type="button" class="chip" data-apps-filter="disabled" data-i18n="appsFilterDisabled">Disabled</button>
+              <button type="button" class="chip" data-apps-filter="all" data-i18n="appsFilterAll">All</button>
+            </div>
+            <div class="apps-toolbar-actions">
+              <button type="button" class="btn apps-action-btn" id="appsRefreshBtn" data-i18n="appsRefresh">Refresh</button>
+              <label class="btn apps-action-btn apps-install-label">
+                <span data-i18n="appsInstall">Install APK</span>
+                <input type="file" id="appsInstallInput" accept=".apk,application/vnd.android.package-archive" hidden />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="apps-layout">
+          <div class="apps-list-wrap" id="appsTableWrap" data-tour="apps-table">
+            <div class="apps-list" id="appsRows"></div>
+          </div>
+          <div class="apps-table-footer">
+            <span class="muted" id="appsPageSummary"></span>
+            <div class="apps-pagination" role="group" data-i18n-aria-label="appsPagination" aria-label="Pagination">
+              <button type="button" class="btn apps-page-btn" id="appsPagePrev" data-i18n="appsPagePrev">Previous</button>
+              <span class="apps-page-label" id="appsPageLabel">1 / 1</span>
+              <button type="button" class="btn apps-page-btn" id="appsPageNext" data-i18n="appsPageNext">Next</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="apps-detail-modal hidden" id="appsDetailPanel" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="appsDetailTitle">
+        <div class="apps-detail-backdrop" data-apps-detail-dismiss></div>
+        <article class="apps-detail-dialog" role="document">
+          <header class="apps-detail-header">
+            <div class="apps-detail-heading">
+              <span class="apps-detail-eyebrow" data-i18n="appsDetailTitle">App details</span>
+              <h2 id="appsDetailTitle">—</h2>
+            </div>
+            <button type="button" class="btn apps-detail-close" id="appsDetailCloseBtn" data-i18n-aria-label="appsClose" aria-label="Close">&times;</button>
+          </header>
+          <div class="apps-detail-body">
+            <div class="apps-detail-meta" id="appsDetailMeta"></div>
+            <div class="apps-actions" id="appsDetailActions">
+              <button type="button" class="btn primary" data-apps-action="launch" data-i18n="appsActionLaunch">Launch</button>
+              <button type="button" class="btn" data-apps-action="force-stop" data-i18n="appsActionStop">Force stop</button>
+              <button type="button" class="btn" data-apps-action="disable" data-i18n="appsActionDisable">Disable</button>
+              <button type="button" class="btn" data-apps-action="enable" data-i18n="appsActionEnable">Enable</button>
+              <button type="button" class="btn danger-outline" data-apps-action="clear" data-i18n="appsActionClear">Clear data</button>
+              <button type="button" class="btn" id="appsPullApkBtn" data-i18n="appsActionPull">Download APK</button>
+            </div>
+            <p class="muted apps-detail-status" id="appsDetailStatus"></p>
+          </div>
+        </article>
+      </div>
+
+      <section class="content hidden" id="view-activity">
+        <div class="files-bar logs-bar" data-tour="device-logs">
+          <label class="files-bar-device logs-bar-device">
+            <select id="logsDeviceSelect" class="input" data-i18n-aria-label="logsDevice"></select>
+          </label>
+          <div class="files-bar-actions logs-bar-actions">
+            <label class="logs-live files-bar-btn">
+              <input type="checkbox" id="logsLiveChk" />
+              <span data-i18n="logsLive">Live</span>
+            </label>
+            <button type="button" class="btn files-bar-btn" id="logsRefreshBtn" data-i18n="logsRefresh">Refresh</button>
+            <button type="button" class="btn files-bar-btn" id="logsClearBtn" data-i18n="logsClear">Clear</button>
+          </div>
+        </div>
+        <div class="incidents-host" data-tour="device-incidents">
+          <div class="incidents-head">
+            <span class="incidents-title" data-i18n="incidentsTitle">Abnormal ends</span>
+            <span class="muted incidents-note" id="incidentsNote"></span>
+            <button type="button" class="btn files-bar-btn" id="incidentsRefreshBtn" data-i18n="logsRefresh">Refresh</button>
+          </div>
+          <div class="incidents-list" id="incidentsList">
+            <div class="incidents-empty" data-i18n="incidentsEmpty">No abnormal end recorded</div>
+          </div>
+        </div>
+        <div class="logs-host">
+          <div class="log-console" id="logConsole" aria-live="off">
+            <div class="log-empty" data-i18n="logsEmpty">No log lines yet</div>
+          </div>
+        </div>
+      </section>
+
+      <div class="apps-detail-modal hidden" id="incidentModal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="incidentModalTitle">
+        <div class="apps-detail-backdrop" data-incident-dismiss></div>
+        <article class="apps-detail-dialog" role="document">
+          <header class="apps-detail-header">
+            <div class="apps-detail-heading">
+              <span class="apps-detail-eyebrow" id="incidentModalDevice">—</span>
+              <h2 id="incidentModalTitle">—</h2>
+            </div>
+            <button type="button" class="btn apps-detail-close" id="incidentModalCloseBtn" data-i18n-aria-label="appsClose" aria-label="Close">&times;</button>
+          </header>
+          <div class="apps-detail-body">
+            <div class="apps-detail-meta" id="incidentModalMeta"></div>
+            <pre class="incident-stack" id="incidentModalStack"></pre>
+          </div>
+        </article>
+      </div>
+
+      <section class="content hidden" id="view-console">
+
+        <div class="panel" id="consoleAppearPanel">
+          <div class="panel-h">
+            <h2 data-i18n="consoleAppearTitle">Appearance</h2>
+          </div>
+          <div class="panel-b console-form">
+            <label class="console-field">
+              <span data-i18n="lang">Language</span>
+              <select id="consoleLangSelect" class="input">
+                <option value="en">English</option>
+                <option value="zh">中文</option>
+                <option value="de">Deutsch</option>
+                <option value="ru">Русский</option>
+              </select>
+            </label>
+            <label class="console-field">
+              <span data-i18n="consoleTheme">Theme</span>
+              <select id="consoleThemeSelect" class="input">
+                <option value="dark" data-i18n="consoleThemeDark">Dark</option>
+                <option value="light" data-i18n="consoleThemeLight">Light</option>
+                <option value="system" data-i18n="consoleThemeSystem">System</option>
+              </select>
+            </label>
+            <label class="console-field">
+              <span data-i18n="consoleDensity">Density</span>
+              <select id="consoleDensitySelect" class="input">
+                <option value="comfortable" data-i18n="consoleDensityComfort">Comfortable</option>
+                <option value="compact" data-i18n="consoleDensityCompact">Compact</option>
+              </select>
+            </label>
+            <label class="console-field">
+              <span data-i18n="consoleLanding">Start page</span>
+              <select id="consoleLandingSelect" class="input">
+                <option value="overview" data-i18n="navOverview">Overview</option>
+                <option value="devices" data-i18n="navDevices">Devices</option>
+                <option value="settings" data-i18n="navSettings">App settings</option>
+                <option value="apps" data-i18n="navApps">Apps</option>
+                <option value="activity" data-i18n="navActivity">Logs</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div class="panel" id="consoleSecurePanel">
+          <div class="panel-h">
+            <h2 data-i18n="consoleSecureTitle">Access password</h2>
+          </div>
+          <div class="panel-b console-form">
+            <p class="muted" id="fleetTokenHint" data-i18n="fleetPasswordHint">Same as Ava → Cluster → Access password. Typing it at the login gate converts it into the API token.</p>
+            <label class="console-field">
+              <span data-i18n="fleetPasswordSetLabel">Set access password</span>
+              <input type="password" class="input" id="consoleFleetToken" autocomplete="new-password" data-i18n-placeholder="fleetPasswordSetPlaceholder" />
+            </label>
+            <div class="console-actions">
+              <button type="button" class="btn primary" id="consoleFleetTokenSaveBtn" data-i18n="fleetPasswordSave">Save to device</button>
+              <button type="button" class="btn" id="consoleLockNowBtn" data-i18n="consoleLockNow">Lock now</button>
+              <button type="button" class="btn" id="consoleFleetTokenClearBtn" data-i18n="fleetPasswordForget">Forget password</button>
+              <span class="muted" id="consolePinStatus"></span>
+            </div>
+            <label class="console-field">
+              <span data-i18n="consoleAutoLock">Auto-lock</span>
+              <select id="consoleAutoLockSelect" class="input">
+                <option value="0" data-i18n="consoleAutoLockOff">Off</option>
+                <option value="5">5 min</option>
+                <option value="15">15 min</option>
+                <option value="30">30 min</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div class="panel" id="consoleFeaturesPanel">
+          <div class="panel-h">
+            <h2 data-i18n="consoleFeaturesTitle">Lightweight features</h2>
+          </div>
+          <div class="panel-b console-form">
+            <label class="console-toggle">
+              <input type="checkbox" id="prefLightweight" />
+              <span data-i18n="consoleLightweight">Lightweight overview (hide KPI row)</span>
+            </label>
+            <label class="console-toggle">
+              <input type="checkbox" id="prefLiveUpdates" />
+              <span data-i18n="consoleLiveUpdates">Live status push (SSE)</span>
+            </label>
+            <label class="console-toggle">
+              <input type="checkbox" id="prefShowLogsNav" />
+              <span data-i18n="consoleShowLogs">Show Device logs in sidebar</span>
+            </label>
+            <label class="console-toggle">
+              <input type="checkbox" id="prefShowTransfer" />
+              <span data-i18n="consoleShowTransfer">Show Transfer tool</span>
+            </label>
+            <label class="console-toggle">
+              <input type="checkbox" id="prefReduceMotion" />
+              <span data-i18n="consoleReduceMotion">Reduce motion</span>
+            </label>
+            <p class="muted" data-i18n="consoleFeaturesHint">Turn off what you don’t need for a faster, quieter console next visit.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+    <nav class="settings-float-nav hidden" id="settingsMiniNav" aria-label="Settings groups"></nav>
+  </div>
+
+  <!-- hidden until auth fails — never flash login when session/password already works -->
+  <div class="console-lock is-booting hidden" id="consoleLockGate" aria-modal="true" role="dialog" aria-labelledby="consoleLockTitle" aria-busy="true">
+    <div class="console-lock-card">
+      <img class="console-lock-mark mark-dark" src="/ava-icon.webp" alt="" width="40" height="40" />
+      <img class="console-lock-mark mark-light" src="/ava-icon-light.webp" alt="" width="40" height="40" />
+
+      <!-- Full-card boot veil: shown until auth probe finishes. Never paint the password form here. -->
+      <div class="console-lock-boot" id="consoleLockBoot" aria-live="polite">
+        <div class="console-lock-skel" aria-hidden="true">
+          <div class="console-lock-skel-line console-lock-skel-title"></div>
+          <div class="console-lock-skel-line console-lock-skel-sub"></div>
+          <div class="console-lock-skel-line console-lock-skel-input"></div>
+          <div class="console-lock-skel-line console-lock-skel-btn"></div>
+        </div>
+        <p class="muted console-lock-boot-text" id="consoleLockBootText" data-i18n="consoleBooting">Connecting…</p>
+      </div>
+
+      <div class="console-lock-form" id="consoleLockForm" hidden>
+        <h2 id="consoleLockTitle" data-i18n="consoleLockTitle">Enter password</h2>
+        <!-- Only when auth.defaultPassword === true; never bake in "1234". -->
+        <p class="muted console-lock-sub is-empty" id="consoleLockSub" aria-hidden="true"></p>
+        <input type="password" class="input console-lock-input" id="consoleLockInput" autocomplete="current-password" aria-describedby="consoleLockError" />
+        <div class="console-lock-actions">
+          <button type="button" class="btn primary" id="consoleUnlockBtn" data-i18n="consoleUnlock">Unlock</button>
+          <p class="console-lock-error hidden" id="consoleLockError" role="alert"></p>
+        </div>
+      </div>
+
+      <!-- Covers the whole card during language swap so mixed strings never paint. -->
+      <div class="console-lock-i18n-veil" id="consoleLockI18nVeil" hidden aria-hidden="true">
+        <div class="console-lock-skel" aria-hidden="true">
+          <div class="console-lock-skel-line console-lock-skel-title"></div>
+          <div class="console-lock-skel-line console-lock-skel-sub"></div>
+          <div class="console-lock-skel-line console-lock-skel-input"></div>
+          <div class="console-lock-skel-line console-lock-skel-btn"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="fleetToast" class="fleet-toast" hidden aria-live="polite" role="status"></div>
+
+  <!-- ADB add/manage — outside .content.hidden views. Shared by wall + devices list. -->
+  <div class="settings-modal hidden" id="adbAddModal" role="dialog" aria-modal="true" aria-labelledby="adbAddTitle">
+    <div class="settings-modal-content adb-add-modal">
+      <div class="settings-modal-header">
+        <button type="button" class="adb-add-back hidden" id="adbPairBackBtn" aria-label="Back" title="Back">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M15.4 4.6 13.9 3.1 5 12l8.9 8.9 1.5-1.5L8 12z"/></svg>
+        </button>
+        <div class="adb-add-title-wrap">
+          <h3 id="adbAddTitle" data-i18n="adbAddTitle">Add device</h3>
+          <p class="adb-add-sub muted" id="adbAddSub" data-i18n="adbAddSub">Connect other Android devices on the LAN via ADB</p>
+        </div>
+        <button type="button" class="btn" id="adbAddCloseBtn" aria-label="Close">&times;</button>
+      </div>
+      <div class="settings-modal-body adb-add-body">
+        <div id="adbAddPanelMain" class="adb-add-panel">
+          <div class="adb-add-card adb-add-card-connect">
+            <div class="adb-add-card-head">
+              <div>
+                <div class="adb-add-label" data-i18n="adbConnectSection">Connect (5555)</div>
+                <p class="adb-add-card-desc muted" data-i18n="adbConnectDesc">Enter peer IP; default port 5555. Peer must have wireless ADB / tcpip 5555 enabled.</p>
+              </div>
+            </div>
+            <div class="adb-add-row adb-add-connect">
+              <input type="text" id="adbConnectHost" class="input" placeholder="192.168.1.8:5555" autocomplete="off" data-i18n-placeholder="adbConnectHostPh" />
+              <button type="button" class="btn primary" id="adbConnectBtn" data-i18n="adbConnectBtn">Connect</button>
+            </div>
+            <button type="button" class="adb-add-pair-entry" id="adbOpenPairBtn">
+              <span class="adb-add-pair-entry-title" data-i18n="adbPairEntry">Pair (Android 11+)</span>
+              <span class="adb-add-pair-entry-desc muted" data-i18n="adbPairEntryDesc">Wireless debugging pairing code flow — then return here to connect</span>
+            </button>
+          </div>
+          <div class="adb-add-card adb-add-card-peers">
+            <div class="adb-add-card-head">
+              <div class="adb-add-card-head-left">
+                <span class="adb-add-label" data-i18n="adbConnectedSection">Connected</span>
+                <span class="badge neutral" id="adbConnectedCount">0</span>
+              </div>
+              <button type="button" class="btn" id="adbRefreshBtn" data-i18n="adbRefreshBtn">Refresh</button>
+            </div>
+            <div id="adbConnectedList" class="adb-connected-list muted" data-i18n="adbConnectedEmpty">No devices</div>
+          </div>
+        </div>
+        <div id="adbAddPanelPair" class="adb-add-panel hidden">
+          <div class="adb-add-card">
+            <div class="adb-add-row adb-add-pair">
+              <input type="text" id="adbPairHost" class="input" placeholder="192.168.1.8:37123" autocomplete="off" data-i18n-placeholder="adbPairHostPh" />
+              <input type="text" id="adbPairCode" class="input adb-pair-code" placeholder="Pairing code" inputmode="numeric" autocomplete="off" data-i18n-placeholder="adbPairCodePh" />
+              <button type="button" class="btn primary" id="adbPairBtn" data-i18n="adbPairBtn">Pair</button>
+            </div>
+          </div>
+        </div>
+        <pre id="adbAddStatus" class="adb-add-status muted" hidden></pre>
+      </div>
+    </div>
+  </div>
+
+  <script src="/i18n.js"></script>
+  <script src="/xterm.js"></script>
+  <script src="/xterm-fit.js"></script>
+  <!-- Motion UMD CDN → window.Motion; fallback CDN then app.js -->
+  <script>
+    (function loadMotionThenApp() {
+      function loadApp() {
+        const s = document.createElement("script");
+        s.src = "/app.js";
+        document.body.appendChild(s);
+      }
+      function tryCdn(url, next) {
+        const s = document.createElement("script");
+        s.src = url;
+        s.onload = loadApp;
+        s.onerror = next || loadApp;
+        document.head.appendChild(s);
+      }
+      tryCdn(
+        "https://cdn.jsdelivr.net/npm/motion@12.23.24/dist/motion.js",
+        function () {
+          tryCdn("https://unpkg.com/motion@12.23.24/dist/motion.js", loadApp);
+        },
+      );
+    })();
+  </script>
+</body>
+</html>

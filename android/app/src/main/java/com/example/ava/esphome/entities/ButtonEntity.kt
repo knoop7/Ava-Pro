@@ -1,5 +1,6 @@
 package com.example.ava.esphome.entities
 
+import android.util.Log
 import com.example.esphomeproto.api.ButtonCommandRequest
 import com.example.esphomeproto.api.EntityCategory
 import com.example.esphomeproto.api.ListEntitiesRequest
@@ -10,7 +11,7 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
 
 class ButtonEntity(
-    val key: Int,
+    override val key: Int,
     val name: String,
     val objectId: String,
     val icon: String = "",
@@ -30,12 +31,18 @@ class ButtonEntity(
             })
 
             is ButtonCommandRequest -> {
-                if (message.key == key)
+                if (message.key == key) {
+                    Log.d(TAG, "ButtonCommand received: key=$key, objectId=$objectId")
                     onPress()
+                }
             }
         }
     }
 
     
     override fun subscribe(): Flow<MessageLite> = emptyFlow()
+
+    companion object {
+        private const val TAG = "ButtonEntity"
+    }
 }

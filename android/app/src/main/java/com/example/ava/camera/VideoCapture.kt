@@ -7,8 +7,12 @@ import android.graphics.ImageFormat
 import android.graphics.Matrix
 import android.graphics.Rect
 import android.graphics.YuvImage
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.util.Size
+import android.view.Surface
+import android.view.OrientationEventListener
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
@@ -16,11 +20,13 @@ import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.LifecycleRegistry
 import java.io.ByteArrayOutputStream
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.math.min
+import kotlin.math.roundToInt
 
 
 class VideoCapture(private val context: Context) {
@@ -28,6 +34,10 @@ class VideoCapture(private val context: Context) {
     companion object {
         private const val TAG = "VideoCapture"
         private const val JPEG_QUALITY = 75
+        private const val LEGACY_HAL_BIND_DELAY_MS = 300L
+        private const val RETRY_DELAY_MS = 200L
+        private const val MAX_RETRY_COUNT = 3
+        private const val UNBIND_AWAIT_MS = 2_000L
         
         fun createPlaceholderFromAsset(context: Context, assetName: String = "camera_off.png", width: Int = 320, height: Int = 240): ByteArray {
             return try {
@@ -59,69 +69,161 @@ class VideoCapture(private val context: Context) {
     }
     
     private val executor = Executors.newSingleThreadExecutor()
+    private val mainHandler = Handler(Looper.getMainLooper())
+    /** Bumped on every stop/close so delayed bind/retry runnables become no-ops. */
+    private val bindGeneration = AtomicInteger(0)
     private var cameraProvider: ProcessCameraProvider? = null
     private var lifecycleOwner: TempLifecycleOwner? = null
     @Volatile private var isRecording = false
     @Volatile private var lastFrameTime = 0L
     private var onFrameCallback: ((ByteArray) -> Unit)? = null
     private var frameIntervalMs = 200L
+    private var jpegQuality = JPEG_QUALITY
+    private var imageAnalysis: ImageAnalysis? = null
+    private var forcedOrientation: String = "AUTO"
+    /** Final JPEG short edge (software scale target). */
+    private var outputShortEdge = 480
+    /** Max short edge requested from the camera HAL — never upscale at HAL level. */
+    private var captureCapShortEdge = 480
+    private var applyVoicePolish = false
+    
+    // Track device orientation for proper rotation
+    @Volatile private var deviceRotation = Surface.ROTATION_0
+    private val orientationListener = object : OrientationEventListener(context) {
+        override fun onOrientationChanged(orientation: Int) {
+            if (orientation == ORIENTATION_UNKNOWN) return
+            val newRotation = when {
+                orientation >= 315 || orientation < 45 -> Surface.ROTATION_0
+                orientation in 45 until 135 -> Surface.ROTATION_270
+                orientation in 135 until 225 -> Surface.ROTATION_180
+                else -> Surface.ROTATION_90
+            }
+            if (deviceRotation != newRotation) {
+                deviceRotation = newRotation
+                imageAnalysis?.targetRotation = newRotation
+            }
+        }
+    }
     
     fun startRecording(
         useFrontCamera: Boolean = false,
         fps: Int = 5,
         resolution: Int = 480,
+        forceOrientation: String = "AUTO",
+        jpegQuality: Int = JPEG_QUALITY,
+        captureCapShortEdge: Int? = null,
+        applyVoicePolish: Boolean = false,
         onFrame: (ByteArray) -> Unit
     ) {
+        forcedOrientation = forceOrientation
+        this.jpegQuality = jpegQuality.coerceIn(40, 95)
+        this.applyVoicePolish = applyVoicePolish
+        outputShortEdge = resolution.coerceIn(120, 1080)
         if (isRecording) return
         
+        val sessionGen = bindGeneration.incrementAndGet()
         isRecording = true
         onFrameCallback = onFrame
         frameIntervalMs = 1000L / fps.coerceIn(1, 15)
         
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
         cameraProviderFuture.addListener({
+            if (!isRecording || sessionGen != bindGeneration.get()) {
+                Log.d(TAG, "Ignoring camera provider callback after stop (gen=$sessionGen)")
+                return@addListener
+            }
             runCatching {
                 cameraProvider = cameraProviderFuture.get()
                 lifecycleOwner = TempLifecycleOwner().apply { start() }
-                
-                val targetSize = Size(resolution * 4 / 3, resolution)
-                val imageAnalysis = ImageAnalysis.Builder()
+
+                val lens = CameraLens.select(cameraProvider!!, useFrontCamera)
+                val isLegacyHal = CameraLens.isLegacyHal(context, lens.useFrontCamera)
+                val capShortEdge = (captureCapShortEdge ?: when {
+                    isLegacyHal -> minOf(outputShortEdge, 240)
+                    else -> outputShortEdge
+                }).coerceIn(120, outputShortEdge)
+                this.captureCapShortEdge = capShortEdge
+
+                deviceRotation = context.displayRotation()
+
+                // Ask HAL for a small/stable size only; never pick a higher sensor mode.
+                val captureSize = Size(capShortEdge * 4 / 3, capShortEdge)
+                Log.d(
+                    TAG,
+                    "capture cap=${captureSize.width}x${captureSize.height} " +
+                        "output short=$outputShortEdge legacy=$isLegacyHal"
+                )
+                imageAnalysis = ImageAnalysis.Builder()
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .setTargetRotation(deviceRotation)
                     .setResolutionSelector(
                         ResolutionSelector.Builder()
-                            .setResolutionStrategy(ResolutionStrategy(targetSize, ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER))
+                            .setResolutionStrategy(
+                                ResolutionStrategy(
+                                    captureSize,
+                                    ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER
+                                )
+                            )
                             .build()
                     )
                     .build()
                     .apply { setAnalyzer(executor, ::processFrame) }
                 
-                
-                val selector = selectCamera(cameraProvider!!, useFrontCamera)
+                orientationListener.enable()
                 
                 cameraProvider?.unbindAll()
-                cameraProvider?.bindToLifecycle(lifecycleOwner!!, selector, imageAnalysis)
+                
+                // Legacy HAL workaround: add delay before binding to let camera fully release
+                // This fixes CAMERA_ERROR_EVICTED on devices like Galaxy Tab S2 with legacy HAL
+                val bindDelay = if (isLegacyHal) LEGACY_HAL_BIND_DELAY_MS else 0L
+                
+                if (bindDelay > 0) {
+                    Log.d(TAG, "Legacy HAL detected, adding ${bindDelay}ms delay before camera bind")
+                }
+                
+                mainHandler.postDelayed({
+                    if (!isRecording || sessionGen != bindGeneration.get()) return@postDelayed
+                    bindCameraWithRetry(
+                        lens.selector,
+                        lens.useFrontCamera,
+                        retryCount = if (isLegacyHal) MAX_RETRY_COUNT else 1,
+                        sessionGen = sessionGen,
+                    )
+                }, bindDelay)
             }.onFailure { Log.e(TAG, "Failed to start", it) }
         }, ContextCompat.getMainExecutor(context))
     }
     
-    private fun selectCamera(provider: ProcessCameraProvider, useFront: Boolean): CameraSelector {
-        val preferred = if (useFront) CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA
-        val fallback = if (useFront) CameraSelector.DEFAULT_BACK_CAMERA else CameraSelector.DEFAULT_FRONT_CAMERA
-
-        val availableCameras = runCatching { provider.availableCameraInfos }.getOrElse { emptyList() }
-
-        for (selector in listOf(preferred, fallback)) {
-            val matches = runCatching { selector.filter(availableCameras) }.getOrElse { emptyList() }
-            if (matches.isNotEmpty()) {
-                if (selector !== preferred) {
-                    Log.w(TAG, "Preferred camera (front=$useFront) not present, falling back to the other lens")
-                }
-                return selector
+    private fun bindCameraWithRetry(
+        selector: CameraSelector,
+        useFrontCamera: Boolean,
+        retryCount: Int,
+        sessionGen: Int,
+    ) {
+        if (!isRecording || sessionGen != bindGeneration.get() || retryCount <= 0) {
+            if (retryCount <= 0) {
+                Log.e(TAG, "Failed to bind camera after all retries")
+            }
+            return
+        }
+        
+        runCatching {
+            val owner = lifecycleOwner ?: return
+            val analysis = imageAnalysis ?: return
+            cameraProvider?.bindToLifecycle(owner, selector, analysis)
+            Log.d(TAG, "Camera bound successfully (front=$useFrontCamera)")
+        }.onFailure { e ->
+            Log.w(TAG, "Camera bind failed, retries left: ${retryCount - 1}", e)
+            if (retryCount > 1) {
+                mainHandler.postDelayed({
+                    if (!isRecording || sessionGen != bindGeneration.get()) return@postDelayed
+                    cameraProvider?.unbindAll()
+                    mainHandler.postDelayed({
+                        bindCameraWithRetry(selector, useFrontCamera, retryCount - 1, sessionGen)
+                    }, LEGACY_HAL_BIND_DELAY_MS)
+                }, RETRY_DELAY_MS)
             }
         }
-
-        Log.w(TAG, "Neither front nor back camera matched, using an unconstrained selector")
-        return CameraSelector.Builder().build()
     }
     
     private fun processFrame(imageProxy: ImageProxy) {
@@ -182,48 +284,105 @@ class VideoCapture(private val context: Context) {
         
         val out = ByteArrayOutputStream()
         YuvImage(nv21, ImageFormat.NV21, width, height, null)
-            .compressToJpeg(Rect(0, 0, width, height), JPEG_QUALITY, out)
+            .compressToJpeg(Rect(0, 0, width, height), jpegQuality, out)
         
         var jpeg = out.toByteArray()
         
+        // Calculate rotation based on forced orientation or auto-detect
+        val rotation = when (forcedOrientation) {
+            "PORTRAIT" -> 0
+            "PORTRAIT_FLIP" -> 180
+            "LANDSCAPE" -> 90
+            "LANDSCAPE_FLIP" -> 270
+            else -> imageProxy.imageInfo.rotationDegrees
+        }
         
-        val rotation = imageProxy.imageInfo.rotationDegrees
         if (rotation != 0) {
             val bmp = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size)
             val matrix = Matrix().apply { postRotate(rotation.toFloat()) }
             val rotated = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, matrix, true)
             bmp.recycle()
             val rotOut = ByteArrayOutputStream()
-            rotated.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, rotOut)
+            rotated.compress(Bitmap.CompressFormat.JPEG, jpegQuality, rotOut)
             rotated.recycle()
             jpeg = rotOut.toByteArray()
         }
-        
-        jpeg
+
+        return finalizeOutputJpeg(jpeg)
     }.getOrNull()
+
+    /** Scale to output short edge while preserving aspect ratio (portrait-safe for HA). */
+    private fun finalizeOutputJpeg(jpeg: ByteArray): ByteArray {
+        var bitmap = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size) ?: return jpeg
+        val shortEdge = min(bitmap.width, bitmap.height)
+        if (shortEdge != outputShortEdge) {
+            val scale = outputShortEdge.toFloat() / shortEdge
+            val targetW = (bitmap.width * scale).roundToInt().coerceAtLeast(1)
+            val targetH = (bitmap.height * scale).roundToInt().coerceAtLeast(1)
+            val scaled = Bitmap.createScaledBitmap(bitmap, targetW, targetH, true)
+            if (scaled != bitmap) bitmap.recycle()
+            bitmap = scaled
+        }
+        if (applyVoicePolish) {
+            val enhanced = VoiceCallVideoEnhancer.enhanceForCapture(bitmap)
+            if (enhanced != bitmap) bitmap.recycle()
+            bitmap = enhanced
+        }
+        return ByteArrayOutputStream().apply {
+            bitmap.compress(Bitmap.CompressFormat.JPEG, jpegQuality, this)
+            bitmap.recycle()
+        }.toByteArray()
+    }
     
-    fun stopRecording() {
+    /**
+     * Stop analysis and unbind CameraX.
+     * @param awaitUnbind when true (teardown/close), block until main-thread unbind finishes
+     * so the HAL is released before the next client binds.
+     */
+    fun stopRecording(awaitUnbind: Boolean = false) {
+        // Invalidate every in-flight provider callback / delayed bind / retry.
+        bindGeneration.incrementAndGet()
         isRecording = false
         onFrameCallback = null
-        android.os.Handler(android.os.Looper.getMainLooper()).post {
-            runCatching {
-                cameraProvider?.unbindAll()
-                lifecycleOwner?.stop()
-                lifecycleOwner = null
-                cameraProvider = null
-            }
-        }
+        orientationListener.disable()
+        mainHandler.removeCallbacksAndMessages(null)
+        runUnbindOnMain(await = awaitUnbind)
     }
     
     fun close() {
-        stopRecording()
+        stopRecording(awaitUnbind = true)
         executor.shutdown()
     }
-    
-    private class TempLifecycleOwner : LifecycleOwner {
-        private val registry = LifecycleRegistry(this)
-        override val lifecycle: Lifecycle get() = registry
-        fun start() { registry.currentState = Lifecycle.State.STARTED }
-        fun stop() { registry.currentState = Lifecycle.State.DESTROYED }
+
+    private fun runUnbindOnMain(await: Boolean) {
+        val teardown = Runnable {
+            runCatching { imageAnalysis?.clearAnalyzer() }
+            runCatching { cameraProvider?.unbindAll() }
+            runCatching { lifecycleOwner?.stop() }
+            lifecycleOwner = null
+            cameraProvider = null
+            imageAnalysis = null
+            Log.d(TAG, "CameraX unbound")
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            teardown.run()
+            return
+        }
+        if (!await) {
+            mainHandler.post(teardown)
+            return
+        }
+        val latch = CountDownLatch(1)
+        mainHandler.post {
+            try {
+                teardown.run()
+            } finally {
+                latch.countDown()
+            }
+        }
+        if (!latch.await(UNBIND_AWAIT_MS, TimeUnit.MILLISECONDS)) {
+            Log.w(TAG, "Timed out waiting for CameraX unbind")
+        }
     }
+    
 }

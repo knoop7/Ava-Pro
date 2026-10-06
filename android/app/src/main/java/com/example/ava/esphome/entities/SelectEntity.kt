@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.map
 
 
 class SelectEntity(
-    val key: Int,
+    override val key: Int,
     val name: String,
     val objectId: String,
     val icon: String = "",

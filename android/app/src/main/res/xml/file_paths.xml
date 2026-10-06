@@ -2,4 +2,6 @@
 <paths>
     <external-path name="downloads" path="Download/" />
     <external-files-path name="app_downloads" path="Download/" />
+    <cache-path name="cache" path="." />
+    <cache-path name="backups" path="backups/" />
 </paths>

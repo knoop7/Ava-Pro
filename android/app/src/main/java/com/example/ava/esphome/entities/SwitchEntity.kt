@@ -12,12 +12,14 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 
 class SwitchEntity(
-    val key: Int,
+    override val key: Int,
     val name: String,
     val objectId: String,
     val icon: String = "",
     val getState: Flow<Boolean>,
     val entityCategory: EntityCategory = EntityCategory.ENTITY_CATEGORY_NONE,
+    /** When set, the command reply uses this value instead of the requested one. */
+    val acceptedState: (() -> Boolean)? = null,
     val setState: suspend (Boolean) -> Unit
 ) : Entity {
     override fun handleMessage(message: MessageLite) = flow {
@@ -36,10 +38,10 @@ class SwitchEntity(
                 if (message.key == key) {
                     Log.d("SwitchEntity", "SwitchCommand received: key=$key, objectId=$objectId, state=${message.state}")
                     setState(message.state)
-                    
+                    val reported = acceptedState?.invoke() ?: message.state
                     emit(switchStateResponse {
                         key = this@SwitchEntity.key
-                        state = message.state
+                        state = reported
                     })
                 }
             }

@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Unified smart-home tile layout shared by all Ava tile widgets.
+  Every text view has ellipsize + maxLines so nothing overflows at any size.
+  Content padding and text sizes are overridden dynamically by AvaActionWidgets.
+
+  The status dot is a sibling of the content column, not part of it, so it stays
+  pinned 15dp from the card's top-right corner no matter how the tier changes
+  the content padding.
+-->
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/ava_action_widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_tile_bg_dark"
+    android:layoutDirection="locale">
+
+    <LinearLayout
+        android:id="@+id/ava_tile_content"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipChildren="true"
+        android:clipToPadding="true"
+        android:orientation="vertical"
+        android:padding="14dp">
+
+        <ImageView
+            android:id="@+id/ava_action_widget_icon"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/widget_action_circle_cyan"
+            android:importantForAccessibility="yes"
+            android:padding="9dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/widget_action_ic_service" />
+
+        <!-- Body: label + subtitle — weight fills remaining vertical space -->
+        <LinearLayout
+            android:id="@+id/ava_tile_body"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:gravity="center_vertical"
+            android:orientation="vertical"
+            android:paddingBottom="2dp"
+            android:paddingTop="2dp">
+
+            <TextView
+                android:id="@+id/ava_action_widget_label"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium"
+                android:gravity="start"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:textColor="#FFF0F4F8"
+                android:textSize="17sp" />
+
+            <TextView
+                android:id="@+id/ava_tile_subtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="1dp"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:textColor="#99F0F4F8"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- Bottom: status pill -->
+        <LinearLayout
+            android:id="@+id/ava_tile_pill"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/widget_tile_pill_off"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingBottom="3dp"
+            android:paddingEnd="10dp"
+            android:paddingStart="7dp"
+            android:paddingTop="3dp">
+
+            <ImageView
+                android:id="@+id/ava_tile_pill_dot"
+                android:layout_width="6dp"
+                android:layout_height="6dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/widget_tile_dot_off" />
+
+            <TextView
+                android:id="@+id/ava_tile_pill_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="5dp"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:textColor="#FF94A3B8"
+                android:textSize="11sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Status dot: fixed 15dp inset from the card's top-right corner -->
+    <ImageView
+        android:id="@+id/ava_tile_dot"
+        android:layout_width="8dp"
+        android:layout_height="8dp"
+        android:layout_alignParentEnd="true"
+        android:layout_alignParentTop="true"
+        android:layout_marginTop="15dp"
+        android:layout_marginEnd="15dp"
+        android:importantForAccessibility="no"
+        android:src="@drawable/widget_tile_dot_off" />
+</RelativeLayout>

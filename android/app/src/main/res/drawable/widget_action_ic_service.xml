@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Ava's brand mark in white, for the teal badge on the core-service card.
+  Same geometry as ic_ava_logo (slanted capsule + dot), measured off the launcher
+  foreground — deliberately not a lightning bolt.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="26dp"
+    android:height="26dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M4.56,18.5 L12.61,4.52"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="7.06"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M18.3,13.61 a4.55,4.55 0 1,0 0,9.1 a4.55,4.55 0 1,0 0,-9.1z" />
+</vector>

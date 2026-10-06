@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Adaptive foreground for the All Apps tile: six dots in a 3x2 grid.
+
+  Adaptive only reveals the middle 72 of 108, so the dots sit on a 20 pitch spanning
+  34..74 across and 44..64 down — a 54x34 glyph whose far corner stays well inside the
+  mask's safe circle.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="@color/minimal_launcher_tile_glyph"
+        android:pathData="M27,44 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0 Z
+                          M47,44 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0 Z
+                          M67,44 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0 Z
+                          M27,64 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0 Z
+                          M47,64 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0 Z
+                          M67,64 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0 Z" />
+</vector>

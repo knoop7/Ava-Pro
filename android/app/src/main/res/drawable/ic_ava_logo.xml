@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Ava mark: the slanted capsule + dot from the launcher icon
+  (mipmap/ic_launcher_foreground), which only exists as WebP rasters.
+
+  Geometry was measured off the xxxhdpi foreground so this is the same mark, not a
+  redraw: capsule axis at 60 degrees with cap centers (161.4,261.9)-(218.9,162.1) and
+  radius 25.2 on the 432 canvas, dot centered (259.5,259.5) radius 32.5. Everything is
+  mapped into a 24 viewport with a 1 unit margin.
+
+  This is the brand mark. Do not substitute widget_action_ic_service (a lightning bolt).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M4.56,18.5 L12.61,4.52"
+        android:strokeColor="#FFD19D73"
+        android:strokeWidth="7.06"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#FF70442A"
+        android:pathData="M18.3,13.61 a4.55,4.55 0 1,0 0,9.1 a4.55,4.55 0 1,0 0,-9.1z" />
+</vector>

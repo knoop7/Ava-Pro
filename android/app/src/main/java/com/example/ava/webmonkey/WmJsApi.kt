@@ -8,7 +8,7 @@ import android.os.Looper
 import android.util.Log
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
-import android.widget.Toast
+import com.example.ava.ui.AvaToast
 
 interface IBrowser {
     fun getCurrentUrl(): String?
@@ -30,8 +30,6 @@ class WmJsApi(
 
     fun getJsInterface(): Any {
         return object {
-            private var toast: Toast? = null
-
             @JavascriptInterface
             fun toast(scriptName: String, scriptNamespace: String, secret: String, duration: Int, message: String) {
                 if (this@WmJsApi.secret != secret) {
@@ -40,9 +38,8 @@ class WmJsApi(
                 }
                 mainHandler.post {
                     try {
-                        toast?.cancel()
-                        toast = Toast.makeText(context, message, duration)
-                        toast?.show()
+                        val ms = if (duration > 0) AvaToast.LONG_MS else AvaToast.SHORT_MS
+                        AvaToast.show(context, message, tag = "wm-js", durationMs = ms)
                     } catch (e: Exception) {
                         Log.e(TAG, "toast error", e)
                     }

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:configure="com.example.ava.widgets.AvaTitleDescriptionWidgetConfigureActivity"
+    android:description="@string/ava_widget_title_description_desc"
+    android:initialLayout="@layout/widget_ava_title_description"
+    android:minHeight="110dp"
+    android:minResizeHeight="48dp"
+    android:minResizeWidth="48dp"
+    android:minWidth="180dp"
+    android:previewLayout="@layout/widget_ava_title_description"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellHeight="2"
+    android:targetCellWidth="3"
+    android:updatePeriodMillis="1800000"
+    android:widgetCategory="home_screen"
+    android:widgetFeatures="reconfigurable" />

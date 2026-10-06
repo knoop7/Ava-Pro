@@ -25,3 +25,22 @@ fun rememberBooleanPreference(
     }
     return state
 }
+
+@Composable
+fun rememberStringPreference(
+    prefs: SharedPreferences,
+    key: String,
+    default: String = ""
+): State<String> {
+    val state = remember { mutableStateOf(prefs.getString(key, default).orEmpty()) }
+    DisposableEffect(prefs, key) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { sharedPrefs, changedKey ->
+            if (changedKey == key) {
+                state.value = sharedPrefs.getString(key, default).orEmpty()
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+    return state
+}

@@ -10,6 +10,9 @@ class NoiseSuppressor(
     
     private var nativeHandle: Long = 0
     private var isInitialized = false
+
+    /** True when native WebRTC NS created and initialized successfully. */
+    val isReady: Boolean get() = isInitialized
     
     private external fun nativeCreate(): Long
     private external fun nativeInit(handle: Long, sampleRate: Int): Int

@@ -66,8 +66,8 @@ object EmotionKeywordDetector {
     )
     
     private val LISTENING_KEYWORDS = listOf(
-        "请说", "我在听", "继续", "然后呢", "接着说", "告诉我", "请讲",
-        "listening", "go on", "continue", "tell me", "please"
+        "请说", "我在听", "然后呢", "接着说", "告诉我", "请讲",
+        "listening", "go on", "tell me", "please"
     )
     
 
@@ -98,25 +98,35 @@ object EmotionKeywordDetector {
         "interesting", "curious", "wonder", "what is", "how", "tell me more", "fascinating"
     )
     
-    fun detectExpression(text: String?): Expression {
-        if (text.isNullOrBlank()) return Expression.NEUTRAL
-        
+    /** Detection result incl. the keyword that fired — for telemetry ("why this face?"). */
+    data class Detection(val expression: Expression, val keyword: String?)
+
+    /** Priority order preserved from the original if-chain — do not reorder. */
+    private val PRIORITY = listOf(
+        Expression.ANGRY to ANGRY_KEYWORDS,
+        Expression.EXCITED to EXCITED_KEYWORDS,
+        Expression.SURPRISED to SURPRISED_KEYWORDS,
+        Expression.HAPPY to HAPPY_KEYWORDS,
+        Expression.PROUD to PROUD_KEYWORDS,
+        Expression.SAD to SAD_KEYWORDS,
+        Expression.SHY to SHY_KEYWORDS,
+        Expression.CURIOUS to CURIOUS_KEYWORDS,
+        Expression.CONFUSED to CONFUSED_KEYWORDS,
+        Expression.THINKING to THINKING_KEYWORDS,
+        Expression.SLEEPY to SLEEPY_KEYWORDS,
+        Expression.LISTENING to LISTENING_KEYWORDS,
+        Expression.SPEAKING to SPEAKING_KEYWORDS
+    )
+
+    fun detect(text: String?): Detection {
+        if (text.isNullOrBlank()) return Detection(Expression.NEUTRAL, null)
         val lowerText = text.lowercase()
-        
-        if (ANGRY_KEYWORDS.any { lowerText.contains(it.lowercase()) }) return Expression.ANGRY
-        if (EXCITED_KEYWORDS.any { lowerText.contains(it.lowercase()) }) return Expression.EXCITED
-        if (SURPRISED_KEYWORDS.any { lowerText.contains(it.lowercase()) }) return Expression.SURPRISED
-        if (HAPPY_KEYWORDS.any { lowerText.contains(it.lowercase()) }) return Expression.HAPPY
-        if (PROUD_KEYWORDS.any { lowerText.contains(it.lowercase()) }) return Expression.PROUD
-        if (SAD_KEYWORDS.any { lowerText.contains(it.lowercase()) }) return Expression.SAD
-        if (SHY_KEYWORDS.any { lowerText.contains(it.lowercase()) }) return Expression.SHY
-        if (CURIOUS_KEYWORDS.any { lowerText.contains(it.lowercase()) }) return Expression.CURIOUS
-        if (CONFUSED_KEYWORDS.any { lowerText.contains(it.lowercase()) }) return Expression.CONFUSED
-        if (THINKING_KEYWORDS.any { lowerText.contains(it.lowercase()) }) return Expression.THINKING
-        if (SLEEPY_KEYWORDS.any { lowerText.contains(it.lowercase()) }) return Expression.SLEEPY
-        if (LISTENING_KEYWORDS.any { lowerText.contains(it.lowercase()) }) return Expression.LISTENING
-        if (SPEAKING_KEYWORDS.any { lowerText.contains(it.lowercase()) }) return Expression.SPEAKING
-        
-        return Expression.NEUTRAL
+        for ((expression, keywords) in PRIORITY) {
+            val hit = keywords.firstOrNull { lowerText.contains(it.lowercase()) }
+            if (hit != null) return Detection(expression, hit)
+        }
+        return Detection(Expression.NEUTRAL, null)
     }
+
+    fun detectExpression(text: String?): Expression = detect(text).expression
 }

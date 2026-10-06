@@ -13,7 +13,20 @@ data class QuickEntitySlot(
     val icon: String = "mdi:home-assistant",
     val label: String = "",
     val size: String = "1x1",
-    val color: String = ""
+    val color: String = "",
+    /**
+     * Cover-crop window inside the camera tile: 0 shows the start of the overflow
+     * axis (left / top), 1 shows the end (right / bottom). Default 0.5 is centered.
+     * Only the overflowing axis is used; the other stays at 0.5.
+     */
+    val cameraPanX: Float = 0.5f,
+    val cameraPanY: Float = 0.5f,
+    /**
+     * 1 = cover (fill the tile, crop overflow). Pinch-out goes down to contain
+     * (whole frame visible, letterbox) so the picture cannot shrink away.
+     * Pinch-in goes up to 3× cover. Clamped per tile/frame at draw time.
+     */
+    val cameraZoom: Float = 1f,
 )
 
 @Serializable
@@ -21,8 +34,31 @@ data class QuickEntitySettings(
     val enableQuickEntity: Boolean = false,
     val enableQuickEntityDisplay: Boolean = false,
     val enableHaSlots: Boolean = false,
-    val slots: List<QuickEntitySlot> = List(6) { QuickEntitySlot() }
-)
+    val slots: List<QuickEntitySlot> = List(6) { QuickEntitySlot() },
+    /**
+     * Smart power-saving AOD for Quick Entity panel: after idle wait, fade in a dark cover
+     * at [smartAodMaskPercent]; any interrupt fades it out and the wait restarts. Default off.
+     */
+    val smartAodEnabled: Boolean = false,
+    /** Idle seconds before entering (or re-entering) Quick Entity smart AOD. */
+    val smartAodTimeoutSeconds: Int = 60,
+    /**
+     * Idle AOD cover strength: 100 = fully opaque (deepest), 5 = lightest. Default 100.
+     * At or below [SMART_AOD_TAP_THROUGH_MAX_PERCENT] the tiles stay legible and taps
+     * pass straight through the cover; above it the first tap only wakes the panel.
+     */
+    val smartAodMaskPercent: Int = 100,
+    /**
+     * When true, long-press drag-reorder on the Quick Entity panel is disabled so
+     * tiles stay put. Default unlocked.
+     */
+    val layoutLocked: Boolean = false,
+) {
+    companion object {
+        /** Deepest mask (percent) at which AOD taps still act directly on the tiles. */
+        const val SMART_AOD_TAP_THROUGH_MAX_PERCENT = 85
+    }
+}
 
 val Context.quickEntitySettingsStore: DataStore<QuickEntitySettings> by dataStore(
     fileName = "quick_entity_settings.json",
@@ -48,6 +84,22 @@ class QuickEntitySettingsStore(dataStore: DataStore<QuickEntitySettings>) :
     val slots = SettingState(getFlow().map { it.slots }) { value ->
         update { it.copy(slots = value) }
     }
+
+    val smartAodEnabled = SettingState(getFlow().map { it.smartAodEnabled }) { value ->
+        update { it.copy(smartAodEnabled = value) }
+    }
+
+    val smartAodTimeoutSeconds = SettingState(getFlow().map { it.smartAodTimeoutSeconds }) { value ->
+        update { it.copy(smartAodTimeoutSeconds = value.coerceIn(10, 3600)) }
+    }
+
+    val smartAodMaskPercent = SettingState(getFlow().map { it.smartAodMaskPercent }) { value ->
+        update { it.copy(smartAodMaskPercent = value.coerceIn(5, 100)) }
+    }
+
+    val layoutLocked = SettingState(getFlow().map { it.layoutLocked }) { value ->
+        update { it.copy(layoutLocked = value) }
+    }
     
     suspend fun updateSlot(index: Int, slot: QuickEntitySlot) {
         update { settings ->
@@ -71,6 +123,8 @@ class QuickEntitySettingsStore(dataStore: DataStore<QuickEntitySettings>) :
                     val type = when {
                         entityId.startsWith("sensor.") || entityId.startsWith("binary_sensor.") -> "sensor"
                         entityId.startsWith("button.") || entityId.startsWith("script.") || entityId.startsWith("scene.") -> "button"
+                        entityId.startsWith("timer.") -> "timer"
+                        entityId.startsWith("camera.") -> "camera"
                         else -> "switch"
                     }
                     val name = entityId.substringAfter(".").lowercase()
@@ -91,12 +145,16 @@ class QuickEntitySettingsStore(dataStore: DataStore<QuickEntitySettings>) :
                     } else {
                         com.example.ava.ui.components.MdiColorMapper.stableRandomSoftColor(entityId)
                     }
+                    val keepView = newSlots[index].entityId == entityId
                     newSlots[index] = newSlots[index].copy(
                         entityId = entityId,
                         entityType = type,
                         icon = icon,
                         label = label,
-                        color = autoColor
+                        color = autoColor,
+                        cameraPanX = if (keepView) newSlots[index].cameraPanX else 0.5f,
+                        cameraPanY = if (keepView) newSlots[index].cameraPanY else 0.5f,
+                        cameraZoom = if (keepView) newSlots[index].cameraZoom else 1f,
                     )
                 }
             }
@@ -171,6 +229,7 @@ class QuickEntitySettingsStore(dataStore: DataStore<QuickEntitySettings>) :
             entityId.startsWith("scene.") -> "mdi:home"
             entityId.startsWith("camera.") -> "mdi:camera"
             entityId.startsWith("lock.") -> "mdi:lock"
+            entityId.startsWith("timer.") -> "mdi:timer"
             else -> "mdi:home-assistant"
         }
     }

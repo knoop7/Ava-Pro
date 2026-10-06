@@ -12,19 +12,24 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 
 class SensorEntity(
-    val key: Int,
+    override val key: Int,
     val name: String,
     val objectId: String,
     val icon: String = "",
     val unitOfMeasurement: String = "",
     val accuracyDecimals: Int = 0,
     val deviceClass: String = "",
-    val entityCategory: EntityCategory = EntityCategory.ENTITY_CATEGORY_NONE
+    val entityCategory: EntityCategory = EntityCategory.ENTITY_CATEGORY_NONE,
+    initialState: Float = 0f,
+    hasInitialState: Boolean = true
 ) : Entity {
     
-    private val _state = MutableStateFlow(0f)
+    private val _state = MutableStateFlow(initialState)
+    @Volatile
+    private var hasState = hasInitialState
     
     fun updateState(value: Float) {
+        hasState = true
         _state.value = value
     }
     
@@ -54,7 +59,7 @@ class SensorEntity(
         sensorStateResponse {
             key = this@SensorEntity.key
             state = it
-            missingState = false
+            missingState = !hasState
         }
     }
 }

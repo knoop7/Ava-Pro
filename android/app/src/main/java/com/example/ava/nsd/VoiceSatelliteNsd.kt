@@ -9,20 +9,23 @@ fun registerVoiceSatelliteNsd(
     name: String,
     port: Int,
     macAddress: String,
-    onNameChanged: ((String) -> Unit)? = null
+    encryptionEnabled: Boolean = false,
 ): NsdRegistration {
+    val attributes = mutableMapOf(
+        "version" to VERSION,
+        "mac" to macAddress,
+        "board" to "host",
+        "platform" to "HOST",
+        "network" to "wifi",
+    )
+    if (encryptionEnabled) {
+        attributes["api_encryption"] = "NOISE"
+    }
     val nsdRegistration = NsdRegistration(
         name = name,
         type = "_esphomelib._tcp",
         port = port,
-        attributes = mapOf(
-            Pair("version", VERSION),
-            Pair("mac", macAddress),
-            Pair("board", "host"),
-            Pair("platform", "HOST"),
-            Pair("network", "wifi")
-        ),
-        onNameChanged = onNameChanged
+        attributes = attributes,
     )
     nsdRegistration.register(context)
     return nsdRegistration

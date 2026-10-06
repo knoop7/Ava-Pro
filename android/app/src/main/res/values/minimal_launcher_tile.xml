@@ -1,0 +1,7 @@
+<resources>
+  <!-- Desktop tiles (All Apps, Settings): white plate, neutral grey glyph. Grey rather
+       than near-black so the tiles read as launcher furniture instead of competing with
+       the full-colour app icons sitting next to them. -->
+  <color name="minimal_launcher_tile_background">#FFFFFFFF</color>
+  <color name="minimal_launcher_tile_glyph">#FF6B7280</color>
+</resources>

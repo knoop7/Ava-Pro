@@ -16,6 +16,9 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven(url = "https://jitpack.io")
+        // GeckoView (only used by the `gecko` product flavor).
+        maven(url = "https://maven.mozilla.org/maven2/")
     }
 }
 

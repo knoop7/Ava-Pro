@@ -5,7 +5,6 @@ import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import com.example.ava.services.VoiceSatelliteService
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -15,13 +14,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -32,18 +30,22 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ava.R
+import com.example.ava.ui.components.sidebarDrawerFocusable
 import com.example.ava.ui.prefs.rememberBooleanPreference
+import com.example.ava.ui.haptic.TickSlider
 import com.example.ava.ui.screens.settings.components.*
 import com.example.ava.settings.PlayerSettings
 import com.example.ava.settings.NotificationSettings
 import com.example.ava.utils.BatteryOptimizationHelper
+import com.example.ava.utils.SoundUriPreview
 import kotlinx.coroutines.launch
 import java.util.Locale
 import com.example.ava.ui.theme.SlateBorder as CardBorder
 import com.example.ava.ui.theme.SlateText as TitleColor
 import com.example.ava.ui.theme.SlateLabel as LabelColor
 import com.example.ava.ui.theme.SlateTertiary as SubLabelColor
-import com.example.ava.ui.theme.AccentBlue as AccentColor
+import com.example.ava.ui.theme.AccentBlue
+import com.example.ava.ui.theme.AccentBrown
 import com.example.ava.ui.theme.IconBackground
 
 
@@ -51,7 +53,7 @@ private val CardBackgroundLight = Color.White
 private val CardBackgroundDark = Color(0xFF1F1F1F)
 
 @Composable
-private fun isDarkModeEnabled(): Boolean {
+internal fun isDarkModeEnabled(): Boolean {
     val context = LocalContext.current
     val prefs = remember {
         context.getSharedPreferences(
@@ -79,6 +81,12 @@ fun getLabelColor(): Color {
     return if (isDarkMode) LabelColorDark else LabelColor
 }
 
+/** Setting-row description: light keeps slate-400; dark is a brighter, less-blue gray. */
+@Composable
+fun getSettingsDescriptionColor(): Color {
+    return if (isDarkModeEnabled()) DescriptionColorDark else SubLabelColor
+}
+
 @Composable
 fun getTitleColor(): Color {
     val isDarkMode = isDarkModeEnabled()
@@ -88,7 +96,37 @@ fun getTitleColor(): Color {
 @Composable
 fun getAccentColor(): Color {
     val isDarkMode = isDarkModeEnabled()
-    return if (isDarkMode) Color(0xFFA78B73) else AccentColor
+    return if (isDarkMode) AccentBrown else AccentBlue
+}
+
+/**
+ * Mass-only chrome accent (rail / MA settings cards / Sendspin stats).
+ * Does **not** replace global [getAccentColor].
+ *
+ * - Dark: translucent brown (theme [AccentBrown])
+ * - Light: fixed muted gray — avoids harsh translucent [AccentBlue] on these pages
+ */
+@Composable
+fun getMassChromeAccent(): Color {
+    val isDarkMode = isDarkModeEnabled()
+    return if (isDarkMode) {
+        // 透棕 — theme brown with alpha (soft over dark surfaces)
+        AccentBrown.copy(alpha = 0.88f)
+    } else {
+        // Day: gray chrome for Mass surfaces only (not app-wide accent)
+        MassChromeAccentLightGray
+    }
+}
+
+/** Light-theme Mass chrome — muted gray (not AccentBlue). */
+private val MassChromeAccentLightGray = Color(0xFF666669)
+
+/** Ink on [getMassChromeAccent] solid fills (primary buttons / selected chips). */
+@Composable
+fun getMassChromeOnAccent(): Color {
+    val isDarkMode = isDarkModeEnabled()
+    // Brown fill → dark ink; gray fill → cream ink for contrast.
+    return if (isDarkMode) Color(0xFF1A140C) else Color(0xFFF4EFE8)
 }
 
 @Composable
@@ -97,32 +135,158 @@ fun getSliderInactiveColor(): Color {
     return if (isDarkMode) Color(0xFF3D3D3D) else Color(0xFFE2E8F0)
 }
 
+/** Bluish-gray for secondary / unknown Bluetooth device labels (theme-aware). */
+@Composable
+fun getSlateMutedColor(): Color {
+    val isDarkMode = isDarkModeEnabled()
+    return if (isDarkMode) Color(0xFF8D99AE) else Color(0xFF94A3B8)
+}
+
+@Composable
+fun CollapsibleSettingsNote(
+    title: String,
+    content: String,
+    modifier: Modifier = Modifier,
+    contentColor: Color = Color.Unspecified,
+    leading: (@Composable () -> Unit)? = null,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .clickable { expanded = !expanded }
+                .padding(bottom = 8.dp),
+        ) {
+            if (leading != null) {
+                leading()
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+            Text(
+                text = title,
+                fontSize = settingsTitleTextSize(),
+                fontWeight = FontWeight.Medium,
+                color = getTitleColor(),
+                modifier = Modifier.weight(1f),
+            )
+            Icon(
+                painter = painterResource(
+                    if (expanded) {
+                        android.R.drawable.arrow_up_float
+                    } else {
+                        android.R.drawable.arrow_down_float
+                    },
+                ),
+                contentDescription = null,
+                tint = Color(0xFF94A3B8),
+                modifier = Modifier.size(16.dp),
+            )
+        }
+        androidx.compose.animation.AnimatedVisibility(visible = expanded) {
+            Text(
+                text = content,
+                fontSize = settingsBodyTextSize(),
+                color = if (contentColor == Color.Unspecified) {
+                    getSettingsDescriptionColor()
+                } else {
+                    contentColor
+                },
+                lineHeight = settingsBodyLineHeight(),
+            )
+        }
+    }
+}
+
 @Composable
 fun getInputBackground(): Color {
     val isDarkMode = isDarkModeEnabled()
     return if (isDarkMode) Color(0xFF2D2D2D) else Color(0xFFF8FAFC)
-} 
-private val IconColor = AccentColor
+}
+
+/** Filled settings fields: title-ink text, description-gray placeholder, accent cursor. */
+@Composable
+fun settingsFilledFieldColors() = TextFieldDefaults.colors(
+    focusedContainerColor = getInputBackground(),
+    unfocusedContainerColor = getInputBackground(),
+    disabledContainerColor = getInputBackground(),
+    errorContainerColor = getInputBackground(),
+    focusedIndicatorColor = Color.Transparent,
+    unfocusedIndicatorColor = Color.Transparent,
+    disabledIndicatorColor = Color.Transparent,
+    errorIndicatorColor = Color.Transparent,
+    cursorColor = getAccentColor(),
+    focusedTextColor = getLabelColor(),
+    unfocusedTextColor = getLabelColor(),
+    disabledTextColor = getSettingsDescriptionColor(),
+    errorTextColor = getLabelColor(),
+    focusedPlaceholderColor = getSettingsDescriptionColor(),
+    unfocusedPlaceholderColor = getSettingsDescriptionColor(),
+    disabledPlaceholderColor = getSettingsDescriptionColor(),
+)
+
+private val IconColor = AccentBlue
 private val LabelColorDark = Color(0xFFF1F5F9)
+private val DescriptionColorDark = Color(0xFFACAEB0)
 
-
-fun checkOverlayPermission(context: android.content.Context): Boolean {
-    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-        Settings.canDrawOverlays(context)
-    } else {
-        true
-    }
+@Composable
+fun settingsLabelColor(): Color {
+    val isDarkMode = isDarkModeEnabled()
+    return if (isDarkMode) LabelColorDark else LabelColor
 }
 
 
-fun requestOverlayPermission(context: android.content.Context) {
-    val intent = Intent(
-        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-        Uri.parse("package:${context.packageName}")
-    ).apply {
-        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+fun checkOverlayPermission(context: android.content.Context): Boolean =
+    com.example.ava.permissions.OverlayPermission.isGranted(context)
+
+
+/**
+ * Toast + jump immediately. Privileged grant runs in the background so a slow
+ * `su` / Shizuku round-trip cannot freeze the UI before settings open.
+ * On ROMs where the overlay switch is dead, show the ADB command instead.
+ */
+fun requestOverlayPermission(
+    context: android.content.Context,
+    @androidx.annotation.StringRes messageRes: Int = R.string.settings_overlay_permission_required,
+) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+    val appContext = context.applicationContext
+    if (com.example.ava.permissions.OverlayPermission.isGranted(appContext)) return
+    if (com.example.ava.permissions.OverlayPermission.isSystemToggleBlocked(appContext)) {
+        val command = com.example.ava.permissions.OverlayPermission.adbGrantCommand(appContext.packageName)
+        com.example.ava.ui.AvaToast.show(
+            appContext,
+            appContext.getString(R.string.settings_overlay_blocked_toast, command),
+            durationMs = com.example.ava.ui.AvaToast.LONG_MS,
+        )
+    } else {
+        com.example.ava.ui.AvaToast.show(
+            appContext,
+            messageRes,
+            durationMs = com.example.ava.ui.AvaToast.LONG_MS,
+        )
+        com.example.ava.permissions.OverlayPermission.openSettings(appContext)
     }
-    context.startActivity(intent)
+    Thread {
+        com.example.ava.permissions.OverlayPermission.tryPrivilegedGrant(appContext)
+    }.start()
+}
+
+fun requestAccessibilityPermission(
+    context: android.content.Context,
+    @androidx.annotation.StringRes messageRes: Int = R.string.mod_permission_accessibility_hint,
+) {
+    val appContext = context.applicationContext
+    if (com.example.ava.services.AccessibilityBridge.isEnabled(appContext)) return
+    com.example.ava.ui.AvaToast.show(
+        appContext,
+        messageRes,
+        durationMs = com.example.ava.ui.AvaToast.LONG_MS,
+    )
+    com.example.ava.services.AccessibilityBridge.openSettings(appContext)
 }
 
 
@@ -139,7 +303,7 @@ fun SectionCard(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(vertical = 8.dp),
         shape = RoundedCornerShape(32.dp),
         color = cardBackground,
         shadowElevation = if (isDarkMode) 0.dp else 1.dp
@@ -188,6 +352,51 @@ fun SectionCard(
 
 
 @Composable
+fun SettingsSectionLabel(text: String, withTopSpacer: Boolean = true) {
+    if (withTopSpacer) {
+        Spacer(modifier = Modifier.height(16.dp))
+    }
+    Text(
+        text = text,
+        fontSize = settingsTitleTextSize(),
+        fontWeight = FontWeight.Medium,
+        color = getSettingsDescriptionColor(),
+        modifier = Modifier.padding(
+            start = SettingsCardInnerHorizontalPadding,
+            end = 16.dp,
+            top = 8.dp,
+            bottom = 8.dp,
+        ),
+    )
+}
+
+/** Hairline that splits a block from the rows above. Caption in the middle is optional. */
+@Composable
+fun SettingsCaptionDivider(text: String = "") {
+    val isDarkMode = isDarkModeEnabled()
+    val line = if (isDarkMode) Color(0xFF2D2D2D) else Color(0xFFE2E8F0)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 20.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        HorizontalDivider(modifier = Modifier.weight(1f), color = line, thickness = 1.dp)
+        if (text.isNotBlank()) {
+            Text(
+                text = text,
+                fontSize = settingsBodyTextSize(),
+                fontWeight = FontWeight.Medium,
+                color = getSettingsDescriptionColor(),
+                maxLines = 1,
+                modifier = Modifier.padding(horizontal = 10.dp),
+            )
+            HorizontalDivider(modifier = Modifier.weight(1f), color = line, thickness = 1.dp)
+        }
+    }
+}
+
+@Composable
 fun SimpleCard(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit
@@ -198,16 +407,53 @@ fun SimpleCard(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(vertical = SettingsSimpleCardVerticalPadding),
         shape = RoundedCornerShape(32.dp),
         color = cardBackground,
         shadowElevation = if (isDarkMode) 0.dp else 1.dp
     ) {
         Column(
-            modifier = Modifier.padding(24.dp),
+            modifier = Modifier.padding(SettingsCardInnerHorizontalPadding),
             content = content
         )
     }
+}
+
+/** Gray well inset used to wrap a feature switch with its Home Assistant twin. */
+@Composable
+fun getSettingsInsetWellColor(): Color {
+    return if (isDarkModeEnabled()) Color(0xFF2A2A2A) else Color(0xFFF1F5F9)
+}
+
+@Composable
+fun SettingsInsetWell(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    // Same width as the card's dividers (the content column) so the well's
+    // left/right edges line up with them; even air above and below so the
+    // well never touches neighbors.
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 10.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(getSettingsInsetWellColor())
+            .padding(horizontal = 14.dp, vertical = 2.dp),
+        content = content,
+    )
+}
+
+@Composable
+fun SettingsWellDivider(
+    modifier: Modifier = Modifier,
+) {
+    val dividerColor = if (isDarkModeEnabled()) Color(0xFF3A3A3A) else Color(0xFFE2E8F0)
+    androidx.compose.material3.HorizontalDivider(
+        modifier = modifier,
+        color = dividerColor,
+        thickness = 1.dp,
+    )
 }
 
 
@@ -216,15 +462,18 @@ fun SettingRow(
     label: String,
     subLabel: String = "",
     iconResId: Int? = null,
+    onClick: (() -> Unit)? = null,
     action: @Composable () -> Unit
 ) {
     val isDarkMode = isDarkModeEnabled()
     val labelColor = if (isDarkMode) LabelColorDark else LabelColor
     
+    val rowScale = rememberSettingsTextScale()
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 16.dp),
+            .then(if (onClick != null) Modifier.settingsClickable(onClick = onClick) else Modifier)
+            .padding(vertical = (16f * rowScale).dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (iconResId != null) {
@@ -232,41 +481,81 @@ fun SettingRow(
                 painter = painterResource(iconResId),
                 contentDescription = label,
                 tint = SubLabelColor,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size((20f * rowScale).dp)
             )
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.width((16f * rowScale).dp))
         }
         
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = label,
                 color = labelColor,
-                fontSize = 15.sp,
+                fontSize = settingsTitleTextSize(),
                 fontWeight = FontWeight.Medium
             )
             if (subLabel.isNotEmpty()) {
-                Text(
+                CollapsibleDescriptionText(
                     text = subLabel,
-                    color = SubLabelColor,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(top = 2.dp)
+                    fontSize = settingsBodyTextSize(),
+                    lineHeight = settingsBodyLineHeight(),
+                    color = getSettingsDescriptionColor(),
                 )
             }
         }
         
-        Spacer(modifier = Modifier.width(15.dp))
+        Spacer(modifier = Modifier.width((15f * rowScale).dp))
         
         action()
     }
 }
 
+/** Shared trailing slot so chevron and ? line up in the same column. */
+@Composable
+private fun settingTrailingSlotSize() = (28f * rememberSettingsTextScale()).dp
 
 @Composable
-fun SettingsDivider() {
+fun SettingRowChevron() {
+    val isDarkMode = isDarkModeEnabled()
+    val slot = settingTrailingSlotSize()
+    Box(
+        modifier = Modifier.size(slot),
+        contentAlignment = Alignment.Center
+    ) {
+        SettingsChevronIcon(
+            tint = if (isDarkMode) Color(0xFF4B5563) else Color(0xFFD1D5DB),
+        )
+    }
+}
+
+@Composable
+fun SettingRowHelpMark() {
+    val slot = settingTrailingSlotSize()
+    Box(
+        modifier = Modifier.size(slot),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "?",
+            fontSize = settingsHelpMarkTextSize(),
+            fontWeight = FontWeight.Bold,
+            color = getAccentColor()
+        )
+    }
+}
+
+
+@Composable
+fun SettingsDivider(
+    modifier: Modifier = Modifier,
+) {
     val isDarkMode = isDarkModeEnabled()
     val dividerColor = if (isDarkMode) Color(0xFF2D2D2D) else Color(0xFFF1F5F9)
-    
-    androidx.compose.material3.HorizontalDivider(color = dividerColor, thickness = 1.dp)
+
+    androidx.compose.material3.HorizontalDivider(
+        modifier = modifier,
+        color = dividerColor,
+        thickness = 1.dp,
+    )
 }
 
 @Composable
@@ -282,14 +571,15 @@ fun ModernSwitch(
             checked = checked,
             onCheckedChange = onCheckedChange,
             enabled = enabled,
+            modifier = Modifier.sidebarDrawerFocusable(),
             colors = SwitchDefaults.colors(
                 checkedThumbColor = Color.White,
-                checkedTrackColor = if (isDarkMode) Color(0xFFA78B73) else AccentColor,
+                checkedTrackColor = if (isDarkMode) AccentBrown else AccentBlue,
                 uncheckedThumbColor = Color.White,
                 uncheckedTrackColor = if (isDarkMode) Color(0xFF3D3D3D) else Color(0xFFE2E8F0),
                 uncheckedBorderColor = Color.Transparent,
                 disabledCheckedThumbColor = Color.White.copy(alpha = 0.6f),
-                disabledCheckedTrackColor = if (isDarkMode) Color(0xFFA78B73).copy(alpha = 0.4f) else AccentColor.copy(alpha = 0.4f),
+                disabledCheckedTrackColor = if (isDarkMode) AccentBrown.copy(alpha = 0.4f) else AccentBlue.copy(alpha = 0.4f),
                 disabledUncheckedThumbColor = Color.White.copy(alpha = 0.6f),
                 disabledUncheckedTrackColor = if (isDarkMode) Color(0xFF3D3D3D).copy(alpha = 0.4f) else Color(0xFFE2E8F0).copy(alpha = 0.4f)
             )
@@ -376,7 +666,7 @@ fun VoiceSatelliteSettings(
                 
                 IntSetting(
                     name = stringResource(R.string.label_voice_satellite_port),
-                    description = stringResource(R.string.settings_port_description),
+                    dialogHint = stringResource(R.string.settings_port_description),
                     value = uiState?.serverPort,
                     enabled = enabled,
                     validation = { viewModel.validatePort(it) },
@@ -439,51 +729,6 @@ fun VoiceSatelliteSettings(
                 
                 
                 SettingRow(
-                    label = stringResource(R.string.settings_vinyl_cover),
-                    subLabel = stringResource(R.string.settings_vinyl_cover_desc)
-                ) {
-                    ModernSwitch(
-                        checked = playerState?.enableVinylCover ?: false,
-                        enabled = enabled,
-                        onCheckedChange = {
-                            if (it && !checkOverlayPermission(context)) {
-                                requestOverlayPermission(context)
-                            } else {
-                                coroutineScope.launch {
-                                    viewModel.saveVinylCover(it)
-                                }
-                            }
-                        }
-                    )
-                }
-                
-                SettingsDivider()
-                
-                
-                SettingRow(
-                    label = stringResource(R.string.settings_floating_window),
-                    subLabel = stringResource(R.string.settings_floating_window_desc)
-                ) {
-                    val hasOverlayPermission = checkOverlayPermission(context)
-                    ModernSwitch(
-                        checked = playerState?.enableFloatingWindow ?: false,
-                        enabled = enabled,
-                        onCheckedChange = {
-                            if (it && !checkOverlayPermission(context)) {
-                                requestOverlayPermission(context)
-                            } else {
-                                coroutineScope.launch {
-                                    viewModel.saveFloatingWindow(it)
-                                }
-                            }
-                        }
-                    )
-                }
-                
-                SettingsDivider()
-                
-                
-                SettingRow(
                     label = stringResource(R.string.label_voice_satellite_enable_wake_sound),
                     subLabel = stringResource(R.string.description_voice_satellite_play_wake_sound)
                 ) {
@@ -506,30 +751,25 @@ fun VoiceSatelliteSettings(
                 val displayDuration = notificationState.sceneDisplayDuration / 1000
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
                         text = stringResource(R.string.settings_scene_display_duration),
                         color = getLabelColor(),
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium
+                        fontSize = settingsTitleTextSize(),
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 8.dp),
+                        maxLines = 2,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     )
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = getSliderInactiveColor()
-                    ) {
-                        Text(
-                            text = "${displayDuration}s",
-                            color = getAccentColor(),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
-                    }
+                    SettingValueBadge(
+                        text = "${displayDuration}s",
+                    )
                 }
                 
-                Slider(
+                TickSlider(
                     value = displayDuration.toFloat(),
                     onValueChange = { newValue ->
                         coroutineScope.launch {
@@ -542,8 +782,8 @@ fun VoiceSatelliteSettings(
                         thumbColor = getAccentColor(),
                         activeTrackColor = getAccentColor(),
                         inactiveTrackColor = getSliderInactiveColor(),
-                        activeTickColor = getAccentColor(),
-                        inactiveTickColor = getSliderInactiveColor()
+                        activeTickColor = Color.Transparent,
+                        inactiveTickColor = Color.Transparent
                     ),
                     modifier = Modifier.padding(top = 8.dp)
                 )
@@ -558,23 +798,18 @@ fun VoiceSatelliteSettings(
                 
                 
                 var showRingtonePicker by remember { mutableStateOf(false) }
-                
+                var externalSoundUri by remember { mutableStateOf<String?>(null) }
                 
                 val audioFileLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.GetContent()
                 ) { uri ->
                     if (uri != null) {
-                        
                         try {
                             context.contentResolver.takePersistableUriPermission(
                                 uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
                             )
                         } catch (e: Exception) {}
-                        coroutineScope.launch {
-                            viewModel.saveSoundUri(uri.toString())
-                            viewModel.saveSoundEnabled(true)
-                        }
-                        showRingtonePicker = false
+                        externalSoundUri = uri.toString()
                     }
                 }
                 
@@ -584,11 +819,13 @@ fun VoiceSatelliteSettings(
                     list.add(context.getString(R.string.sound_none) to "")
                     val manager = RingtoneManager(context)
                     manager.setType(RingtoneManager.TYPE_NOTIFICATION)
-                    val cursor = manager.cursor
-                    while (cursor.moveToNext()) {
-                        val title = cursor.getString(RingtoneManager.TITLE_COLUMN_INDEX)
-                        val uri = manager.getRingtoneUri(cursor.position).toString()
-                        list.add(title to uri)
+                    manager.cursor.use { cursor ->
+                        while (cursor.moveToNext()) {
+                            val title = cursor.getString(RingtoneManager.TITLE_COLUMN_INDEX)
+                                ?: context.getString(R.string.sound_unknown)
+                            val uri = manager.getRingtoneUri(cursor.position).toString()
+                            list.add(title to uri)
+                        }
                     }
                     list
                 }
@@ -611,7 +848,7 @@ fun VoiceSatelliteSettings(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable(enabled = enabled) { showRingtonePicker = true }
+                        .settingsClickable(enabled = enabled) { showRingtonePicker = true }
                         .padding(vertical = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
@@ -619,163 +856,40 @@ fun VoiceSatelliteSettings(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = stringResource(R.string.notification_sound),
-                            fontSize = 14.sp,
+                            fontSize = settingsTitleTextSize(),
                             color = getLabelColor(),
                             fontWeight = FontWeight.Medium
                         )
-                        Text(
+                        CollapsibleDescriptionText(
                             text = stringResource(R.string.notification_sound_desc),
-                            fontSize = 12.sp,
-                            color = SubLabelColor
+                            fontSize = settingsBodyTextSize(),
+                            lineHeight = settingsBodyLineHeight(),
+                            color = getSettingsDescriptionColor(),
                         )
                     }
-                    Icon(
-                        imageVector = Icons.Filled.KeyboardArrowRight,
-                        contentDescription = null,
-                        tint = SubLabelColor
-                    )
+                    SettingsChevronIcon(tint = SubLabelColor)
                 }
                 
                 
                 if (showRingtonePicker) {
-                    
-                    var tempSelectedUri by remember { mutableStateOf(soundUri) }
-                    
-                    var currentRingtone by remember { mutableStateOf<android.media.Ringtone?>(null) }
-                    
-                    AlertDialog(
-                        onDismissRequest = { 
-                            currentRingtone?.stop()
-                            showRingtonePicker = false 
-                        },
-                        title = {
-                            Text(
-                                text = stringResource(R.string.select_sound),
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp,
-                                color = getTitleColor()
-                            )
-                        },
-                        text = {
-                            Column(
-                                modifier = Modifier
-                                    .heightIn(max = 300.dp)
-                                    .verticalScroll(rememberScrollState())
-                            ) {
-                                ringtones.forEach { (title, uri) ->
-                                    val isSelected = uri == tempSelectedUri
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable {
-                                                
-                                                currentRingtone?.stop()
-                                                
-                                                tempSelectedUri = uri
-                                                
-                                                if (uri.isNotEmpty()) {
-                                                    try {
-                                                        val ringtone = RingtoneManager.getRingtone(context, Uri.parse(uri))
-                                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                                                            ringtone?.isLooping = false
-                                                        }
-                                                        ringtone?.play()
-                                                        currentRingtone = ringtone
-                                                    } catch (e: Exception) {
-                                                        try {
-                                                            val mediaPlayer = android.media.MediaPlayer()
-                                                            mediaPlayer.setDataSource(context, Uri.parse(uri))
-                                                            mediaPlayer.setAudioAttributes(
-                                                                android.media.AudioAttributes.Builder()
-                                                                    .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
-                                                                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                                                                    .build()
-                                                            )
-                                                            mediaPlayer.prepare()
-                                                            mediaPlayer.start()
-                                                            mediaPlayer.setOnCompletionListener { it.release() }
-                                                        } catch (e2: Exception) {}
-                                                    }
-                                                }
-                                            }
-                                            .padding(vertical = 12.dp, horizontal = 4.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        RadioButton(
-                                            selected = isSelected,
-                                            onClick = null,
-                                            modifier = Modifier.padding(end = 8.dp),
-                                            colors = RadioButtonDefaults.colors(
-                                                selectedColor = getAccentColor(),
-                                                unselectedColor = SubLabelColor
-                                            )
-                                        )
-                                        Text(
-                                            text = title,
-                                            fontSize = 14.sp,
-                                            color = if (isSelected) getAccentColor() else getLabelColor(),
-                                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                    }
-                                    if (title != ringtones.last().first) {
-                                        SettingsDivider()
-                                    }
-                                }
-                                
-                                
-                                SettingsDivider()
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            currentRingtone?.stop()
-                                            audioFileLauncher.launch("audio/*")
-                                        }
-                                        .padding(vertical = 12.dp, horizontal = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "+ Select Audio",
-                                        fontSize = 14.sp,
-                                        color = getAccentColor(),
-                                        fontWeight = FontWeight.Medium,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
+                    SharedRingtonePickerDialog(
+                        ringtones = ringtones,
+                        currentUri = soundUri,
+                        context = context,
+                        title = stringResource(R.string.select_sound),
+                        externalSoundUri = externalSoundUri,
+                        onExternalSoundUriConsumed = { externalSoundUri = null },
+                        onDismiss = { showRingtonePicker = false },
+                        onConfirm = { uri ->
+                            coroutineScope.launch {
+                                viewModel.saveSoundUri(uri)
+                                viewModel.saveSoundEnabled(uri.isNotEmpty())
                             }
+                            showRingtonePicker = false
                         },
-                        confirmButton = {
-                            TextButton(onClick = { 
-                                currentRingtone?.stop()
-                                coroutineScope.launch {
-                                    viewModel.saveSoundUri(tempSelectedUri)
-                                    viewModel.saveSoundEnabled(tempSelectedUri.isNotEmpty())
-                                }
-                                showRingtonePicker = false 
-                            }) {
-                                Text(
-                                    text = stringResource(R.string.label_ok),
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = getAccentColor()
-                                )
-                            }
+                        onSelectExternal = {
+                            audioFileLauncher.launch("audio/*")
                         },
-                        dismissButton = {
-                            TextButton(onClick = { 
-                                currentRingtone?.stop()
-                                showRingtonePicker = false 
-                            }) {
-                                Text(
-                                    text = stringResource(R.string.label_cancel),
-                                    fontSize = 14.sp,
-                                    color = SubLabelColor
-                                )
-                            }
-                        },
-                        shape = RoundedCornerShape(20.dp),
-                        containerColor = getDialogBackground()
                     )
                 }
                 
@@ -837,7 +951,7 @@ fun VoiceSatelliteSettings(
                             showTutorialDialog = false
                             
                             coroutineScope.launch {
-                                viewModel.saveCustomSceneUrl("https://ghfast.top/https://raw.githubusercontent.com/knoop7/Ava/refs/heads/master/custom_scenes.json")
+                                viewModel.saveCustomSceneUrl("https://raw.githubusercontent.com/knoop7/Ava/refs/heads/master/custom_scenes.json")
                             }
                         }
                     )
@@ -846,11 +960,10 @@ fun VoiceSatelliteSettings(
                 SettingsDivider()
                 
                 SettingRow(
-                    label = stringResource(R.string.custom_scene_config)
+                    label = stringResource(R.string.custom_scene_config),
+                    onClick = { showTutorialDialog = true },
                 ) {
-                    TextButton(onClick = { showTutorialDialog = true }) {
-                        Text("?", color = getAccentColor())
-                    }
+                    SettingRowHelpMark()
                 }
             }
         }
@@ -902,12 +1015,20 @@ fun VoiceSatelliteSettings(
                         if (hasBackCamera) add(com.example.ava.settings.CameraPosition.BACK)
                     }
                     
+                    // The stored position defaults to FRONT even on back-only hardware, where the
+                    // picker stays disabled — show the lens that will actually be bound
+                    // (reported by @gilcu2, knoop7/Ava#163).
+                    val availablePosition = when {
+                        cameraOptions.isEmpty() || currentPosition in cameraOptions -> currentPosition
+                        else -> cameraOptions.first()
+                    }
+                    
                     val backCameraLabel = stringResource(R.string.settings_camera_back)
                     val frontCameraLabel = stringResource(R.string.settings_camera_front)
                     
                     SelectSetting(
                         name = stringResource(R.string.settings_camera_position),
-                        selected = currentPosition,
+                        selected = availablePosition,
                         items = cameraOptions,
                         enabled = enabled && cameraOptions.size > 1,
                         key = { it.name },
@@ -915,7 +1036,7 @@ fun VoiceSatelliteSettings(
                             when (it) {
                                 com.example.ava.settings.CameraPosition.BACK -> backCameraLabel
                                 com.example.ava.settings.CameraPosition.FRONT -> frontCameraLabel
-                                else -> ""
+                                null -> ""
                             }
                         },
                         onConfirmRequest = {
@@ -952,48 +1073,28 @@ fun VoiceSatelliteSettings(
                     
                     val sensorInterval = experimentalState?.sensorUpdateInterval ?: 35
                     
-                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text(
-                                    text = stringResource(R.string.settings_sensor_update_interval),
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = getTitleColor()
-                                )
-                                Text(
-                                    text = stringResource(R.string.settings_sensor_update_interval_desc),
-                                    fontSize = 13.sp,
-                                    color = SubLabelColor
-                                )
-                            }
-                            Text(
-                                text = "${sensorInterval}s",
-                                fontSize = 14.sp,
-                                color = getAccentColor(),
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                        Slider(
+                    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                        SettingSliderLabelRow(
+                            title = stringResource(R.string.settings_sensor_update_interval),
+                            description = stringResource(R.string.settings_sensor_update_interval_desc),
+                            badgeText = "${sensorInterval}s",
+                        )
+                        TickSlider(
                             value = sensorInterval.toFloat(),
                             onValueChange = { 
                                 coroutineScope.launch {
                                     viewModel.saveSensorUpdateInterval(it.toInt())
                                 }
                             },
-                            valueRange = 10f..60f,
-                            steps = 4,
+                            valueRange = 5f..60f,
+                            steps = 10,
                             enabled = enabled,
                             colors = SliderDefaults.colors(
                                 thumbColor = getAccentColor(),
                                 activeTrackColor = getAccentColor(),
                                 inactiveTrackColor = getSliderInactiveColor(),
-                                activeTickColor = getAccentColor(),
-                                inactiveTickColor = getSliderInactiveColor()
+                                activeTickColor = Color.Transparent,
+                                inactiveTickColor = Color.Transparent
                             ),
                             modifier = Modifier.padding(top = 8.dp)
                         )
@@ -1043,35 +1144,20 @@ fun VoiceSatelliteSettings(
                             onCheckedChange = {
                                 coroutineScope.launch {
                                     viewModel.saveWeatherOverlayDisplay(it)
-                                    kotlinx.coroutines.delay(100)
-                                    context.stopService(Intent(context, VoiceSatelliteService::class.java))
-                                    kotlinx.coroutines.delay(600)
-                                    val intent = Intent(context, VoiceSatelliteService::class.java)
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                        context.startForegroundService(intent)
-                                    } else {
-                                        context.startService(intent)
-                                    }
                                 }
                             }
                         )
                     }
                     
                     Spacer(modifier = Modifier.height(16.dp))
-                    val currentEntity = playerState?.haWeatherEntity ?: ""
-                    val notConfiguredText = stringResource(R.string.settings_custom_scene_not_configured)
-                    
-                    TextSetting(
-                        name = stringResource(R.string.settings_ha_weather_entity),
-                        description = stringResource(R.string.settings_ha_weather_entity_desc),
-                        value = if (currentEntity.isEmpty()) notConfiguredText else currentEntity,
-                        placeholder = "weather.xxx",
+                    SatelliteWeatherEntitySetting(
+                        currentEntity = playerState?.haWeatherEntity ?: "",
                         enabled = enabled,
-                        onConfirmRequest = { newValue ->
+                        onSave = { entity ->
                             coroutineScope.launch {
-                                viewModel.saveHaWeatherEntity(newValue)
+                                viewModel.saveHaWeatherEntity(entity)
                             }
-                        }
+                        },
                     )
                 }
             }
@@ -1086,6 +1172,67 @@ fun VoiceSatelliteSettings(
 
 
 @Composable
+private fun SatelliteWeatherEntitySetting(
+    currentEntity: String,
+    enabled: Boolean,
+    onSave: (String) -> Unit,
+) {
+    val notConfiguredText = stringResource(R.string.settings_custom_scene_not_configured)
+    val pickerAvailable = com.example.ava.homeassistant.ui.rememberIsHaPickerAvailable()
+    var showPicker by remember { mutableStateOf(false) }
+
+    if (!pickerAvailable) {
+        TextSetting(
+            name = stringResource(R.string.settings_ha_weather_entity),
+            description = stringResource(R.string.settings_ha_weather_entity_desc),
+            value = currentEntity,
+            rowValue = if (currentEntity.isEmpty()) notConfiguredText else currentEntity,
+            placeholder = "weather.xxx",
+            enabled = enabled,
+            onConfirmRequest = onSave,
+        )
+        return
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled) { showPicker = true }
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.settings_ha_weather_entity),
+                fontSize = settingsTitleTextSize(),
+                color = getLabelColor(),
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                text = if (currentEntity.isEmpty()) notConfiguredText else currentEntity,
+                fontSize = settingsBodyTextSize(),
+                color = getSettingsDescriptionColor(),
+            )
+        }
+        SettingsChevronIcon(tint = SubLabelColor)
+    }
+
+    if (showPicker) {
+        com.example.ava.homeassistant.ui.HaEntityPickerDialog(
+            title = stringResource(R.string.settings_ha_weather_entity),
+            currentValue = currentEntity,
+            domainFilter = com.example.ava.homeassistant.entity.HaEntityDomainFilter.Weather,
+            onDismiss = { showPicker = false },
+            onConfirm = { newValue ->
+                onSave(newValue)
+                showPicker = false
+            },
+        )
+    }
+}
+
+@Composable
 fun CustomSceneUrlSetting(
     currentUrl: String,
     statusText: String,
@@ -1096,13 +1243,9 @@ fun CustomSceneUrlSetting(
     var showDialog by remember { mutableStateOf(false) }
     
     
-    SettingItem(
-        name = stringResource(R.string.settings_custom_scene_url),
-        description = statusText,
-        value = if (currentUrl.isEmpty()) stringResource(R.string.settings_custom_scene_url_placeholder) else currentUrl,
-        modifier = if (enabled) {
-            Modifier.clickable {
-                
+    Row(
+        modifier = (if (enabled) {
+            Modifier.settingsClickable {
                 val handled = onClickWithTutorialCheck()
                 if (!handled) {
                     showDialog = true
@@ -1110,8 +1253,28 @@ fun CustomSceneUrlSetting(
             }
         } else {
             Modifier.alpha(0.5f)
+        })
+            .fillMaxWidth()
+            .padding(vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.settings_custom_scene_url),
+                    color = getLabelColor(),
+                    fontSize = settingsTitleTextSize(),
+                    fontWeight = FontWeight.Medium
+                )
+            Text(
+                text = statusText,
+                color = getSettingsDescriptionColor(),
+                fontSize = settingsBodyTextSize(),
+                modifier = Modifier.padding(top = 2.dp)
+            )
         }
-    )
+        Spacer(modifier = Modifier.width(15.dp))
+        SettingsChevronIcon(tint = SubLabelColor)
+    }
     
     
     if (showDialog) {
@@ -1123,7 +1286,7 @@ fun CustomSceneUrlSetting(
                 Text(
                     text = stringResource(R.string.settings_custom_scene_url),
                     fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
+                    fontSize = settingsTitleTextSize(),
                     color = getTitleColor()
                 )
             },
@@ -1134,21 +1297,15 @@ fun CustomSceneUrlSetting(
                     placeholder = { 
                         Text(
                             text = stringResource(R.string.settings_custom_scene_url_placeholder),
-                            fontSize = 13.sp,
-                            color = SubLabelColor
+                            fontSize = settingsBodyTextSize(),
+                            color = getSettingsDescriptionColor(),
                         ) 
                     },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = getLabelColor()),
+                textStyle = androidx.compose.ui.text.TextStyle(fontSize = settingsTitleTextSize(), color = getLabelColor()),
                     shape = RoundedCornerShape(12.dp),
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = getInputBackground(),
-                        unfocusedContainerColor = getInputBackground(),
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        cursorColor = getAccentColor()
-                    )
+                    colors = settingsFilledFieldColors(),
                 )
             },
             confirmButton = {
@@ -1161,7 +1318,7 @@ fun CustomSceneUrlSetting(
                     Text(
                         text = stringResource(R.string.label_ok), 
                         color = getAccentColor(),
-                        fontSize = 14.sp,
+                        fontSize = settingsTitleTextSize(),
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -1171,7 +1328,7 @@ fun CustomSceneUrlSetting(
                     Text(
                         text = stringResource(R.string.label_cancel), 
                         color = SubLabelColor,
-                        fontSize = 14.sp
+                        fontSize = settingsTitleTextSize()
                     )
                 }
             },
@@ -1187,66 +1344,20 @@ fun CustomSceneTutorialDialog(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
-    AlertDialog(
+    UsageGuideDialog(
         onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = stringResource(R.string.custom_scene_config),
-                fontWeight = FontWeight.Bold,
-                fontSize = 16.sp,
-                color = getTitleColor()
-            )
-        },
-        text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text(
-                    text = stringResource(R.string.custom_scene_desc),
-                    fontSize = 13.sp,
-                    color = getLabelColor(),
-                    lineHeight = 18.sp
-                )
-                Text(
-                    text = stringResource(R.string.custom_scene_json_format),
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 13.sp,
-                    color = getTitleColor()
-                )
-                Text(
-                    text = stringResource(R.string.custom_scene_json_requirements),
-                    fontSize = 12.sp,
-                    color = SubLabelColor,
-                    lineHeight = 17.sp
-                )
-                Text(
-                    text = stringResource(R.string.custom_scene_example_hint),
-                    fontSize = 12.sp,
-                    color = SubLabelColor,
-                    lineHeight = 17.sp
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(
-                    text = stringResource(R.string.custom_scene_use_example),
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    color = getAccentColor()
-                )
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(
-                    text = stringResource(R.string.custom_scene_i_know),
-                    fontSize = 14.sp,
-                    color = SubLabelColor
-                )
-            }
-        },
-        shape = RoundedCornerShape(20.dp),
-        containerColor = getDialogBackground()
-    )
+        title = stringResource(R.string.custom_scene_config),
+        confirmLabel = stringResource(R.string.custom_scene_use_example),
+        onConfirm = onConfirm,
+    ) {
+        SettingsHelpBodyText(text = stringResource(R.string.custom_scene_desc))
+        Text(
+            text = stringResource(R.string.custom_scene_json_format),
+            fontWeight = FontWeight.SemiBold,
+            fontSize = settingsTitleTextSize(),
+            color = getTitleColor()
+        )
+        SettingsHelpBodyText(text = stringResource(R.string.custom_scene_json_requirements))
+        SettingsHelpBodyText(text = stringResource(R.string.custom_scene_example_hint))
+    }
 }

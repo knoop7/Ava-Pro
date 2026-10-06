@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Sensor card: readout on top, history wave bleeding into the bottom edge.
+
+  The wave is a bitmap that always covers this full band; how much of the band the
+  curve actually fills is baked into the bitmap by AvaSensorWidgets, because
+  RemoteViews cannot resize a view below API 31. The content column reserves room for
+  it with a bottom padding set at render time, so the footer never sits on the curve.
+
+  Every text view has ellipsize + maxLines, and sizes are overridden per tier at
+  render time. The status dot is a sibling of the content column so it stays pinned
+  15dp from the card's top-right corner regardless of tier padding.
+-->
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/ava_sensor_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_tile_bg_dark"
+    android:layoutDirection="locale">
+
+    <ImageView
+        android:id="@+id/ava_sensor_wave"
+        android:layout_width="match_parent"
+        android:layout_height="72dp"
+        android:layout_alignParentBottom="true"
+        android:importantForAccessibility="no"
+        android:scaleType="fitXY" />
+
+    <LinearLayout
+        android:id="@+id/ava_sensor_content"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipChildren="true"
+        android:clipToPadding="true"
+        android:orientation="vertical"
+        android:padding="14dp">
+
+        <ImageView
+            android:id="@+id/ava_sensor_badge"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:background="@drawable/widget_action_circle_cyan"
+            android:importantForAccessibility="yes"
+            android:padding="9dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/mdi_gauge" />
+
+        <!-- Readout: weight fills the gap between badge and footer -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:gravity="bottom"
+            android:orientation="vertical"
+            android:paddingTop="6dp">
+
+            <TextView
+                android:id="@+id/ava_sensor_name"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:textColor="#FF94A3B8"
+                android:textSize="12sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:orientation="horizontal">
+
+                <!-- weight lets a long or non-numeric state shrink instead of
+                     pushing the unit off the card -->
+                <TextView
+                    android:id="@+id/ava_sensor_value"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:fontFamily="sans-serif-medium"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:textColor="#FFF0F4F8"
+                    android:textSize="27sp" />
+
+                <TextView
+                    android:id="@+id/ava_sensor_unit"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="2dp"
+                    android:ellipsize="end"
+                    android:fontFamily="sans-serif"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:textColor="#FF94A3B8"
+                    android:textSize="13sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Footer: status pill + range summary -->
+        <LinearLayout
+            android:id="@+id/ava_sensor_footer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="7dp"
+            android:baselineAligned="false"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:id="@+id/ava_sensor_pill"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/widget_tile_pill_off"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingBottom="3dp"
+                android:paddingEnd="9dp"
+                android:paddingStart="7dp"
+                android:paddingTop="3dp">
+
+                <ImageView
+                    android:id="@+id/ava_sensor_pill_dot"
+                    android:layout_width="5dp"
+                    android:layout_height="5dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/widget_tile_dot_off" />
+
+                <TextView
+                    android:id="@+id/ava_sensor_pill_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
+                    android:ellipsize="end"
+                    android:fontFamily="sans-serif-medium"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:textColor="#FF94A3B8"
+                    android:textSize="10sp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/ava_sensor_meta"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif"
+                android:gravity="end"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:textColor="#FF64748B"
+                android:textSize="10sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Status dot: fixed 15dp inset from the card's top-right corner -->
+    <ImageView
+        android:id="@+id/ava_sensor_dot"
+        android:layout_width="8dp"
+        android:layout_height="8dp"
+        android:layout_alignParentEnd="true"
+        android:layout_alignParentTop="true"
+        android:layout_marginTop="15dp"
+        android:layout_marginEnd="15dp"
+        android:importantForAccessibility="no"
+        android:src="@drawable/widget_tile_dot_off" />
+</RelativeLayout>

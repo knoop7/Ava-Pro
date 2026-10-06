@@ -6,7 +6,7 @@ import android.os.Looper
 import android.util.Log
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
-import android.widget.Toast
+import com.example.ava.ui.AvaToast
 import kotlinx.coroutines.*
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -72,7 +72,7 @@ class GmApi(
     @JavascriptInterface
     fun toast(message: String, duration: Int) {
         mainHandler.post {
-            Toast.makeText(context, message, if (duration > 0) Toast.LENGTH_LONG else Toast.LENGTH_SHORT).show()
+            AvaToast.show(context, message, tag = "gm", durationMs = if (duration > 0) AvaToast.LONG_MS else AvaToast.SHORT_MS)
         }
     }
 
@@ -250,14 +250,14 @@ class GmApi(
     @JavascriptInterface
     fun toastShort(message: String) {
         mainHandler.post {
-            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+            AvaToast.show(context, message, tag = "gm")
         }
     }
 
     @JavascriptInterface
     fun toastLong(message: String) {
         mainHandler.post {
-            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            AvaToast.show(context, message, tag = "gm", durationMs = AvaToast.LONG_MS)
         }
     }
 

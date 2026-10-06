@@ -9,11 +9,13 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.*
+import com.example.ava.ui.haptic.TickSlider
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -27,16 +29,24 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.ui.res.painterResource
 import com.example.ava.R
 import com.example.ava.services.QuickEntityOverlayService
-import com.example.ava.services.VoiceSatelliteService
+import com.example.ava.ui.screens.settings.restartVoiceSatelliteServiceIfRunning
+import com.example.ava.settings.QuickEntitySettings
 import com.example.ava.settings.QuickEntitySlot
+import com.example.ava.settings.SidebarItemKey
+import com.example.ava.settings.SidebarSettingsStore
 import com.example.ava.settings.quickEntitySettingsStore
+import com.example.ava.settings.sidebarSettingsStore
+import com.example.ava.ui.AvaToast
 import com.example.ava.ui.prefs.rememberBooleanPreference
 import com.example.ava.ui.screens.settings.SimpleCard
 import com.example.ava.ui.screens.settings.SettingRow
 import com.example.ava.ui.screens.settings.ModernSwitch
 import com.example.ava.ui.screens.settings.SettingsDivider
+import com.example.ava.ui.screens.settings.SettingsInsetWell
+import com.example.ava.ui.screens.settings.SettingsWellDivider
 import com.example.ava.ui.screens.settings.getAccentColor
-import kotlinx.coroutines.flow.first
+import com.example.ava.ui.screens.settings.getSettingsDescriptionColor
+import com.example.ava.ui.screens.settings.getSliderInactiveColor
 import kotlinx.coroutines.launch
 
 private val LabelColorLight = Color(0xFF334155)
@@ -72,6 +82,7 @@ fun QuickEntitySettingsCard(
 ) {
     val context = LocalContext.current
     val quickEntityStore = remember { context.quickEntitySettingsStore }
+    val sidebarStore = remember { SidebarSettingsStore(context.sidebarSettingsStore) }
     val isDark = isDarkMode()
     val labelColor = if (isDark) LabelColorDark else LabelColorLight
     val slotBackground = if (isDark) SlotBackgroundDark else SlotBackgroundLight
@@ -84,68 +95,81 @@ fun QuickEntitySettingsCard(
     var editingSlotIndex by remember { mutableStateOf(0) }
 
     LaunchedEffect(Unit) {
-        val settings = quickEntityStore.data.first()
-        quickEntityEnabled = settings.enableQuickEntity
-        haSlotsEnabled = settings.enableHaSlots
-        slots = settings.slots
+        quickEntityStore.data.collect { settings ->
+            quickEntityEnabled = settings.enableQuickEntity
+            haSlotsEnabled = settings.enableHaSlots
+            slots = settings.slots
+        }
     }
 
     SimpleCard {
-        SettingRow(
-            label = stringResource(R.string.settings_quick_entity),
-            subLabel = stringResource(R.string.settings_quick_entity_desc)
-        ) {
-            ModernSwitch(
-                checked = quickEntityEnabled,
-                enabled = enabled,
-                onCheckedChange = { newValue ->
-                    quickEntityEnabled = newValue
-                    coroutineScope.launch {
-                        quickEntityStore.updateData { 
-                            it.copy(
-                                enableQuickEntity = newValue,
-                                enableQuickEntityDisplay = false
-                            ) 
-                        }
-                        if (!newValue) {
-                            QuickEntityOverlayService.hide(context)
-                        }
-                        VoiceSatelliteService.getInstance()?.restartVoiceSatellite()
-                    }
-                }
-            )
-        }
-
-        if (quickEntityEnabled) {
-            SettingsDivider()
-            
+        val quickEntityMasterRow: @Composable () -> Unit = {
             SettingRow(
-                label = stringResource(R.string.settings_quick_entity_ha_slots),
-                subLabel = stringResource(R.string.settings_quick_entity_ha_slots_desc)
+                label = stringResource(R.string.settings_quick_entity),
+                subLabel = stringResource(R.string.settings_quick_entity_desc)
             ) {
                 ModernSwitch(
-                    checked = haSlotsEnabled,
+                    checked = quickEntityEnabled,
                     enabled = enabled,
                     onCheckedChange = { newValue ->
-                        haSlotsEnabled = newValue
+                        quickEntityEnabled = newValue
                         coroutineScope.launch {
                             quickEntityStore.updateData { 
-                                it.copy(enableHaSlots = newValue) 
+                                it.copy(
+                                    enableQuickEntity = newValue,
+                                    enableQuickEntityDisplay = false
+                                ) 
                             }
-                            VoiceSatelliteService.getInstance()?.restartVoiceSatellite()
+                            if (newValue) {
+                                sidebarStore.offerHomeEntry(SidebarItemKey.QuickEntity)
+                            } else {
+                                QuickEntityOverlayService.hide(context)
+                            }
+                            restartVoiceSatelliteServiceIfRunning()
                         }
                     }
                 )
             }
-            
+        }
+
+        if (quickEntityEnabled) {
+            SettingsInsetWell {
+                quickEntityMasterRow()
+
+                SettingsWellDivider()
+
+                SettingRow(
+                    label = stringResource(R.string.settings_quick_entity_ha_slots),
+                    subLabel = stringResource(R.string.settings_quick_entity_ha_slots_desc)
+                ) {
+                    ModernSwitch(
+                        checked = haSlotsEnabled,
+                        enabled = enabled,
+                        onCheckedChange = { newValue ->
+                            haSlotsEnabled = newValue
+                            coroutineScope.launch {
+                                quickEntityStore.updateData { 
+                                    it.copy(enableHaSlots = newValue) 
+                                }
+                                restartVoiceSatelliteServiceIfRunning()
+                            }
+                        }
+                    )
+                }
+            }
+        } else {
+            quickEntityMasterRow()
+        }
+
+        if (quickEntityEnabled) {
             SettingsDivider()
             Spacer(modifier = Modifier.height(12.dp))
 
             Text(
                 text = stringResource(R.string.settings_quick_entity_configure),
-                fontSize = 12.sp,
+                fontSize = settingsBodyTextSize(),
                 fontWeight = FontWeight.Medium,
-                color = SubLabelColor,
+                color = getSettingsDescriptionColor(),
                 modifier = Modifier.padding(bottom = 8.dp)
             )
 
@@ -180,6 +204,14 @@ fun QuickEntitySettingsCard(
         }
     }
 
+    // Smart AOD only applies to the Quick Entity panel — hide when panel is off.
+    if (quickEntityEnabled) {
+        QuickEntitySmartAodSettingsCard(
+            enabled = enabled,
+            coroutineScope = coroutineScope,
+        )
+    }
+
     if (showEditDialog) {
         QuickEntityEditDialog(
             slot = slots.getOrElse(editingSlotIndex) { QuickEntitySlot() },
@@ -192,11 +224,125 @@ fun QuickEntitySettingsCard(
                 coroutineScope.launch {
                     quickEntityStore.updateData { it.copy(slots = newSlots) }
                     QuickEntityOverlayService.updateSlots(context)
-                    VoiceSatelliteService.getInstance()?.restartVoiceSatellite()
+                    restartVoiceSatelliteServiceIfRunning()
                 }
                 showEditDialog = false
             }
         )
+    }
+}
+
+@Composable
+fun QuickEntitySmartAodSettingsCard(
+    enabled: Boolean,
+    coroutineScope: kotlinx.coroutines.CoroutineScope,
+) {
+    val context = LocalContext.current
+    val quickEntityStore = remember { context.quickEntitySettingsStore }
+    var aodEnabled by remember { mutableStateOf(false) }
+    var aodTimeout by remember { mutableIntStateOf(60) }
+    var aodMaskPercent by remember { mutableIntStateOf(100) }
+
+    LaunchedEffect(Unit) {
+        quickEntityStore.data.collect { settings ->
+            aodEnabled = settings.smartAodEnabled
+            aodTimeout = settings.smartAodTimeoutSeconds.coerceIn(10, 3600)
+            aodMaskPercent = settings.smartAodMaskPercent.coerceIn(5, 100)
+        }
+    }
+
+    SimpleCard {
+        SettingRow(
+            label = stringResource(R.string.settings_quick_entity_smart_aod),
+            subLabel = stringResource(R.string.settings_quick_entity_smart_aod_desc),
+        ) {
+            ModernSwitch(
+                checked = aodEnabled,
+                enabled = enabled,
+                onCheckedChange = { newValue ->
+                    aodEnabled = newValue
+                    coroutineScope.launch {
+                        quickEntityStore.updateData { it.copy(smartAodEnabled = newValue) }
+                    }
+                },
+            )
+        }
+
+        if (aodEnabled) {
+            SettingsDivider()
+            Spacer(modifier = Modifier.height(8.dp))
+
+            IntSetting(
+                name = stringResource(R.string.settings_quick_entity_smart_aod_timeout),
+                description = stringResource(R.string.settings_quick_entity_smart_aod_timeout_desc),
+                value = aodTimeout,
+                enabled = enabled,
+                validation = { value ->
+                    if (value != null && value in 10..3600) {
+                        null
+                    } else {
+                        context.getString(R.string.validation_range, 10, 3600)
+                    }
+                },
+                onConfirmRequest = {
+                    if (it != null) {
+                        val snapped = it.coerceIn(10, 3600)
+                        aodTimeout = snapped
+                        coroutineScope.launch {
+                            quickEntityStore.updateData {
+                                it.copy(smartAodTimeoutSeconds = snapped)
+                            }
+                        }
+                    }
+                },
+            )
+
+            SettingsDivider()
+            Spacer(modifier = Modifier.height(8.dp))
+
+            var maskSlider by remember(aodMaskPercent) { mutableFloatStateOf(aodMaskPercent.toFloat()) }
+            SettingSliderLabelRow(
+                title = stringResource(R.string.settings_quick_entity_smart_aod_mask),
+                description = stringResource(R.string.settings_quick_entity_smart_aod_mask_desc),
+                badgeText = "${maskSlider.toInt()}%",
+            )
+            TickSlider(
+                value = maskSlider,
+                onValueChange = { maskSlider = it },
+                onValueChangeFinished = {
+                    val snapped = maskSlider.toInt().coerceIn(5, 100)
+                    maskSlider = snapped.toFloat()
+                    aodMaskPercent = snapped
+                    coroutineScope.launch {
+                        quickEntityStore.updateData {
+                            it.copy(smartAodMaskPercent = snapped)
+                        }
+                    }
+                    val threshold = QuickEntitySettings.SMART_AOD_TAP_THROUGH_MAX_PERCENT
+                    val toastRes = if (snapped <= threshold) {
+                        R.string.settings_quick_entity_smart_aod_tap_through_toast
+                    } else {
+                        R.string.settings_quick_entity_smart_aod_wake_first_toast
+                    }
+                    AvaToast.show(
+                        context,
+                        context.getString(toastRes, threshold),
+                        tag = "quick_entity_aod_mask",
+                    )
+                },
+                enabled = enabled,
+                valueRange = 5f..100f,
+                steps = 94,
+                colors = SliderDefaults.colors(
+                    thumbColor = getAccentColor(),
+                    activeTrackColor = getAccentColor(),
+                    inactiveTrackColor = getSliderInactiveColor(),
+                    activeTickColor = Color.Transparent,
+                    inactiveTickColor = Color.Transparent,
+                ),
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
     }
 }
 
@@ -272,7 +418,7 @@ private fun QuickEntityEditDialog(
             Text(
                 text = stringResource(R.string.settings_quick_entity_slot, slotIndex + 1),
                 fontWeight = FontWeight.Bold,
-                fontSize = 16.sp
+                fontSize = settingsTitleTextSize()
             )
         },
         text = {
@@ -282,16 +428,17 @@ private fun QuickEntityEditDialog(
                 Column {
                     Text(
                         text = stringResource(R.string.settings_quick_entity_id),
-                        fontSize = 12.sp,
+                        fontSize = settingsBodyTextSize(),
                         fontWeight = FontWeight.Medium,
-                        color = SubLabelColor
+                        color = getSettingsDescriptionColor()
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     BasicTextField(
                         value = entityId,
                         onValueChange = { entityId = it },
+                        cursorBrush = SolidColor(getAccentColor()),
                         textStyle = TextStyle(
-                            fontSize = 14.sp,
+                            fontSize = settingsTitleTextSize(),
                             color = labelColor
                         ),
                         modifier = Modifier
@@ -303,8 +450,8 @@ private fun QuickEntityEditDialog(
                                 if (entityId.isEmpty()) {
                                     Text(
                                         text = stringResource(R.string.settings_quick_entity_id_hint),
-                                        color = SubLabelColor,
-                                        fontSize = 14.sp
+                                        color = getSettingsDescriptionColor(),
+                                        fontSize = settingsTitleTextSize()
                                     )
                                 }
                                 innerTextField()
@@ -316,9 +463,9 @@ private fun QuickEntityEditDialog(
                 Column {
                     Text(
                         text = stringResource(R.string.settings_quick_entity_icon),
-                        fontSize = 12.sp,
+                        fontSize = settingsBodyTextSize(),
                         fontWeight = FontWeight.Medium,
-                        color = SubLabelColor
+                        color = getSettingsDescriptionColor()
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Box(
@@ -364,9 +511,9 @@ private fun QuickEntityEditDialog(
                 Column {
                     Text(
                         text = stringResource(R.string.settings_quick_entity_color),
-                        fontSize = 12.sp,
+                        fontSize = settingsBodyTextSize(),
                         fontWeight = FontWeight.Medium,
-                        color = SubLabelColor
+                        color = getSettingsDescriptionColor()
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(
@@ -401,7 +548,7 @@ private fun QuickEntityEditDialog(
                         Text(
                             text = stringResource(R.string.settings_quick_entity_color_auto),
                             fontSize = 10.sp,
-                            color = SubLabelColor,
+                            color = getSettingsDescriptionColor(),
                             modifier = Modifier.padding(top = 4.dp)
                         )
                     }
@@ -423,6 +570,8 @@ private fun QuickEntityEditDialog(
                         entityId.startsWith("script.") -> "button"
                         entityId.startsWith("scene.") -> "button"
                         entityId.startsWith("automation.") -> "switch"
+                        entityId.startsWith("timer.") -> "timer"
+                        entityId.startsWith("camera.") -> "camera"
                         else -> "switch"
                     }
                     onConfirm(QuickEntitySlot(
@@ -431,7 +580,10 @@ private fun QuickEntityEditDialog(
                         icon = icon,
                         label = "",
                         size = slot.size,
-                        color = selectedColor
+                        color = selectedColor,
+                        cameraPanX = if (slot.entityId == entityId) slot.cameraPanX else 0.5f,
+                        cameraPanY = if (slot.entityId == entityId) slot.cameraPanY else 0.5f,
+                        cameraZoom = if (slot.entityId == entityId) slot.cameraZoom else 1f,
                     ))
                 }
             ) {
@@ -446,7 +598,7 @@ private fun QuickEntityEditDialog(
             TextButton(onClick = onDismiss) {
                 Text(
                     text = stringResource(R.string.label_cancel),
-                    color = SubLabelColor
+                    color = getSettingsDescriptionColor()
                 )
             }
         },

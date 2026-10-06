@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Restart tile. The three action widgets share every id so one renderer drives
+  them all; the accent lives in the layout so the picker preview is already the
+  right colour before the first update arrives.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/ava_action_widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_action_bg_blue_light"
+    android:layoutDirection="locale">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="10dp">
+
+        <ImageView
+            android:id="@+id/ava_action_widget_icon"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/widget_action_circle_blue"
+            android:padding="13dp"
+            android:src="@drawable/widget_action_ic_restart" />
+
+        <TextView
+            android:id="@+id/ava_action_widget_label"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:text="@string/settings_device_control_restart"
+            android:textColor="#FF1E293B"
+            android:textSize="15sp" />
+    </LinearLayout>
+</FrameLayout>

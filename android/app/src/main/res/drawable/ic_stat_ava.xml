@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Status-bar / notification small icon. Same slanted capsule + dot as ic_ava_logo,
+  measured off the launcher foreground. Must stay a plain vector — never point
+  setSmallIcon at mipmap/ic_launcher (adaptive icons are circle-masked by SystemUI).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M4.56,18.5 L12.61,4.52"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="7.06"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M18.3,13.61 a4.55,4.55 0 1,0 0,9.1 a4.55,4.55 0 1,0 0,-9.1z" />
+</vector>

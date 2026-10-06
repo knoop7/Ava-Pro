@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Per-AppWidgetHostView state; keyed tag avoids collisions with provider content. -->
+    <item name="tag_minimal_launcher_widget_reported_size" type="id" />
+</resources>

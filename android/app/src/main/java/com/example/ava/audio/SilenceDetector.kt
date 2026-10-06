@@ -1,15 +1,16 @@
 package com.example.ava.audio
 
-import kotlin.math.abs
+import kotlin.math.sqrt
 
 class SilenceDetector(
-    private val silenceThreshold: Float = 0.008f,
-    private val silenceDurationMs: Long = 1200,
-    private val minSpeechDurationMs: Long = 500
+    private val silenceThreshold: Int = 200,
+    private val silenceDurationMs: Long = 3500,
+    private val minSpeechDurationMs: Long = 400
 ) {
     private var lastSoundTime: Long = 0
     private var speechStartTime: Long = 0
-    private var isSpeaking: Boolean = false
+    var isSpeaking: Boolean = false
+        private set
 
     fun reset() {
         lastSoundTime = 0
@@ -17,9 +18,16 @@ class SilenceDetector(
         isSpeaking = false
     }
 
+    fun forceStartSpeaking() {
+        val now = System.currentTimeMillis()
+        isSpeaking = true
+        speechStartTime = now
+        lastSoundTime = now
+    }
+
     fun processAudio(audioBytes: ByteArray): Boolean {
         val currentTime = System.currentTimeMillis()
-        val silence = checkSilence(audioBytes)
+        val silence = isSilent(audioBytes)
 
         if (silence) {
             if (isSpeaking && lastSoundTime > 0) {
@@ -44,11 +52,16 @@ class SilenceDetector(
         return false
     }
 
-    private fun checkSilence(audioBytes: ByteArray): Boolean {
-        if (audioBytes.size < 2) return true
+    fun isSilent(audioBytes: ByteArray): Boolean {
+        val rms = calculateRMS(audioBytes)
+        return rms < silenceThreshold
+    }
 
-        var sum = 0L
-        var count = 0
+    private fun calculateRMS(audioBytes: ByteArray): Double {
+        if (audioBytes.size < 2) return 0.0
+
+        var sumSquares = 0.0
+        var sampleCount = 0
 
         var i = 0
         while (i < audioBytes.size - 1) {
@@ -56,14 +69,11 @@ class SilenceDetector(
             val hi = audioBytes[i + 1].toInt()
             val sample = lo or (hi shl 8)
             val signed = if (sample > 32767) sample - 65536 else sample
-            sum += abs(signed)
-            count++
+            sumSquares += signed * signed
+            sampleCount++
             i += 2
         }
 
-        if (count == 0) return true
-
-        val volume = sum.toFloat() / count
-        return volume < (silenceThreshold * 32768)
+        return if (sampleCount > 0) sqrt(sumSquares / sampleCount) else 0.0
     }
 }

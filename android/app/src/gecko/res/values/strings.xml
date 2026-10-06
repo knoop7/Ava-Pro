@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Shade header / Settings > Apps. Not a launcher label. -->
+    <string name="gecko_engine_app_name">Gecko Engine</string>
+</resources>

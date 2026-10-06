@@ -118,6 +118,7 @@ object LightKeywordDetector {
     private val EXIT_PATTERNS = listOf(
         Regex("再见"),
         Regex("拜拜"),
+        Regex("告辞"),
         Regex("下次见"),
         Regex("回头见"),
         Regex("退下"),
@@ -130,12 +131,22 @@ object LightKeywordDetector {
         Regex("bye\\s*bye", RegexOption.IGNORE_CASE),
         Regex("see\\s*you", RegexOption.IGNORE_CASE),
         Regex("take\\s*care", RegexOption.IGNORE_CASE),
+        Regex("farewell", RegexOption.IGNORE_CASE),
+        Regex("so\\s+long", RegexOption.IGNORE_CASE),
+        Regex("talk\\s+to\\s+you\\s+later", RegexOption.IGNORE_CASE),
+        Regex("until\\s+next\\s+time", RegexOption.IGNORE_CASE),
         Regex("have\\s*a\\s*(good|nice|great)", RegexOption.IGNORE_CASE)
     )
-    
+
     fun isExitKeyword(ttsText: String?): Boolean {
         if (ttsText.isNullOrBlank()) return false
         val text = ttsText.trim()
         return EXIT_PATTERNS.any { it.containsMatchIn(text) }
+    }
+
+    fun endsWithQuestionMark(text: String?): Boolean {
+        if (text.isNullOrBlank()) return false
+        val trimmed = text.trim()
+        return trimmed.endsWith('?') || trimmed.endsWith('？')
     }
 }

@@ -32,7 +32,7 @@ fun SettingsCategoryHeader(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(start = 16.dp, top = if (showDivider) 20.dp else 32.dp, end = 16.dp, bottom = 8.dp),
-            fontSize = 14.sp,
+            fontSize = settingsTitleTextSize(),
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary
         )

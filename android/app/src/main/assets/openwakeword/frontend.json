@@ -1,0 +1,31 @@
+{
+  "format": "openwakeword-v1",
+  "author": "David Scripka / openWakeWord",
+  "license": "Apache-2.0",
+  "license_url": "https://github.com/dscripka/openWakeWord/blob/main/LICENSE",
+  "source_url": "https://github.com/dscripka/openWakeWord",
+  "melspectrogram": "C++ oww_melspectrogram; melspectrogram.onnx is not shipped",
+  "embedding": {
+    "file": "embedding_model.owweb",
+    "format": "OWWEMBD1 v2 native blob, int8 per-channel weights + fp32 first conv (tools/oww_embedding_blob); embedding_model.onnx is not shipped, reference copy under .oww-hosttest/ref",
+    "input": "input_1",
+    "output": "conv2d_19"
+  },
+  "classifier_io": "Classifier tensor names carry a per-model hash suffix; bind by index, not by name.",
+  "sample_rate": 16000,
+  "chunk_samples": 640,
+  "mel_prefix_samples": 480,
+  "mel_bins": 32,
+  "mel_frames_per_chunk": 4,
+  "mel_transform": "x/10+2",
+  "mel_window": 76,
+  "mel_buffer_fill": 1.0,
+  "embedding_dim": 96,
+  "embedding_window": 16,
+  "audio_scale": "int16-range float32; do not normalise to +/-1",
+  "warmup_chunks": 20,
+  "warmup": "noise",
+  "warmup_predictions": 5,
+  "energy_lookback": [-14, -4],
+  "energy_floor_rms": 80
+}

@@ -8,11 +8,19 @@ class MicroFrontend : AutoCloseable {
     private external fun newNativeFrontend(): Long
     private external fun deleteNativeFrontend(nativeFrontend: Long)
     private external fun processSamples(nativeFrontend: Long, audio: ByteBuffer): ProcessOutput
+    private external fun resetNativeFrontend(nativeFrontend: Long)
 
     private var nativeFrontend = newNativeFrontend()
 
     fun processSamples(audio: ByteBuffer): ProcessOutput {
         return processSamples(nativeFrontend, audio)
+    }
+
+    /** Clears frontend ring/noise-reduction state so post-TTS silence cannot poison the next wake. */
+    fun reset() {
+        if (nativeFrontend != -1L) {
+            resetNativeFrontend(nativeFrontend)
+        }
     }
 
     private fun delete() {

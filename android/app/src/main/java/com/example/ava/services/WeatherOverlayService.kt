@@ -1,5 +1,7 @@
 package com.example.ava.services
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
 import android.annotation.SuppressLint
 import android.app.Service
 import android.content.Context
@@ -11,11 +13,14 @@ import android.os.IBinder
 import android.os.Looper
 import android.util.Log
 import android.view.Gravity
-import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.widget.FrameLayout
+import android.view.animation.AccelerateInterpolator
+import android.view.animation.DecelerateInterpolator
 import com.example.ava.R
 import com.example.ava.settings.playerSettingsStore
+import com.example.ava.ui.OverlayLogoBadge
 import com.example.ava.weather.WeatherData
 import com.example.ava.weather.WeatherService
 import kotlinx.coroutines.CoroutineScope
@@ -33,12 +38,15 @@ import kotlin.random.Random
 class WeatherOverlayService : Service() {
 
     private var windowManager: WindowManager? = null
+    private var weatherHost: FrameLayout? = null
     private var weatherView: WeatherOverlayView? = null
     private var windowParams: WindowManager.LayoutParams? = null
     private val handler = Handler(Looper.getMainLooper())
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var isWeatherEnabled = false
     private var isWeatherVisible = true
+    /** Bumped on every show/hide so a cancelled fade-out cannot leave the view stuck VISIBLE. */
+    private var weatherHideGeneration = 0
     @Volatile private var isServiceRunning = true
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -53,24 +61,23 @@ class WeatherOverlayService : Service() {
         super.onCreate()
         instance = this
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+        OverlayLayerSplit.register(
+            this,
+            OverlayLayerSplit.Layer.WEATHER,
+            showing = { isOverlayShowing() },
+            host = { weatherHost },
+            apply = { frame -> applyLayerSplit(frame) },
+        )
         WeatherService.addWeatherListener(weatherListener)
     }
     
     private fun bringToFront() {
         if (!isWeatherEnabled || !isWeatherVisible) return
-        weatherView?.let { view ->
-            windowParams?.let { params ->
-                try {
-
-                    if (view.isAttachedToWindow) {
-                        windowManager?.removeView(view)
-                        windowManager?.addView(view, params)
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to bring weather to front", e)
-                }
-            }
+        OverlayLayerSplit.sync()
+        if (!OverlayLayerSplit.isPaneView(weatherHost)) {
+            OverlayZOrderCoordinator.bringToFront(windowManager, weatherHost, windowParams, TAG)
         }
+        OverlayZOrderCoordinator.raiseVinylFabAbovePassiveDashboard()
     }
     
     private fun ensureWeatherViewCreated() {
@@ -145,42 +152,37 @@ class WeatherOverlayService : Service() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             }
+            OverlayOrientation.apply(this)
         }
 
-        weatherView = WeatherOverlayView(this, realWidth, realHeight).apply {
-            
-            setOnTouchListener(DoubleTapPassThroughListener(
-                onDoubleTap = { toggleVisibility() },
-                onSwipeLeft = { switchToClock() },  
-                windowManager = windowManager
-            ))
+        val overlay = WeatherOverlayView(this, realWidth, realHeight).apply {
+            setOnTouchListener(
+                DashboardTouchListener(
+                    context = this@WeatherOverlayService,
+                    kind = DashboardOverlayChrome.Kind.WEATHER,
+                    onSwipeLeft = { switchToClock() },
+                )
+            )
         }
+        weatherView = overlay
+        val host = FrameLayout(this).apply {
+            addView(
+                overlay,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                ),
+            )
+            visibility = View.GONE
+        }
+        weatherHost = host
+        DashboardOverlayChrome.attach(host, DashboardOverlayChrome.Kind.WEATHER)
 
         try {
-            windowManager?.addView(weatherView, windowParams)
-            weatherView?.visibility = View.GONE
+            windowManager?.addView(host, windowParams)
+            OverlayZOrderCoordinator.noteWindowAdded()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to add weather window", e)
-        }
-    }
-
-    private fun toggleVisibility() {
-        if (!isWeatherEnabled) return
-        
-        if (isWeatherVisible) {
-            weatherView?.stopAnimation()
-            weatherView?.visibility = View.GONE
-            isWeatherVisible = false
-            serviceScope.launch {
-                playerSettingsStore.updateData { it.copy(enableWeatherOverlayVisible = false) }
-            }
-        } else {
-            weatherView?.visibility = View.VISIBLE
-            weatherView?.startAnimation()
-            isWeatherVisible = true
-            serviceScope.launch {
-                playerSettingsStore.updateData { it.copy(enableWeatherOverlayVisible = true) }
-            }
         }
     }
 
@@ -206,35 +208,56 @@ class WeatherOverlayService : Service() {
         when (intent?.action) {
             ACTION_SHOW -> {
                 ensureWeatherViewCreated()
+                val alreadyShown = isWeatherEnabled && isWeatherVisible &&
+                    weatherHost?.visibility == View.VISIBLE
                 isWeatherEnabled = true
                 isWeatherVisible = true
-                bringToFront()
-                weatherView?.visibility = View.VISIBLE
-                weatherView?.startAnimation()
+                OverlayLayerSplit.noteOpened(OverlayLayerSplit.Layer.WEATHER)
+                if (!alreadyShown) {
+                    OverlayLayerSplit.sync()
+                    bringToFront()
+                    weatherHost?.let { fadeInWeather(it) }
+                    weatherView?.startAnimation()
+                    OverlayZOrderCoordinator.raiseVinylFabAbovePassiveDashboard()
+                }
+                DashboardOverlayChrome.bind(this, DashboardOverlayChrome.Kind.WEATHER)
+                if (!alreadyShown) {
+                    DashboardOverlayChrome.revealOnShow(DashboardOverlayChrome.Kind.WEATHER)
+                }
             }
             ACTION_HIDE -> {
                 isWeatherEnabled = false
-                weatherView?.stopAnimation()
-                weatherView?.visibility = View.GONE
                 isWeatherVisible = false
-            }
-            ACTION_TOGGLE -> {
-                if (isWeatherEnabled) {
-                    toggleVisibility()
-                }
+                OverlayLayerSplit.sync()
+                weatherView?.stopAnimation()
+                weatherHost?.let { fadeOutWeather(it) }
+                DashboardOverlayChrome.unbind(DashboardOverlayChrome.Kind.WEATHER)
             }
             ACTION_SET_VISIBLE -> {
                 if (isWeatherEnabled) {
                     val visible = intent.getBooleanExtra(EXTRA_VISIBLE, true)
                     if (visible && !isWeatherVisible) {
-                        weatherView?.visibility = View.VISIBLE
-                        weatherView?.startAnimation()
                         isWeatherVisible = true
+                        OverlayLayerSplit.sync()
+                        weatherHost?.let { fadeInWeather(it) }
+                        weatherView?.startAnimation()
+                        DashboardOverlayChrome.bind(this, DashboardOverlayChrome.Kind.WEATHER)
+                        DashboardOverlayChrome.revealOnShow(DashboardOverlayChrome.Kind.WEATHER)
+                        OverlayZOrderCoordinator.raiseVinylFabAbovePassiveDashboard()
                     } else if (!visible && isWeatherVisible) {
-                        weatherView?.stopAnimation()
-                        weatherView?.visibility = View.GONE
                         isWeatherVisible = false
+                        OverlayLayerSplit.sync()
+                        weatherView?.stopAnimation()
+                        weatherHost?.let { fadeOutWeather(it) }
+                        DashboardOverlayChrome.unbind(DashboardOverlayChrome.Kind.WEATHER)
                     }
+                } else if (!intent.getBooleanExtra(EXTRA_VISIBLE, true)) {
+                    // Feature already disabled but window may still be stuck VISIBLE.
+                    isWeatherVisible = false
+                    OverlayLayerSplit.sync()
+                    weatherView?.stopAnimation()
+                    weatherHost?.let { fadeOutWeather(it) }
+                    DashboardOverlayChrome.unbind(DashboardOverlayChrome.Kind.WEATHER)
                 }
             }
             "com.example.ava.ACTION_BRING_TO_FRONT" -> {
@@ -244,18 +267,77 @@ class WeatherOverlayService : Service() {
         return START_NOT_STICKY
     }
 
+    private fun fadeInWeather(v: View) {
+        weatherHideGeneration++
+        v.animate().cancel()
+        v.animate().setListener(null)
+        v.alpha = 0f
+        v.visibility = View.VISIBLE
+        OverlayLayerSplit.fadeWhenPaneReady(OverlayLayerSplit.Layer.WEATHER) {
+            if (v.visibility != View.VISIBLE) return@fadeWhenPaneReady
+            v.animate().alpha(1f).setDuration(230)
+                .setInterpolator(DecelerateInterpolator())
+                .start()
+        }
+    }
+
+    private fun fadeOutWeather(v: View) {
+        OverlayZOrderCoordinator.cancelScheduledVoiceRaise()
+        val gen = ++weatherHideGeneration
+        v.animate().cancel()
+        v.animate().setListener(null)
+        v.animate().alpha(0f).setDuration(230)
+            .setInterpolator(AccelerateInterpolator())
+            .setListener(object : AnimatorListenerAdapter() {
+                private var canceled = false
+                override fun onAnimationCancel(animation: Animator) {
+                    canceled = true
+                    // Cancelled without a following show — still force GONE.
+                    if (gen == weatherHideGeneration && !isWeatherVisible) {
+                        v.visibility = View.GONE
+                        v.alpha = 1f
+                        v.animate().setListener(null)
+                    }
+                }
+                override fun onAnimationEnd(animation: Animator) {
+                    v.animate().setListener(null)
+                    if (canceled || gen != weatherHideGeneration) return
+                    v.visibility = View.GONE
+                    v.alpha = 1f
+                }
+            })
+            .start()
+    }
+
+    private fun applyLayerSplit(frame: OverlayLayerSplit.Frame?) {
+        val host = weatherHost ?: return
+        if (frame == null && !isWeatherVisible && host.visibility == View.VISIBLE) return
+        OverlayLayerSplit.applyTo(
+            OverlayLayerSplit.Layer.WEATHER,
+            windowManager,
+            host,
+            windowParams,
+            frame,
+        )
+    }
+
     override fun onDestroy() {
+        OverlayLayerSplit.unregister(OverlayLayerSplit.Layer.WEATHER)
         super.onDestroy()
+        DashboardOverlayChrome.unbind(DashboardOverlayChrome.Kind.WEATHER)
         isServiceRunning = false
         WeatherService.removeWeatherListener(weatherListener)
         handler.removeCallbacksAndMessages(null)
         serviceScope.cancel()
         weatherView?.stopAnimation()
         try {
-            weatherView?.let { windowManager?.removeView(it) }
+            weatherHost?.let { windowManager?.removeView(it) }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to remove weather window", e)
         }
+        weatherHost = null
+        weatherView = null
+        if (instance === this) instance = null
     }
 
     companion object {
@@ -264,13 +346,16 @@ class WeatherOverlayService : Service() {
         
         const val ACTION_SHOW = "com.example.ava.SHOW_WEATHER"
         const val ACTION_HIDE = "com.example.ava.HIDE_WEATHER"
-        const val ACTION_TOGGLE = "com.example.ava.TOGGLE_WEATHER"
         
+        fun isOverlayShowing(): Boolean = instance?.let { it.isWeatherEnabled && it.isWeatherVisible } == true
+
         fun bringToFrontStatic() {
             instance?.bringToFront()
         }
 
         fun show(context: Context) {
+            val svc = instance
+            if (svc != null && svc.isWeatherEnabled && svc.isWeatherVisible) return
             val intent = Intent(context, WeatherOverlayService::class.java).apply {
                 action = ACTION_SHOW
             }
@@ -280,13 +365,6 @@ class WeatherOverlayService : Service() {
         fun hide(context: Context) {
             val intent = Intent(context, WeatherOverlayService::class.java).apply {
                 action = ACTION_HIDE
-            }
-            context.startService(intent)
-        }
-
-        fun toggle(context: Context) {
-            val intent = Intent(context, WeatherOverlayService::class.java).apply {
-                action = ACTION_TOGGLE
             }
             context.startService(intent)
         }
@@ -369,14 +447,6 @@ class WeatherOverlayView(
         }
 
     
-    private var lastTapTime = 0L
-    private var tapCount = 0
-    private var touchStartX = 0f
-    private var touchStartY = 0f
-    private var onDoubleTap: (() -> Unit)? = null
-    private var onSwipeRight: (() -> Unit)? = null
-
-    
     private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -397,9 +467,13 @@ class WeatherOverlayView(
         Typeface.create("sans-serif", Typeface.BOLD)
     }
     private val labelTypeface = Typeface.create("sans-serif", Typeface.NORMAL)
+    private var haLogoBitmap: Bitmap? = null
 
-    fun setOnDoubleTap(callback: () -> Unit) { onDoubleTap = callback }
-    fun setOnSwipeRight(callback: () -> Unit) { onSwipeRight = callback }
+    private fun haLogoBitmap(): Bitmap? {
+        haLogoBitmap?.let { if (!it.isRecycled) return it }
+        haLogoBitmap = OverlayLogoBadge.loadHaLogo(context)
+        return haLogoBitmap
+    }
 
     fun updateWeather(data: com.example.ava.weather.WeatherData) {
         val oldCondition = condition
@@ -547,9 +621,10 @@ class WeatherOverlayView(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         
-        if (width > 0 && height > 0) {
+        if (width > 0 && height > 0 && (width != screenWidth || height != screenHeight)) {
             screenWidth = width
             screenHeight = height
+            initParticles()
         }
         
         drawSkyBackground(canvas)
@@ -1040,8 +1115,12 @@ class WeatherOverlayView(
     private fun drawUILayer(canvas: Canvas) {
         val actualWidth = width
         val actualHeight = height
-        val isSmallSquareScreen = kotlin.math.abs(actualWidth - actualHeight) < 50 && actualWidth <= 500
-        val isLandscape = actualWidth > actualHeight * 1.2f
+        val squarePanel = com.example.ava.ui.isCompactSquarePixels(
+            maxOf(actualWidth, actualHeight),
+            minOf(actualWidth, actualHeight),
+        )
+        val isSmallSquareScreen = squarePanel && minOf(actualWidth, actualHeight) <= 500
+        val isLandscape = !squarePanel && actualWidth > actualHeight * 1.2f
         val vmin = minOf(actualWidth, actualHeight).toFloat()
         val padding = if (isSmallSquareScreen) actualWidth * 0.1f else actualWidth * 0.06f
         
@@ -1063,17 +1142,9 @@ class WeatherOverlayView(
         
         
 
-        val logoSize = (actualWidth * 0.05f).toInt()
-        val logoMargin = (actualWidth * 0.04f).toInt()
-        val haLogoBitmap = try {
-            context.assets.open("ha_logo.png").use { android.graphics.BitmapFactory.decodeStream(it) }
-        } catch (e: Exception) { null }
-        haLogoBitmap?.let {
-            val iconRight = actualWidth - logoMargin
-            val iconTop = logoMargin
-            val logoPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { alpha = 64 }
-            val destRect = android.graphics.Rect(iconRight - logoSize, iconTop, iconRight, iconTop + logoSize)
-            canvas.drawBitmap(it, null, destRect, logoPaint)
+        val logoLayout = OverlayLogoBadge.layoutPx(this)
+        haLogoBitmap()?.let { bitmap ->
+            OverlayLogoBadge.draw(canvas, actualWidth, bitmap, logoLayout)
         }
         
         
@@ -1113,7 +1184,7 @@ class WeatherOverlayView(
 
     private fun drawDashboard(canvas: Canvas, padding: Float, isSmallSquareScreen: Boolean, actualWidth: Int, actualHeight: Int) {
         val vmin = minOf(actualWidth, actualHeight).toFloat()
-        val isLandscape = actualWidth > actualHeight * 1.2f
+        val isLandscape = !isSmallSquareScreen && actualWidth > actualHeight * 1.2f
         
         
         val gridLeft = padding
@@ -1222,40 +1293,6 @@ class WeatherOverlayView(
         canvas.drawText(label, x, y + vmin * 0.07f, textPaint)
         textPaint.alpha = 255
         textPaint.setShadowLayer(0f, 0f, 0f, Color.TRANSPARENT)
-    }
-    
-    @SuppressLint("ClickableViewAccessibility")
-    override fun onTouchEvent(event: MotionEvent): Boolean {
-        when (event.action) {
-            MotionEvent.ACTION_DOWN -> {
-                touchStartX = event.x
-                touchStartY = event.y
-                
-                val currentTime = System.currentTimeMillis()
-                if (currentTime - lastTapTime < 300) {
-                    tapCount++
-                    if (tapCount >= 2) {
-                        onDoubleTap?.invoke()
-                        tapCount = 0
-                        return true
-                    }
-                } else {
-                    tapCount = 1
-                }
-                lastTapTime = currentTime
-            }
-            MotionEvent.ACTION_UP -> {
-                val dx = event.x - touchStartX
-                val dy = event.y - touchStartY
-                
-                
-                if (dx > 100 && abs(dy) < 100) {
-                    onSwipeRight?.invoke()
-                    return true
-                }
-            }
-        }
-        return false
     }
 
     private data class Particle(

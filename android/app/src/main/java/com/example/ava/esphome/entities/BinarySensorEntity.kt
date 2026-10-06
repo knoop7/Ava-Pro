@@ -1,5 +1,6 @@
 package com.example.ava.esphome.entities
 
+import com.example.esphomeproto.api.EntityCategory
 import com.example.esphomeproto.api.ListEntitiesRequest
 import com.example.esphomeproto.api.listEntitiesBinarySensorResponse
 import com.example.esphomeproto.api.binarySensorStateResponse
@@ -10,12 +11,13 @@ import kotlinx.coroutines.flow.map
 
 
 class BinarySensorEntity(
-    val key: Int,
+    override val key: Int,
     val name: String,
     val objectId: String,
     val deviceClass: String = "", 
     val icon: String = "",
     val getState: Flow<Boolean>,
+    val entityCategory: EntityCategory = EntityCategory.ENTITY_CATEGORY_NONE,
     val isStatusBinarySensor: Boolean = false,
     val disabledByDefault: Boolean = false
 ) : Entity {
@@ -31,6 +33,7 @@ class BinarySensorEntity(
                 if (this@BinarySensorEntity.icon.isNotEmpty()) {
                     icon = this@BinarySensorEntity.icon
                 }
+                entityCategory = this@BinarySensorEntity.entityCategory
                 isStatusBinarySensor = this@BinarySensorEntity.isStatusBinarySensor
                 disabledByDefault = this@BinarySensorEntity.disabledByDefault
             })

@@ -35,9 +35,14 @@ import android.widget.TextView
 import com.example.ava.notifications.FontAwesomeHelper
 import com.example.ava.notifications.NotificationScenes
 import com.example.ava.notifications.NotificationScene
+import com.example.ava.notifications.SceneReset
 import com.example.ava.settings.NotificationSettings
+import com.example.ava.settings.NotificationDisplayStyle
 import com.example.ava.settings.NotificationSettingsStore
 import com.example.ava.settings.notificationSettingsStore
+import com.example.ava.ui.glass.LiquidGlass
+import com.example.ava.ui.glass.LiquidGlassDrawable
+import com.example.ava.utils.BlurCompat
 import android.media.RingtoneManager
 import android.net.Uri
 import kotlinx.coroutines.CoroutineScope
@@ -53,6 +58,7 @@ class NotificationOverlayService : Service() {
 
     private var windowManager: WindowManager? = null
     private var overlayView: View? = null
+    private var windowParams: WindowManager.LayoutParams? = null
     
     
     private var backgroundView: View? = null
@@ -63,7 +69,6 @@ class NotificationOverlayService : Service() {
     private var iconView: TextView? = null
     private var titleView: TextView? = null
     private var descView: TextView? = null
-    private var subDescView: TextView? = null
     private var dividerView: View? = null
     private var dotView: View? = null
     
@@ -76,6 +81,13 @@ class NotificationOverlayService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private var autoHideRunnable: Runnable? = null
     private var currentScene: NotificationScene? = null
+    /** Auto-hide override of the scene being shown (e.g. 3s preview); null = user setting. */
+    private var lastAutoHideOverrideMs: Long? = null
+    
+    /** Content column width available to title/desc text (set in createOverlayView). */
+    private var textAvailWidthPx = 0
+    /** Screen-derived title size (sp); fitTitleTextSizeSp() steps down from here. */
+    private var titleMaxSp = 35f
     private var techRingAnimator: ObjectAnimator? = null
     private var isShowingAnimation = false
     
@@ -89,38 +101,69 @@ class NotificationOverlayService : Service() {
     private var iconSunRiseAnimator: ObjectAnimator? = null
     private var iconShadowAnimator: ValueAnimator? = null
 
+    /**
+     * Infinite glow/pulse animators owned by the current overlay view. Held so
+     * [cancelOverlayAnimators] can stop them: [createOverlayView] runs again on every
+     * rotation, and an orphaned INFINITE animator keeps ticking on the detached view.
+     */
+    private var coreGlowAnimator: ValueAnimator? = null
+    private var dotPulseAnimator: ObjectAnimator? = null
+
     
     private var auroraAnimator1: Animator? = null
     private var auroraAnimator2: Animator? = null
     private var auroraAnimator3: Animator? = null
     private var auroraAnimator4: Animator? = null
 
+    private val bannerOverlay by lazy { NotificationBannerOverlay(this) }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+        LiquidGlass.ensureLoaded(this)
         createOverlayView()
-        
+        bannerOverlay.ensureAttached(windowManager!!)
+
         initializeDefaultColors()
-        
-        
+
+
         notificationSettingsStore.sceneDisplayDuration.onEach { duration ->
-            
-            if (overlayView?.visibility == View.VISIBLE) {
-                scheduleAutoHide()
+
+            if (overlayView?.visibility == View.VISIBLE ||
+                bannerOverlay.root?.visibility == View.VISIBLE
+            ) {
+                scheduleAutoHide(lastAutoHideOverrideMs)
             }
         }.launchIn(serviceScope)
     }
 
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
         super.onConfigurationChanged(newConfig)
-        
+
+        // Capture before tearing views down: only restore what was actually on screen.
+        val wasVisible = overlayView?.visibility == View.VISIBLE ||
+            bannerOverlay.root?.visibility == View.VISIBLE ||
+            isShowingAnimation
+
         overlayView?.let {
             windowManager?.removeView(it)
             overlayView = null
         }
         createOverlayView()
+        bannerOverlay.detach(windowManager)
+        windowManager?.let { bannerOverlay.ensureAttached(it) }
+        if (!wasVisible) return
+        currentScene?.let { scene ->
+            serviceScope.launch {
+                val settings = notificationSettingsStore.get()
+                handler.post {
+                    presentScene(scene, settings, lastAutoHideOverrideMs, playSound = false)
+                }
+            }
+        }
     }
 
     
@@ -138,7 +181,10 @@ class NotificationOverlayService : Service() {
 
     @SuppressLint("ClickableViewAccessibility")
     private fun createOverlayView() {
-        
+        // Rotation rebuilds the overlay; stop the previous view's animators first or
+        // each rotation leaves another set running against a detached view.
+        cancelOverlayAnimators()
+
         val displayMetrics = DisplayMetrics()
         @Suppress("DEPRECATION")
         val display = windowManager?.defaultDisplay
@@ -164,6 +210,7 @@ class NotificationOverlayService : Service() {
             setBackgroundColor(Color.parseColor("#02040a"))
             clipChildren = false  
             clipToPadding = false
+            visibility = View.GONE
         }
         
         
@@ -233,19 +280,28 @@ class NotificationOverlayService : Service() {
             clipToPadding = false
 
             
-            val cardBg = GradientDrawable(
-                GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(
-                    Color.argb(180, 5, 10, 25),  
-                    Color.argb(140, 5, 10, 25),  
-                    Color.argb(80, 5, 10, 25)    
+            if (LiquidGlass.enabled) {
+                // HUD card as a glass slab; the window blurs the wallpaper behind it.
+                background = LiquidGlassDrawable(
+                    cornerRadiusPx = cardCornerRadius,
+                    tint = Color.argb(150, 5, 10, 25),
+                    windowBacked = true,
+                ).also { it.setDensity(density) }
+            } else {
+                val cardBg = GradientDrawable(
+                    GradientDrawable.Orientation.TOP_BOTTOM,
+                    intArrayOf(
+                        Color.argb(180, 5, 10, 25),
+                        Color.argb(140, 5, 10, 25),
+                        Color.argb(80, 5, 10, 25)
+                    )
                 )
-            )
-            cardBg.cornerRadius = cardCornerRadius
-            if (!isPortraitOrSquare) {
-                cardBg.setStroke((1 * density).toInt(), Color.parseColor("#19FFFFFF")) 
+                cardBg.cornerRadius = cardCornerRadius
+                if (!isPortraitOrSquare) {
+                    cardBg.setStroke((1 * density).toInt(), Color.parseColor("#19FFFFFF"))
+                }
+                background = cardBg
             }
-            background = cardBg
         }
         
         
@@ -268,6 +324,10 @@ class NotificationOverlayService : Service() {
         
         val maxContentWidth = (896 * density).toInt()
         val basePadding = if (isPortraitOrSquare) (16 * density).toInt() else (32 * density).toInt()
+        // Cap the content column on large screens (mockup max-w); card can be wider.
+        val contentWidth = minOf(cardWidth, maxContentWidth)
+        textAvailWidthPx = contentWidth - 2 * basePadding
+        titleMaxSp = titleSize
         val contentContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER  
@@ -275,7 +335,7 @@ class NotificationOverlayService : Service() {
             clipToPadding = false
             setPadding(basePadding, basePadding, basePadding, basePadding)
             val lp = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
+                contentWidth,
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
             lp.gravity = Gravity.CENTER
@@ -326,7 +386,7 @@ class NotificationOverlayService : Service() {
             
             
             val coreView = this
-            ValueAnimator.ofFloat(0f, 1f).apply {
+            coreGlowAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
                 duration = 3000  
                 repeatCount = ValueAnimator.INFINITE
                 repeatMode = ValueAnimator.RESTART
@@ -397,7 +457,7 @@ class NotificationOverlayService : Service() {
             elevation = 15 * density
             
             
-            ObjectAnimator.ofFloat(this, "alpha", 1f, 0.5f, 1f).apply {
+            dotPulseAnimator = ObjectAnimator.ofFloat(this, "alpha", 1f, 0.5f, 1f).apply {
                 duration = 2000
                 repeatCount = ValueAnimator.INFINITE
                 interpolator = AccelerateDecelerateInterpolator()
@@ -443,7 +503,7 @@ class NotificationOverlayService : Service() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             val lp = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             )
             lp.gravity = Gravity.CENTER
@@ -462,10 +522,15 @@ class NotificationOverlayService : Service() {
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
             text = ""
+            // Long titles: fitTitleTextSize() steps the size down first; if the floor
+            // still overflows, cap at 2 lines and ellipsize instead of pushing the
+            // desc row / HA badge out of the card.
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
             
             
             val lp = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             )
             lp.gravity = Gravity.CENTER
@@ -483,7 +548,7 @@ class NotificationOverlayService : Service() {
             clipChildren = false  
             clipToPadding = false
             val lp = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             )
             lp.gravity = Gravity.CENTER
@@ -493,45 +558,33 @@ class NotificationOverlayService : Service() {
         }
         
         
-        val descContainer = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            
-            setBaselineAligned(true)
-            clipChildren = false  
-            clipToPadding = false
-            setBackgroundColor(Color.TRANSPARENT)  
-            val lp = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
-            lp.gravity = Gravity.CENTER
-            layoutParams = lp
-        }
-        
-        
-        
+        // desc + subDesc render as one spannable line; overflow scrolls via the
+        // native TextView marquee (same principle as the lyrics CautiousMarquee:
+        // framework only animates when the text is wider than the view, short
+        // lines stay static and centered). Fading edges stand in for the lyric
+        // DstIn dissolve — they draw fine on this software-rendered overlay.
         descView = TextView(this).apply {
-            textSize = descSize
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.parseColor("#fcd34d"))  
-            text = ""
-            setBackgroundColor(Color.TRANSPARENT)
-            letterSpacing = 0.05f  
-        }
-        descContainer.addView(descView)
-
-        
-        subDescView = TextView(this).apply {
             textSize = descSize
             setTextColor(Color.parseColor("#e5e7eb"))  
             text = ""
             setBackgroundColor(Color.TRANSPARENT)
             letterSpacing = 0.05f  
+            gravity = Gravity.CENTER
+            setSingleLine(true)
+            ellipsize = android.text.TextUtils.TruncateAt.MARQUEE
+            marqueeRepeatLimit = -1
+            // Overlay window is FLAG_NOT_FOCUSABLE — marquee needs selected state.
+            isSelected = true
+            isHorizontalFadingEdgeEnabled = true
+            setFadingEdgeLength((24 * density).toInt())
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            lp.gravity = Gravity.CENTER
+            layoutParams = lp
         }
-        descContainer.addView(subDescView)
-        
-        descOuterContainer.addView(descContainer)
+        descOuterContainer.addView(descView)
         
         
         
@@ -663,6 +716,9 @@ class NotificationOverlayService : Service() {
         rootContainer.addView(cardContainer)
         
         overlayView = rootContainer
+        // Large setShadowLayer on a hardware canvas crashes the RenderThread (RenderScript
+        // ScriptIntrinsicBlur) on old APIs; render the whole overlay in software there.
+        BlurCompat.forceSoftwareLayerIfNeeded(rootContainer)
 
         
         val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -692,8 +748,13 @@ class NotificationOverlayService : Service() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             }
+            // The HUD card covers ~92% of the screen, so a whole-window backdrop blur reads
+            // as the card's own glass rather than a global dim.
+            LiquidGlass.applyWindowBlur(this, density)
+            OverlayOrientation.apply(this)
         }
-
+        windowParams = params
+        
         try {
             windowManager?.addView(overlayView, params)
             overlayView?.visibility = View.GONE
@@ -703,6 +764,30 @@ class NotificationOverlayService : Service() {
     }
     
     
+    /** Stops every animator bound to the current overlay view and drops the references. */
+    private fun cancelOverlayAnimators() {
+        listOfNotNull(
+            techRingAnimator,
+            iconSunRiseAnimator,
+            iconShadowAnimator,
+            coreGlowAnimator,
+            dotPulseAnimator,
+            auroraAnimator1,
+            auroraAnimator2,
+            auroraAnimator3,
+            auroraAnimator4,
+        ).forEach { runCatching { it.cancel() } }
+        techRingAnimator = null
+        iconSunRiseAnimator = null
+        iconShadowAnimator = null
+        coreGlowAnimator = null
+        dotPulseAnimator = null
+        auroraAnimator1 = null
+        auroraAnimator2 = null
+        auroraAnimator3 = null
+        auroraAnimator4 = null
+    }
+
     private fun startIconSunRiseAnimation() {
         
         iconSunRiseAnimator = ObjectAnimator.ofFloat(iconView, "scaleX", 1f, 1.1f, 1f).apply {
@@ -793,8 +878,10 @@ class NotificationOverlayService : Service() {
         when (intent.action) {
             ACTION_SHOW_SCENE -> {
                 val sceneId = intent.getStringExtra(EXTRA_SCENE_ID)
+                val autoHideMs = intent.getLongExtra(EXTRA_AUTO_HIDE_MS, -1L)
+                    .takeIf { it > 0 }
                 if (sceneId != null) {
-                    showScene(sceneId)
+                    showScene(sceneId, autoHideMs)
                 }
             }
             ACTION_SHOW_SCENE_BY_INDEX -> {
@@ -813,12 +900,20 @@ class NotificationOverlayService : Service() {
         }
     }
 
-    private fun showScene(sceneId: String) {
+    private fun showScene(sceneId: String, autoHideOverrideMs: Long? = null) {
+        if (SceneReset.matchesToken(sceneId)) {
+            hideOverlay()
+            return
+        }
         val scene = NotificationScenes.getSceneById(sceneId) ?: return
-        displayScene(scene)
+        displayScene(scene, autoHideOverrideMs)
     }
     
     private fun showSceneByTitle(sceneTitle: String) {
+        if (SceneReset.matchesToken(sceneTitle)) {
+            hideOverlay()
+            return
+        }
         val scene = NotificationScenes.getSceneByTitle(sceneTitle) ?: return
         displayScene(scene)
     }
@@ -828,61 +923,255 @@ class NotificationOverlayService : Service() {
         displayScene(scene)
     }
     
-    private fun displayScene(scene: NotificationScene) {
-        handler.post {
-            currentScene = scene
-            
-            autoHideRunnable?.let { handler.removeCallbacks(it) }
-            
-            
-            if (isShowingAnimation) {
-                overlayView?.animate()?.cancel()
-            }
-            
-            updateContent(scene)
-            updateColors(scene)
-            
-            isShowingAnimation = true
-            overlayView?.alpha = 0f
-            overlayView?.visibility = View.VISIBLE
-            overlayView?.animate()
-                ?.alpha(1f)
-                ?.setDuration(300)
-                ?.setInterpolator(AccelerateDecelerateInterpolator())
-                ?.withEndAction {
-                    isShowingAnimation = false
-                }
-                ?.start()
-            
-            
-            playNotificationSound()
-            
-            scheduleAutoHide()
+    private fun displayScene(scene: NotificationScene, autoHideOverrideMs: Long? = null) {
+        if (SceneReset.matchesToken(scene.id) || SceneReset.matchesToken(scene.title)) {
+            hideOverlay()
+            return
         }
+        serviceScope.launch {
+            val settings = notificationSettingsStore.get()
+            handler.post { presentScene(scene, settings, autoHideOverrideMs) }
+        }
+    }
+
+    private fun presentScene(
+        scene: NotificationScene,
+        settings: com.example.ava.settings.NotificationSettings,
+        autoHideOverrideMs: Long? = null,
+        playSound: Boolean = true,
+    ) {
+        if (SceneReset.matchesToken(scene.id) || SceneReset.matchesToken(scene.title)) {
+            hideOverlay()
+            return
+        }
+        ScreensaverController.dismissForTransientOverlay()
+        ScreensaverService.notifySmartAodInterrupt()
+        QuickEntityOverlayService.notifySmartAodInterrupt()
+        currentScene = scene
+        lastAutoHideOverrideMs = autoHideOverrideMs
+
+        autoHideRunnable?.let { handler.removeCallbacks(it) }
+        if (isShowingAnimation) {
+            overlayView?.animate()?.cancel()
+            bannerOverlay.root?.animate()?.cancel()
+        }
+
+        val useBanner =
+            settings.displayStyle == com.example.ava.settings.NotificationDisplayStyle.BANNER
+        if (useBanner) {
+            hideFullscreenImmediate()
+            showBanner(scene, settings)
+        } else {
+            hideBannerImmediate()
+            showFullscreen(scene)
+        }
+        if (playSound) playNotificationSound(scene)
+        scheduleAutoHide(autoHideOverrideMs)
+    }
+
+    private fun showFullscreen(scene: NotificationScene) {
+        updateContent(scene)
+        updateColors(scene)
+
+        isShowingAnimation = true
+        // Restack while GONE so the HUD lands above the screensaver without a
+        // visible remove+add hole (that hole was the mic disc flashing).
+        bringToFront()
+        overlayView?.alpha = 0f
+        overlayView?.visibility = View.VISIBLE
+        overlayView?.animate()
+            ?.alpha(1f)
+            ?.setDuration(300)
+            ?.setInterpolator(AccelerateDecelerateInterpolator())
+            ?.withEndAction { isShowingAnimation = false }
+            ?.start()
+    }
+
+    private fun showBanner(
+        scene: NotificationScene,
+        settings: com.example.ava.settings.NotificationSettings,
+    ) {
+        val wm = windowManager ?: return
+        bannerOverlay.ensureAttached(wm)
+        bannerOverlay.onLayoutChanged = {
+            bannerOverlay.windowParams?.let { params ->
+                try {
+                    bannerOverlay.root?.let { wm.updateViewLayout(it, params) }
+                } catch (_: Exception) {
+                }
+            }
+        }
+        bannerOverlay.onExpandedChanged = { expanded ->
+            if (expanded) scheduleAutoHide(lastAutoHideOverrideMs)
+        }
+        bannerOverlay.applyPosition(settings)
+        bannerOverlay.bind(scene, settings) { resolveSceneText(it) }
+        bannerOverlay.windowParams?.let { params ->
+            try {
+                bannerOverlay.root?.let { wm.updateViewLayout(it, params) }
+            } catch (_: Exception) {
+            }
+        }
+        isShowingAnimation = true
+        bannerOverlay.root?.alpha = 0f
+        bannerOverlay.root?.visibility = View.VISIBLE
+        OverlayZOrderCoordinator.bringToFront(
+            windowManager,
+            bannerOverlay.root,
+            bannerOverlay.windowParams,
+            TAG
+        )
+        bannerOverlay.root?.animate()
+            ?.alpha(1f)
+            ?.setDuration(300)
+            ?.setInterpolator(AccelerateDecelerateInterpolator())
+            ?.withEndAction { isShowingAnimation = false }
+            ?.start()
+    }
+
+    private fun hideFullscreenImmediate() {
+        overlayView?.animate()?.cancel()
+        overlayView?.visibility = View.GONE
+        overlayView?.alpha = 0f
+    }
+
+    private fun hideBannerImmediate() {
+        bannerOverlay.root?.animate()?.cancel()
+        bannerOverlay.root?.visibility = View.GONE
+        bannerOverlay.root?.alpha = 0f
     }
     
     
-    private fun playNotificationSound() {
+    private fun playNotificationSound(scene: NotificationScene) {
         serviceScope.launch {
             val settings = notificationSettingsStore.get()
-            if (settings.soundEnabled && settings.soundUri.isNotEmpty()) {
-                try {
-                    val uri = Uri.parse(settings.soundUri)
-                    val ringtone = RingtoneManager.getRingtone(this@NotificationOverlayService, uri)
-                    ringtone?.play()
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to play notification sound", e)
+            val uri = scene.resolveSoundUri(settings) ?: return@launch
+            playSoundUri(uri)
+        }
+    }
+
+    private fun playSoundUri(uri: String) {
+        try {
+            when {
+                uri.startsWith("asset://") ||
+                    uri.startsWith("http://") ||
+                    uri.startsWith("https://") -> {
+                    VoiceSatelliteService.getInstance()?.playSceneNotificationSound(uri)
+                        ?: Log.w(TAG, "VoiceSatelliteService unavailable, cannot play scene sound")
+                }
+                else -> {
+                    RingtoneManager.getRingtone(this, Uri.parse(uri))?.play()
                 }
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to play notification sound: $uri", e)
         }
     }
     
     private fun updateContent(scene: NotificationScene) {
-        
         iconView?.text = FontAwesomeHelper.getIconChar(scene.icon)
-        titleView?.text = scene.title
-        descView?.text = scene.desc
-        subDescView?.text = " ${scene.subDesc}"
+
+        val title = resolveSceneText(scene.title)
+        titleView?.let { view ->
+            view.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, fitTitleTextSizeSp(view, title))
+            view.text = title
+        }
+
+        // Single spannable line: desc keeps bold + scene primary color, subDesc
+        // stays regular gray. Separator space only when both parts are present.
+        val desc = resolveSceneText(scene.desc)
+        val subDesc = resolveSceneText(scene.subDesc)
+        descView?.let { view ->
+            if (desc.isBlank() && subDesc.isBlank()) {
+                view.visibility = View.GONE
+                return@let
+            }
+            view.visibility = View.VISIBLE
+            val line = android.text.SpannableStringBuilder()
+            if (desc.isNotBlank()) {
+                line.append(desc)
+                line.setSpan(
+                    android.text.style.StyleSpan(Typeface.BOLD),
+                    0, line.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+                line.setSpan(
+                    android.text.style.ForegroundColorSpan(scene.getPrimaryColor()),
+                    0, line.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+            }
+            if (subDesc.isNotBlank()) {
+                if (line.isNotEmpty()) line.append(" ")
+                line.append(subDesc)
+            }
+            view.text = line
+            // Text change resets the marquee; re-assert selection so an
+            // overflowing line starts scrolling again.
+            view.isSelected = true
+        }
+    }
+
+    /**
+     * 字号管理检测：按可用宽度用 StaticLayout 试排，标题超过 2 行就逐级降 2sp，
+     * 最低 [TITLE_MIN_SP]；仍放不下时由 maxLines+ellipsize 兜底。全 API 可用（minSdk 21）。
+     */
+    private fun fitTitleTextSizeSp(view: TextView, text: String): Float {
+        val availWidth = textAvailWidthPx
+        var sp = titleMaxSp
+        if (availWidth <= 0 || text.isEmpty()) return sp
+        val paint = android.text.TextPaint(view.paint)
+        val scaledDensity = resources.displayMetrics.scaledDensity
+        while (sp > TITLE_MIN_SP) {
+            paint.textSize = sp * scaledDensity
+            @Suppress("DEPRECATION")
+            val layout = android.text.StaticLayout(
+                text, paint, availWidth,
+                android.text.Layout.Alignment.ALIGN_NORMAL, 1f, 0f, false
+            )
+            if (layout.lineCount <= 2) break
+            sp = (sp - 2f).coerceAtLeast(TITLE_MIN_SP)
+        }
+        return sp
+    }
+
+    /**
+     * 用当前 VoiceSatelliteService 缓存里的实体值替换 {{entity_id}} / {{entity_id|attr}} 占位符。
+     * 服务未就绪或缓存里没有值时，占位符会变成 "--"。
+     */
+    private fun resolveSceneText(text: String): String {
+        if (!com.example.ava.notifications.SceneTemplateResolver.hasPlaceholders(text)) return text
+        val svc = VoiceSatelliteService.getInstance()
+        val states = svc?.getSceneEntityStates().orEmpty()
+        val units = svc?.getSceneEntityUnits().orEmpty()
+        val attrs = svc?.getSceneEntityAttributes().orEmpty()
+        return com.example.ava.notifications.SceneTemplateResolver.resolve(text) { eid, haAttr ->
+            when (haAttr) {
+                "" -> states[eid]
+                "unit_of_measurement" -> units[eid]
+                else -> attrs[eid]?.get(haAttr)
+            }
+        }
+    }
+
+    /** VoiceSatellite 收到目标实体新状态时调用：若当前场景正在显示且引用了该实体，刷新文本。 */
+    fun onSceneEntityChanged(entityId: String) {
+        val scene = currentScene ?: return
+        val fullscreenVisible = overlayView?.visibility == View.VISIBLE
+        val bannerVisible = bannerOverlay.root?.visibility == View.VISIBLE
+        if (!fullscreenVisible && !bannerVisible) return
+        val refs = com.example.ava.notifications.SceneTemplateResolver
+            .extractRefs(scene.title, scene.desc, scene.subDesc)
+        if (refs.none { it.entityId == entityId.lowercase() }) return
+        handler.post {
+            if (fullscreenVisible) updateContent(scene)
+            if (bannerVisible) {
+                serviceScope.launch {
+                    val settings = notificationSettingsStore.get()
+                    handler.post {
+                        bannerOverlay.bind(scene, settings) { resolveSceneText(it) }
+                    }
+                }
+            }
+        }
     }
     
     private fun updateColors(scene: NotificationScene) {
@@ -914,7 +1203,7 @@ class NotificationOverlayService : Service() {
         }
 
         
-        descView?.setTextColor(primaryColor)
+        // desc line colors live in updateContent's spans (desc = primary, subDesc = gray).
 
         
         iconView?.setTextColor(iconColor)
@@ -964,45 +1253,64 @@ class NotificationOverlayService : Service() {
         return Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color))
     }
 
-    private fun scheduleAutoHide() {
-        
+    private fun scheduleAutoHide(overrideMs: Long? = null) {
+
         autoHideRunnable?.let { handler.removeCallbacks(it) }
-        
+
         val currentRunnable = Runnable {
-            overlayView?.animate()
-                ?.alpha(0f)
-                ?.setDuration(300)
-                ?.withEndAction {
-                    overlayView?.visibility = View.GONE
-                }
-                ?.start()
+            val targets = listOfNotNull(overlayView, bannerOverlay.root)
+                .filter { it.visibility == View.VISIBLE }
+            if (targets.isEmpty()) return@Runnable
+            currentScene = null
+            OverlayZOrderCoordinator.cancelScheduledVoiceRaise()
+            targets.forEach { view ->
+                view.animate()
+                    ?.alpha(0f)
+                    ?.setDuration(300)
+                    ?.withEndAction { finishHidingScene(view) }
+                    ?.start()
+            }
         }
         autoHideRunnable = currentRunnable
-        
-        
+
+        if (overrideMs != null) {
+            handler.postDelayed(currentRunnable, overrideMs)
+            return
+        }
+
         serviceScope.launch {
             val settings = notificationSettingsStore.get()
-            
+
             if (autoHideRunnable === currentRunnable) {
                 handler.postDelayed(currentRunnable, settings.sceneDisplayDuration.toLong())
             }
         }
     }
 
+    private fun finishHidingScene(view: View) {
+        view.visibility = View.GONE
+        // Scene sat on top of the disc; GONE does not bury it. Climbing here is the
+        // same glyph twitch as opening the scene.
+        OverlayZOrderCoordinator.cancelScheduledVoiceRaise()
+    }
+
     private fun hideOverlay() {
+        OverlayZOrderCoordinator.cancelScheduledVoiceRaise()
         handler.post {
             autoHideRunnable?.let { handler.removeCallbacks(it) }
-            overlayView?.animate()
-                ?.alpha(0f)
-                ?.setDuration(200)
-                ?.withEndAction {
-                    overlayView?.visibility = View.GONE
-                }
-                ?.start()
+            currentScene = null
+            listOfNotNull(overlayView, bannerOverlay.root).forEach { view ->
+                view.animate()
+                    ?.alpha(0f)
+                    ?.setDuration(200)
+                    ?.withEndAction { finishHidingScene(view) }
+                    ?.start()
+            }
         }
     }
 
     override fun onDestroy() {
+        if (instance === this) instance = null
         super.onDestroy()
         handler.removeCallbacksAndMessages(null)
         
@@ -1010,24 +1318,46 @@ class NotificationOverlayService : Service() {
         serviceScope.cancel()
 
         
-        techRingAnimator?.cancel()
-        iconSunRiseAnimator?.cancel()
-        iconShadowAnimator?.cancel()
-        auroraAnimator1?.cancel()
-        auroraAnimator2?.cancel()
-        auroraAnimator3?.cancel()
-        auroraAnimator4?.cancel()
+        cancelOverlayAnimators()
 
         try {
             overlayView?.let { windowManager?.removeView(it) }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to remove notification overlay", e)
         }
+        bannerOverlay.detach(windowManager)
     }
 
     companion object {
         private const val TAG = "NotificationOverlay"
-        
+        /** Title auto-shrink floor; below this we ellipsize instead. */
+        private const val TITLE_MIN_SP = 20f
+
+        @Volatile
+        private var instance: NotificationOverlayService? = null
+
+        /** 用于运行中的服务获取当前 overlay 实例（例如收到 HA 状态推送时刷新可见场景）。 */
+        fun getInstance(): NotificationOverlayService? = instance
+
+        fun bringToFrontIfVisible() {
+            instance?.bringToFront()
+            instance?.bringBannerToFront()
+        }
+
+        /** True while a scene notification (fullscreen or banner) is on screen (or animating in). */
+        fun isOverlayVisible(): Boolean {
+            val service = instance ?: return false
+            return service.overlayView?.visibility == View.VISIBLE ||
+                service.bannerOverlay.root?.visibility == View.VISIBLE ||
+                service.isShowingAnimation
+        }
+
+        /** Fullscreen scene only — the banner cannot trap the panel. */
+        fun isFullscreenShowing(): Boolean {
+            val service = instance ?: return false
+            return service.overlayView?.visibility == View.VISIBLE
+        }
+
         const val ACTION_SHOW_SCENE = "com.example.ava.SHOW_NOTIFICATION_SCENE"
         const val ACTION_SHOW_SCENE_BY_INDEX = "com.example.ava.SHOW_NOTIFICATION_SCENE_INDEX"
         const val ACTION_SHOW_SCENE_BY_TITLE = "com.example.ava.SHOW_NOTIFICATION_SCENE_TITLE"
@@ -1035,11 +1365,23 @@ class NotificationOverlayService : Service() {
         const val EXTRA_SCENE_ID = "scene_id"
         const val EXTRA_SCENE_INDEX = "scene_index"
         const val EXTRA_SCENE_TITLE = "scene_title"
+        const val EXTRA_AUTO_HIDE_MS = "auto_hide_ms"
+        private const val PREVIEW_DURATION_MS = 3000L
 
         fun showScene(context: Context, sceneId: String) {
             val intent = Intent(context, NotificationOverlayService::class.java).apply {
                 action = ACTION_SHOW_SCENE
                 putExtra(EXTRA_SCENE_ID, sceneId)
+            }
+            context.startService(intent)
+        }
+
+        /** Settings-page preview: fixed short auto-hide, ignores sceneDisplayDuration. */
+        fun previewScene(context: Context, sceneId: String) {
+            val intent = Intent(context, NotificationOverlayService::class.java).apply {
+                action = ACTION_SHOW_SCENE
+                putExtra(EXTRA_SCENE_ID, sceneId)
+                putExtra(EXTRA_AUTO_HIDE_MS, PREVIEW_DURATION_MS)
             }
             context.startService(intent)
         }
@@ -1066,5 +1408,28 @@ class NotificationOverlayService : Service() {
             }
             context.startService(intent)
         }
+    }
+
+    private fun bringToFront() {
+        val view = overlayView ?: return
+        if (view.visibility != View.VISIBLE && !isShowingAnimation) return
+        OverlayZOrderCoordinator.bringToFront(
+            windowManager,
+            view,
+            windowParams,
+            TAG,
+            raiseMic = false,
+        )
+    }
+
+    private fun bringBannerToFront() {
+        val view = bannerOverlay.root ?: return
+        if (view.visibility != View.VISIBLE && !isShowingAnimation) return
+        OverlayZOrderCoordinator.bringToFront(
+            windowManager,
+            view,
+            bannerOverlay.windowParams,
+            TAG
+        )
     }
 }

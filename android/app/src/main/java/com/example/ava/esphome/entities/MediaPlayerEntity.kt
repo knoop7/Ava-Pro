@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.flow
 
 @OptIn(UnstableApi::class)
 class MediaPlayerEntity(
-    val key: Int,
+    override val key: Int,
     val name: String,
     val objectId: String,
     val player: VoiceSatellitePlayer
@@ -29,13 +29,23 @@ class MediaPlayerEntity(
                 name = this@MediaPlayerEntity.name
                 objectId = this@MediaPlayerEntity.objectId
                 supportsPause = true
+                featureFlags = 1201677
+                // No supported_formats. Listing any format makes HA rewrite every URL
+                // through its one-shot ffmpeg proxy (no duration, restarts at byte 0).
+                // The original response is decoded from its Content-Type, so a
+                // tts_proxy URL named .mp3 still plays when the body is WAV.
             })
 
             is MediaPlayerCommandRequest -> {
                 if (message.key == key) {
                     if (message.hasMediaUrl) {
-                        player.mediaPlayer.play(message.mediaUrl)
-                        player.onMediaPlay?.invoke(message.mediaUrl)
+                        val playUrl = player.resolvePlayUrl(message.mediaUrl) ?: message.mediaUrl
+                        if (message.announcement) {
+                            player.playEsphomeAnnouncement(playUrl)
+                        } else if (!player.mediaPlayer.isCurrentPlayback(playUrl)) {
+                            player.mediaPlayer.play(playUrl)
+                            player.onMediaPlay?.invoke(playUrl)
+                        }
                     } else if (message.hasCommand) {
                         when (message.command) {
                             MediaPlayerCommand.MEDIA_PLAYER_COMMAND_PAUSE -> {
@@ -79,5 +89,21 @@ class MediaPlayerEntity(
         AudioPlayerState.PLAYING -> MediaPlayerState.MEDIA_PLAYER_STATE_PLAYING
         AudioPlayerState.PAUSED -> MediaPlayerState.MEDIA_PLAYER_STATE_PAUSED
         AudioPlayerState.IDLE -> MediaPlayerState.MEDIA_PLAYER_STATE_IDLE
+    }
+    
+    companion object {
+        private const val FEATURE_PAUSE = 1 shl 0      // 1
+        private const val FEATURE_SEEK = 1 shl 1       // 2
+        private const val FEATURE_VOLUME_SET = 1 shl 2 // 4
+        private const val FEATURE_VOLUME_MUTE = 1 shl 3 // 8
+        private const val FEATURE_PREVIOUS_TRACK = 1 shl 4 // 16
+        private const val FEATURE_NEXT_TRACK = 1 shl 5     // 32
+        private const val FEATURE_TURN_ON = 1 shl 7    // 128
+        private const val FEATURE_TURN_OFF = 1 shl 8   // 256
+        private const val FEATURE_PLAY_MEDIA = 1 shl 9 // 512
+        private const val FEATURE_VOLUME_STEP = 1 shl 10 // 1024
+        private const val FEATURE_STOP = 1 shl 12      // 4096
+        private const val FEATURE_PLAY = 1 shl 14      // 16384
+        private const val FEATURE_MEDIA_ANNOUNCE = 1 shl 24 // 16777216
     }
 }

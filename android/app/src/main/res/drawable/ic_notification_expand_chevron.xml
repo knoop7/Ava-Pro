@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Thin chevron-down (filled geometry so ImageView tint works reliably). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M6.8,9.6 L12,14.8 L17.2,9.6 L15.9,8.3 L12,12.2 L8.1,8.3 Z" />
+</vector>

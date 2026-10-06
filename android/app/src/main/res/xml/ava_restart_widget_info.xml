@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/ava_widget_restart_desc"
+    android:initialLayout="@layout/widget_ava_tile"
+    android:minHeight="60dp"
+    android:minResizeHeight="72dp"
+    android:minResizeWidth="48dp"
+    android:minWidth="60dp"
+    android:previewLayout="@layout/widget_ava_tile"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellHeight="1"
+    android:targetCellWidth="2"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen" />

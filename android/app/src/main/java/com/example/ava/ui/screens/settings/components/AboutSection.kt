@@ -27,13 +27,12 @@ import com.example.ava.R
 import com.example.ava.ui.prefs.rememberBooleanPreference
 import com.example.ava.ui.screens.home.KEY_DARK_MODE
 import com.example.ava.ui.screens.home.PREFS_NAME
+import com.example.ava.ui.screens.settings.getSettingsDescriptionColor
 import java.net.NetworkInterface
 import com.example.ava.ui.theme.SlateText as SlateTextLight
-import com.example.ava.ui.theme.SlateTertiary as SlateSecondary
 import com.example.ava.ui.theme.SlateBorder as CardBorder
 
 private val SlateTextDark = Color(0xFFF1F5F9)
-private val SlateTertiary = Color(0xFFCBD5E1)
 private val CardBackgroundLight = Color.White
 private val CardBackgroundDark = Color(0xFF1F1F1F)
 
@@ -98,7 +97,7 @@ fun AboutSection() {
                 Text(
                     text = stringResource(R.string.github_project),
                     color = slateText,
-                    fontSize = 12.sp,
+                    fontSize = settingsBodyTextSize(),
                     fontWeight = FontWeight.SemiBold
                 )
             }
@@ -109,14 +108,14 @@ fun AboutSection() {
         
         Text(
             text = stringResource(R.string.ava_version, versionName),
-            color = SlateSecondary,
-            fontSize = 12.sp,
+            color = getSettingsDescriptionColor(),
+            fontSize = settingsBodyTextSize(),
             fontWeight = FontWeight.Medium
         )
         
         Text(
             text = stringResource(R.string.device_ip, deviceIp),
-            color = SlateSecondary,
+            color = getSettingsDescriptionColor(),
             fontSize = 11.sp
         )
         
@@ -125,13 +124,13 @@ fun AboutSection() {
         
         Text(
             text = stringResource(R.string.original_author),
-            color = SlateTertiary,
+            color = getSettingsDescriptionColor(),
             fontSize = 10.sp,
             textAlign = TextAlign.Center
         )
         Text(
             text = stringResource(R.string.secondary_dev),
-            color = SlateTertiary,
+            color = getSettingsDescriptionColor(),
             fontSize = 10.sp,
             textAlign = TextAlign.Center
         )

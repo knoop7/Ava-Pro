@@ -18,7 +18,7 @@ data class ServiceArg(
 
 
 class ServiceEntity(
-    val key: Int,
+    override val key: Int,
     val name: String,
     val args: List<ServiceArg> = emptyList(),
     val description: String = "",
@@ -27,7 +27,6 @@ class ServiceEntity(
     override fun handleMessage(message: MessageLite) = flow {
         when (message) {
             is ListEntitiesRequest -> {
-                
                 val sanitizedName = name.replace(" ", "").replace("-", "_").lowercase()
                 emit(ListEntitiesServicesResponse.newBuilder()
                     .setKey(key)
@@ -48,13 +47,7 @@ class ServiceEntity(
                     message.argsList.forEachIndexed { index, arg ->
                         if (index < args.size) {
                             val argDef = args[index]
-                            val value: Any = when (argDef.type) {
-                                ServiceArgType.SERVICE_ARG_TYPE_BOOL -> arg.bool
-                                ServiceArgType.SERVICE_ARG_TYPE_INT -> arg.int
-                                ServiceArgType.SERVICE_ARG_TYPE_FLOAT -> arg.float
-                                ServiceArgType.SERVICE_ARG_TYPE_STRING -> arg.string
-                                else -> arg.string
-                            }
+                            val value: Any = decodeArgument(argDef, arg)
                             argsMap[argDef.name] = value
                         }
                     }
@@ -65,4 +58,21 @@ class ServiceEntity(
     }
 
     override fun subscribe(): Flow<MessageLite> = emptyFlow()
+
+    private fun decodeArgument(
+        argDef: ServiceArg,
+        arg: com.example.esphomeproto.api.ExecuteServiceArgument,
+    ): Any {
+        return when (argDef.type) {
+            ServiceArgType.SERVICE_ARG_TYPE_BOOL -> arg.bool
+            ServiceArgType.SERVICE_ARG_TYPE_INT -> arg.int
+            ServiceArgType.SERVICE_ARG_TYPE_FLOAT -> arg.float
+            ServiceArgType.SERVICE_ARG_TYPE_STRING -> arg.string
+            ServiceArgType.SERVICE_ARG_TYPE_BOOL_ARRAY -> arg.boolArrayList.toList()
+            ServiceArgType.SERVICE_ARG_TYPE_INT_ARRAY -> arg.intArrayList.map { it.toInt() }
+            ServiceArgType.SERVICE_ARG_TYPE_FLOAT_ARRAY -> arg.floatArrayList.toList()
+            ServiceArgType.SERVICE_ARG_TYPE_STRING_ARRAY -> arg.stringArrayList.toList()
+            else -> arg.string
+        }
+    }
 }

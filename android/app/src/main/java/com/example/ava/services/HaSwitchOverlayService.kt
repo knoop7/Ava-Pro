@@ -23,12 +23,14 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import androidx.core.content.ContextCompat
 import com.example.ava.R
+import com.example.ava.ui.glass.LiquidGlass
 import com.example.ava.utils.LightKeywordDetector
 
 class HaSwitchOverlayService : Service() {
 
     private var windowManager: WindowManager? = null
     private var overlayView: View? = null
+    private var windowParams: WindowManager.LayoutParams? = null
     private var iconView: ImageView? = null
     private var circleBackground: View? = null
     private var glowView: View? = null
@@ -42,7 +44,9 @@ class HaSwitchOverlayService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+        LiquidGlass.ensureLoaded(this)
         createOverlayView()
     }
 
@@ -71,7 +75,8 @@ class HaSwitchOverlayService : Service() {
         val rootContainer = FrameLayout(this).apply {
             clipChildren = false
             clipToPadding = false
-            setBackgroundColor(Color.parseColor("#99000000"))
+            // With backdrop blur the scrim can be lighter; the blur already separates the dial.
+            setBackgroundColor(if (LiquidGlass.enabled) 0x66000000 else Color.parseColor("#99000000"))
         }
 
         val centerContainer = FrameLayout(this).apply {
@@ -112,11 +117,21 @@ class HaSwitchOverlayService : Service() {
             lp.gravity = Gravity.CENTER
             layoutParams = lp
             
-            val bg = GradientDrawable()
-            bg.shape = GradientDrawable.OVAL
-            bg.setColor(Color.parseColor("#1AFFFFFF"))
-            bg.setStroke((3 * density).toInt(), Color.parseColor("#66FFFFFF"))
-            background = bg
+            if (LiquidGlass.enabled) {
+                // Circular glass puck: the drawable's corner radius = half the size → a circle.
+                LiquidGlass.applyTo(
+                    this,
+                    cornerRadiusPx = circleSize / 2f,
+                    tint = 0x33FFFFFF,
+                    windowBacked = true,
+                ).setDensity(density)
+            } else {
+                val bg = GradientDrawable()
+                bg.shape = GradientDrawable.OVAL
+                bg.setColor(Color.parseColor("#1AFFFFFF"))
+                bg.setStroke((3 * density).toInt(), Color.parseColor("#66FFFFFF"))
+                background = bg
+            }
             elevation = 8 * density
         }
         centerContainer.addView(circleBackground)
@@ -141,15 +156,11 @@ class HaSwitchOverlayService : Service() {
             WindowManager.LayoutParams.TYPE_PHONE
         }
 
-        var flags = WindowManager.LayoutParams.FLAG_FULLSCREEN or
+        val flags = WindowManager.LayoutParams.FLAG_FULLSCREEN or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
-        
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            flags = flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND
-        }
 
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -162,13 +173,16 @@ class HaSwitchOverlayService : Service() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                blurBehindRadius = 30
-            }
+            // This overlay is a full-screen dim + centred dial, so blurring everything behind
+            // it is the intended look. Radius follows the Liquid Glass intensity; off = none.
+            LiquidGlass.applyWindowBlur(this, density)
+            OverlayOrientation.apply(this)
         }
+        windowParams = params
 
         try {
             windowManager?.addView(overlayView, params)
+            OverlayZOrderCoordinator.noteWindowAdded()
             overlayView?.visibility = View.GONE
         } catch (e: Exception) {
             Log.e(TAG, "Failed to create HA switch overlay", e)
@@ -201,6 +215,7 @@ class HaSwitchOverlayService : Service() {
             autoHideRunnable?.let { handler.removeCallbacks(it) }
             
             updateDeviceState(deviceType, isOn)
+            bringToFront()
             
             if (!isShowing) {
                 isShowing = true
@@ -279,6 +294,7 @@ class HaSwitchOverlayService : Service() {
     }
 
     private fun hideOverlay() {
+        OverlayZOrderCoordinator.cancelScheduledVoiceRaise()
         handler.post {
             autoHideRunnable?.let { handler.removeCallbacks(it) }
             glowAnimator?.cancel()
@@ -305,17 +321,25 @@ class HaSwitchOverlayService : Service() {
                 Log.e(TAG, "Failed to remove overlay view", e)
             }
         }
+        instance = null
         super.onDestroy()
     }
 
     companion object {
         private const val TAG = "HaSwitchOverlay"
         private const val AUTO_HIDE_DELAY = 2000L
+        @Volatile private var instance: HaSwitchOverlayService? = null
         
         const val ACTION_SHOW_DEVICE = "com.example.ava.action.SHOW_DEVICE"
         const val ACTION_HIDE = "com.example.ava.action.HIDE_SWITCH"
         const val EXTRA_DEVICE_TYPE = "device_type"
         const val EXTRA_IS_ON = "is_on"
+
+        fun bringToFrontIfVisible() {
+            instance?.bringToFront()
+        }
+
+        fun isOverlayShowing(): Boolean = instance?.isShowing == true
 
         fun showDeviceAction(context: Context, deviceType: LightKeywordDetector.DeviceType, isOn: Boolean) {
             val intent = Intent(context, HaSwitchOverlayService::class.java).apply {
@@ -332,5 +356,10 @@ class HaSwitchOverlayService : Service() {
             }
             context.startService(intent)
         }
+    }
+
+    private fun bringToFront() {
+        if (!isShowing) return
+        OverlayZOrderCoordinator.bringToFront(windowManager, overlayView, windowParams, TAG)
     }
 }

@@ -6,6 +6,8 @@ import com.example.esphomeproto.api.BinarySensorStateResponse
 import com.example.esphomeproto.api.BluetoothConnectionsFreeResponse
 import com.example.esphomeproto.api.BluetoothDeviceClearCacheResponse
 import com.example.esphomeproto.api.BluetoothDeviceConnectionResponse
+import com.example.esphomeproto.api.BluetoothSetConnectionParamsRequest
+import com.example.esphomeproto.api.BluetoothSetConnectionParamsResponse
 import com.example.esphomeproto.api.BluetoothDevicePairingResponse
 import com.example.esphomeproto.api.BluetoothDeviceRequest
 import com.example.esphomeproto.api.BluetoothDeviceUnpairingResponse
@@ -45,6 +47,7 @@ import com.example.esphomeproto.api.DisconnectRequest
 import com.example.esphomeproto.api.DisconnectResponse
 import com.example.esphomeproto.api.EventResponse
 import com.example.esphomeproto.api.ExecuteServiceRequest
+import com.example.esphomeproto.api.ExecuteServiceResponse
 import com.example.esphomeproto.api.FanCommandRequest
 import com.example.esphomeproto.api.FanStateResponse
 import com.example.esphomeproto.api.GetTimeRequest
@@ -52,6 +55,7 @@ import com.example.esphomeproto.api.GetTimeResponse
 import com.example.esphomeproto.api.HelloRequest
 import com.example.esphomeproto.api.HelloResponse
 import com.example.esphomeproto.api.HomeAssistantStateResponse
+import com.example.esphomeproto.api.HomeassistantActionResponse
 import com.example.esphomeproto.api.HomeassistantServiceResponse
 import com.example.esphomeproto.api.LightCommandRequest
 import com.example.esphomeproto.api.LightStateResponse
@@ -257,6 +261,10 @@ val MESSAGE_PARSERS = mapOf<Int, Parser<out Any>>(
     Pair(125, NoiseEncryptionSetKeyResponse.parser()),
     Pair(126, BluetoothScannerStateResponse.parser()),
     Pair(127, BluetoothScannerSetModeRequest.parser()),
+    Pair(130, HomeassistantActionResponse.parser()),
+    Pair(131, ExecuteServiceResponse.parser()),
+    Pair(145, BluetoothSetConnectionParamsRequest.parser()),
+    Pair(146, BluetoothSetConnectionParamsResponse.parser()),
 )
 
 val MESSAGE_TYPES = mapOf<Class<out Any>, Int>(
@@ -386,5 +394,9 @@ val MESSAGE_TYPES = mapOf<Class<out Any>, Int>(
     Pair(NoiseEncryptionSetKeyRequest::class.java, 124),
     Pair(NoiseEncryptionSetKeyResponse::class.java, 125),
     Pair(BluetoothScannerStateResponse::class.java, 126),
-    Pair(BluetoothScannerSetModeRequest::class.java, 127)
+    Pair(BluetoothScannerSetModeRequest::class.java, 127),
+    Pair(HomeassistantActionResponse::class.java, 130),
+    Pair(ExecuteServiceResponse::class.java, 131),
+    Pair(BluetoothSetConnectionParamsRequest::class.java, 145),
+    Pair(BluetoothSetConnectionParamsResponse::class.java, 146)
 )

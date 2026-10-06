@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+        Gecko flavor: headless engine pack only. No launcher, no VoiceSatellite, no settings UI.
+        The lite Ava app (com.example.ava) delegates browser rendering to this package.
+    -->
+
+    <application
+        android:name=".GeckoEngineApplication"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/gecko_engine_app_name"
+        android:theme="@android:style/Theme.NoDisplay"
+        tools:replace="android:name,android:icon,android:roundIcon,android:label,android:theme">
+
+        <activity
+            android:name=".GeckoBrowserBridge"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="com.example.ava.gecko.action.SHOW_BROWSER" />
+                <action android:name="com.example.ava.gecko.action.HIDE_BROWSER" />
+                <action android:name="com.example.ava.gecko.action.DESTROY_BROWSER" />
+                <action android:name="com.example.ava.gecko.action.NAVIGATE" />
+                <action android:name="com.example.ava.gecko.action.REFRESH_DARK_MODE" />
+                <action android:name="com.example.ava.gecko.action.RESTORE_FROM_SETTINGS" />
+                <action android:name="com.example.ava.gecko.action.CLEAR_CACHE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- User-facing Ava UI and satellite stack — not part of the engine pack -->
+        <activity android:name=".MainActivity" tools:node="remove" />
+        <activity android:name=".UnlockActivity" tools:node="remove" />
+
+        <service android:name=".services.VoiceSatelliteService" tools:node="remove" />
+        <service android:name=".services.FloatingWindowService" tools:node="remove" />
+        <service android:name=".services.QuickWakeFabService" tools:node="remove" />
+        <service android:name=".services.VolumeControlService" tools:node="remove" />
+        <service android:name=".services.VinylCoverService" tools:node="remove" />
+        <service android:name=".services.DreamClockService" tools:node="remove" />
+        <service android:name=".services.ScreensaverService" tools:node="remove" />
+        <service android:name=".services.WeatherOverlayService" tools:node="remove" />
+        <service android:name=".services.VoiceMessageOverlayService" tools:node="remove" />
+        <service android:name=".services.VoiceMessagePlaybackOverlayService" tools:node="remove" />
+        <service android:name=".services.QuickEntityOverlayService" tools:node="remove" />
+        <service android:name=".services.ScreensaverWebViewService" tools:node="remove" />
+        <service android:name=".services.AiBrowserService" tools:node="remove" />
+        <service android:name=".services.AvaAccessibilityService" tools:node="remove" />
+        <service android:name=".services.NotificationOverlayService" tools:node="remove" />
+        <service android:name=".services.WakeRippleService" tools:node="remove" />
+        <service android:name=".services.HaSwitchOverlayService" tools:node="remove" />
+
+        <service
+            android:name=".services.WebViewService"
+            android:exported="true"
+            tools:replace="android:exported" />
+
+        <receiver android:name=".receivers.BootReceiver" tools:node="remove" />
+        <receiver android:name=".receivers.AvaControlReceiver" tools:node="remove" />
+        <receiver android:name=".receiver.DeviceAdminReceiver" tools:node="remove" />
+        <receiver android:name=".bluetooth.BleScanReceiver" tools:node="remove" />
+
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            tools:node="remove" />
+
+        <!-- Host-only: same authority as lite app would block side-by-side install -->
+        <provider
+            android:name=".webcompat.HostSidebarSettingsProvider"
+            tools:node="remove" />
+
+        <receiver
+            android:name=".webcompat.GeckoSidebarSettingsReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.example.ava.action.PUSH_SIDEBAR_SETTINGS" />
+            </intent-filter>
+        </receiver>
+
+        <!-- ADB / Fleet / host punch. Wakes the idle child, then starts WebViewService here. -->
+        <receiver
+            android:name=".GeckoChildControlReceiver"
+            android:exported="true"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="com.example.ava.gecko.action.SHOW_BROWSER" />
+                <action android:name="com.example.ava.gecko.action.HIDE_BROWSER" />
+                <action android:name="com.example.ava.gecko.action.DESTROY_BROWSER" />
+                <action android:name="com.example.ava.gecko.action.NAVIGATE" />
+                <action android:name="com.example.ava.gecko.action.REFRESH_DARK_MODE" />
+                <action android:name="com.example.ava.gecko.action.RESTORE_FROM_SETTINGS" />
+                <action android:name="com.example.ava.gecko.action.CLEAR_CACHE" />
+                <action android:name="com.example.ava.gecko.action.FORCE_REFRESH" />
+            </intent-filter>
+        </receiver>
+
+    </application>
+
+</manifest>

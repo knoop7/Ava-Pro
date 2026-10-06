@@ -1,6 +1,6 @@
 [versions]
 agp = "8.12.3"
-datastore = "1.2.0"
+datastore = "1.1.7"
 gson = "2.13.2"
 kotlin = "2.2.21"
 coreKtx = "1.12.0"
@@ -23,11 +23,15 @@ material = "1.13.0"
 media3 = "1.8.0"
 material3 = "1.4.0"
 colorpicker = "1.0.7"
+onnxruntime = "1.26.0"
+jmdns = "3.5.9"
+dadb = "2.0.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-datastore = { module = "androidx.datastore:datastore", version.ref = "datastore" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
+androidx-lifecycle-process = { group = "androidx.lifecycle", name = "lifecycle-process", version.ref = "lifecycleRuntimeKtx" }
 androidx-lifecycle-service = { group = "androidx.lifecycle", name = "lifecycle-service", version.ref = "lifecycleRuntimeKtx" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
@@ -57,6 +61,9 @@ androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "j
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
 material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "material3" }
 colorpicker-compose = { group = "com.github.skydoves", name = "colorpicker-compose", version.ref = "colorpicker" }
+onnxruntime-android = { group = "com.microsoft.onnxruntime", name = "onnxruntime-android", version.ref = "onnxruntime" }
+jmdns = { group = "org.jmdns", name = "jmdns", version.ref = "jmdns" }
+dadb = { group = "dev.mobile", name = "dadb", version.ref = "dadb" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

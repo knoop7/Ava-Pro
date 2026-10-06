@@ -1,0 +1,23 @@
+{
+  "type": "openwakeword",
+  "format": "openwakeword-v1",
+  "id": "ok_nabu",
+  "wake_word": "Ok Nabu",
+  "model": "ok_nabu.onnx",
+  "trained_languages": ["en"],
+  "author": "Home Assistant community, collected by Florian Wartner (fwartner)",
+  "website": "https://github.com/fwartner/home-assistant-wakewords-collection",
+  "license": "MIT",
+  "license_url": "https://github.com/fwartner/home-assistant-wakewords-collection/blob/main/LICENSE",
+  "source_url": "https://raw.githubusercontent.com/fwartner/home-assistant-wakewords-collection/main/en/ok_nabu/ok_nabu.onnx",
+  "sha256": "6680019fc90375fae9178b59405076d02489cf9528e92608dfac5be1b71dd57e",
+  "input": { "name": "serving_default_onnx_tf__tf_Flatten_0_a41fe4ab:0", "shape": [1, 16, 96], "dtype": "float32" },
+  "output": { "name": "PartitionedCall:0", "shape": [1, 1], "dtype": "float32" },
+    "openwakeword": {
+      "threshold": 0.5,
+      "required_hits": 2,
+      "cooldown_ms": 2000,
+      "sliding_window_size": 1
+    },
+  "stop_classifier": false
+}

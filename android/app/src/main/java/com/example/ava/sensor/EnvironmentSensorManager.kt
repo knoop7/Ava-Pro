@@ -34,8 +34,11 @@ class EnvironmentSensorManager(context: Context) : SensorEventListener {
     val magneticField: StateFlow<Float> = _magneticField.asStateFlow()
     
     
-    private val _proximity = MutableStateFlow(0f)
-    val proximity: StateFlow<Float> = _proximity.asStateFlow()
+    private val _proximity = MutableStateFlow<Float?>(null)
+    val proximity: StateFlow<Float?> = _proximity.asStateFlow()
+
+    private val _hasProximityReading = MutableStateFlow(false)
+    val hasProximityReading: StateFlow<Boolean> = _hasProximityReading.asStateFlow()
     
     
     val hasLightSensor: Boolean get() = lightSensor != null
@@ -65,7 +68,10 @@ class EnvironmentSensorManager(context: Context) : SensorEventListener {
         }
         
         if (proximitySensor != null) {
-            sensorManager.registerListener(this, proximitySensor, SensorManager.SENSOR_DELAY_NORMAL)
+            _hasProximityReading.value = false
+            _proximity.value = null
+            sensorManager.registerListener(this, proximitySensor, SensorManager.SENSOR_DELAY_FASTEST, 0)
+            runCatching { sensorManager.flush(this) }
             Log.d(TAG, "Proximity sensor registered: max range = $proximityMaxRange")
         } else {
             Log.w(TAG, "Proximity sensor NOT available on this device")
@@ -82,6 +88,13 @@ class EnvironmentSensorManager(context: Context) : SensorEventListener {
         isRegistered = false
         Log.d(TAG, "Sensors unregistered")
     }
+
+    fun requestImmediateProximityRefresh() {
+        val sensor = proximitySensor ?: return
+        runCatching { sensorManager.unregisterListener(this, sensor) }
+        sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_FASTEST, 0)
+        runCatching { sensorManager.flush(this) }
+    }
     
     override fun onSensorChanged(event: SensorEvent) {
         when (event.sensor.type) {
@@ -97,6 +110,7 @@ class EnvironmentSensorManager(context: Context) : SensorEventListener {
             }
             Sensor.TYPE_PROXIMITY -> {
                 val value = event.values[0]
+                _hasProximityReading.value = true
                 _proximity.value = value
             }
         }
@@ -108,9 +122,6 @@ class EnvironmentSensorManager(context: Context) : SensorEventListener {
     
     fun onTouchEvent(isTouching: Boolean) {
         this.isTouching = isTouching
-        if (isTouching) {
-            _proximity.value = 0f
-        }
     }
     
     fun isScreenTouched(): Boolean = isTouching

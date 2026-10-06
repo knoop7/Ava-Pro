@@ -7,4 +7,5 @@ enum class VoiceAssistantFeature(val flag: Int) {
     TIMERS(1 shl 3),
     ANNOUNCE(1 shl 4),
     START_CONVERSATION(1 shl 5),
+    MULTI_CHANNEL_AUDIO(1 shl 6),
 }

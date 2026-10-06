@@ -50,6 +50,57 @@ object WeatherService {
         return cachedWeather
     }
     
+    /**
+     * Parse HA weather state/attrs into [WeatherData] without touching the shared cache.
+     * Used by Simple Clock's dedicated weather path (decoupled from the overlay).
+     */
+    fun parseFromHa(
+        state: String,
+        temperature: String?,
+        humidity: String?,
+        windSpeed: String?,
+        windBearing: String?,
+        friendlyName: String?,
+        aqi: String? = null,
+        pm25: String? = null,
+        visibility: String? = null,
+        pressure: String? = null,
+        temperatureUnit: String? = null,
+        pressureUnit: String? = null,
+        windSpeedUnit: String? = null,
+        visibilityUnit: String? = null,
+        precipitationUnit: String? = null
+    ): WeatherData {
+        val temp = temperature?.toDoubleOrNull()?.let { kotlin.math.round(it).toInt() } ?: 0
+        val hum = humidity?.toDoubleOrNull()?.toInt() ?: 0
+        val wind = windSpeed?.toFloatOrNull() ?: 0f
+        val bearing = windBearing?.toDoubleOrNull()?.toInt() ?: 0
+        val aqiVal = aqi?.toDoubleOrNull()?.toInt() ?: 0
+        val pm25Val = pm25?.toDoubleOrNull()?.toInt() ?: 0
+        val vis = visibility?.toFloatOrNull() ?: 0f
+        val pres = pressure?.toFloatOrNull() ?: 0f
+        val condition = convertHaState(state)
+        val windDir = getWindDirectionText(bearing)
+        return WeatherData(
+            temperature = temp,
+            condition = condition,
+            humidity = hum,
+            windSpeed = wind,
+            windDirection = windDir,
+            windDirectionEn = getWindDirectionTextEn(bearing),
+            visibility = vis,
+            pressure = pres,
+            aqi = aqiVal,
+            pm25 = pm25Val,
+            city = friendlyName ?: "",
+            temperatureUnit = temperatureUnit ?: "°C",
+            pressureUnit = pressureUnit ?: "hPa",
+            windSpeedUnit = windSpeedUnit ?: "km/h",
+            visibilityUnit = visibilityUnit ?: "km",
+            precipitationUnit = precipitationUnit ?: "mm"
+        )
+    }
+
     fun updateFromHa(
         state: String,
         temperature: String?,
@@ -67,34 +118,22 @@ object WeatherService {
         visibilityUnit: String? = null,
         precipitationUnit: String? = null
     ) {
-        val temp = temperature?.toDoubleOrNull()?.let { kotlin.math.round(it).toInt() } ?: 0
-        val hum = humidity?.toDoubleOrNull()?.toInt() ?: 0
-        val wind = windSpeed?.toFloatOrNull() ?: 0f
-        val bearing = windBearing?.toDoubleOrNull()?.toInt() ?: 0
-        val aqiVal = aqi?.toDoubleOrNull()?.toInt() ?: 0
-        val pm25Val = pm25?.toDoubleOrNull()?.toInt() ?: 0
-        val vis = visibility?.toFloatOrNull() ?: 0f
-        val pres = pressure?.toFloatOrNull() ?: 0f
-        val condition = convertHaState(state)
-        val windDir = getWindDirectionText(bearing)
-        
-        val newWeather = WeatherData(
-            temperature = temp,
-            condition = condition,
-            humidity = hum,
-            windSpeed = wind,
-            windDirection = windDir,
-            windDirectionEn = getWindDirectionTextEn(bearing),
-            visibility = vis,
-            pressure = pres,
-            aqi = aqiVal,
-            pm25 = pm25Val,
-            city = friendlyName ?: "",
-            temperatureUnit = temperatureUnit ?: "°C",
-            pressureUnit = pressureUnit ?: "hPa",
-            windSpeedUnit = windSpeedUnit ?: "km/h",
-            visibilityUnit = visibilityUnit ?: "km",
-            precipitationUnit = precipitationUnit ?: "mm"
+        val newWeather = parseFromHa(
+            state = state,
+            temperature = temperature,
+            humidity = humidity,
+            windSpeed = windSpeed,
+            windBearing = windBearing,
+            friendlyName = friendlyName,
+            aqi = aqi,
+            pm25 = pm25,
+            visibility = visibility,
+            pressure = pressure,
+            temperatureUnit = temperatureUnit,
+            pressureUnit = pressureUnit,
+            windSpeedUnit = windSpeedUnit,
+            visibilityUnit = visibilityUnit,
+            precipitationUnit = precipitationUnit
         )
         
         if (newWeather != cachedWeather) {

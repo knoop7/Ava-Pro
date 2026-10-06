@@ -13,6 +13,9 @@ object LocaleUtils {
             lang.startsWith("ru") -> Locale.getDefault()
             lang.startsWith("pt") -> Locale.getDefault()
             lang.startsWith("vi") -> Locale.getDefault()
+            lang.startsWith("de") -> Locale.getDefault()
+            lang.startsWith("fr") -> Locale.getDefault()
+            lang.startsWith("es") -> Locale.getDefault()
             else -> Locale.ENGLISH
         }
     }
@@ -43,5 +46,20 @@ object LocaleUtils {
     fun isVietnameseLocale(): Boolean {
         val lang = Locale.getDefault().language.lowercase()
         return lang.startsWith("vi")
+    }
+
+    fun isGermanLocale(): Boolean {
+        val lang = Locale.getDefault().language.lowercase()
+        return lang.startsWith("de")
+    }
+
+    fun isFrenchLocale(): Boolean {
+        val lang = Locale.getDefault().language.lowercase()
+        return lang.startsWith("fr")
+    }
+
+    fun isSpanishLocale(): Boolean {
+        val lang = Locale.getDefault().language.lowercase()
+        return lang.startsWith("es")
     }
 }

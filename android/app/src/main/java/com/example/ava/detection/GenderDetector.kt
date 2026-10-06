@@ -9,6 +9,8 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
+import kotlin.math.abs
+import kotlin.math.exp
 
 private const val TAG = "GenderDetector"
 private const val MODEL_FILE = "models/gender.tflite"
@@ -56,11 +58,23 @@ fun detectGender(faceBitmap: Bitmap): Gender {
         val output = Array(1) { FloatArray(2) }
         genderInterpreter?.run(inputBuffer, output)
         
-        val maleProb = output[0][0]
-        val femaleProb = output[0][1]
-        
+        val maleLogit = output[0][0]
+        val femaleLogit = output[0][1]
+        val maleExp = exp(maleLogit)
+        val femaleExp = exp(femaleLogit)
+        val sum = (maleExp + femaleExp).coerceAtLeast(1e-6f)
+        val maleProb = maleExp / sum
+        val femaleProb = femaleExp / sum
+        val confidence = maxOf(maleProb, femaleProb)
+        val margin = abs(maleProb - femaleProb)
 
-        if (femaleProb > maleProb + 0.15f) Gender.FEMALE else Gender.MALE
+        if (confidence < MIN_CONFIDENCE || margin < MIN_MARGIN) {
+            Gender.UNKNOWN
+        } else if (femaleProb > maleProb) {
+            Gender.FEMALE
+        } else {
+            Gender.MALE
+        }
     } catch (e: Exception) {
         Log.e(TAG, "Gender detection failed: ${e.message}")
         Gender.UNKNOWN
@@ -114,10 +128,15 @@ private fun convertBitmapToByteBuffer(bitmap: Bitmap): ByteBuffer {
 }
 
 private fun loadGenderModelFile(context: Context): MappedByteBuffer {
-    val assetFileDescriptor = context.assets.openFd(MODEL_FILE)
-    val inputStream = FileInputStream(assetFileDescriptor.fileDescriptor)
-    val fileChannel = inputStream.channel
-    val startOffset = assetFileDescriptor.startOffset
-    val declaredLength = assetFileDescriptor.declaredLength
-    return fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength)
+    context.assets.openFd(MODEL_FILE).use { assetFileDescriptor ->
+        FileInputStream(assetFileDescriptor.fileDescriptor).use { inputStream ->
+            val fileChannel = inputStream.channel
+            val startOffset = assetFileDescriptor.startOffset
+            val declaredLength = assetFileDescriptor.declaredLength
+            return fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength)
+        }
+    }
 }
+
+private const val MIN_CONFIDENCE = 0.65f
+private const val MIN_MARGIN = 0.20f

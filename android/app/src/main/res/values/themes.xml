@@ -1,5 +1,38 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.Ava" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.Ava" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowDisablePreview">true</item>
+    </style>
+
+    <!-- Floating app windows are re-added on every z-order restack; without
+         this the system replays its overlay enter animation each time, which
+         reads as the window twitching. -->
+    <style name="AppWindowNoAnimation">
+        <item name="android:windowEnterAnimation">@null</item>
+        <item name="android:windowExitAnimation">@null</item>
+    </style>
+
+    <!-- Android 7–8 off-screen anchor (see FreeformKeepAliveActivity). A Dialog
+         theme, not Translucent: a fully translucent activity can fail to enter
+         the freeform stack on some 7/8 ROMs. Dim is off so the 1×1 window never
+         darkens the screen. Android 10+ replaces this in onCreate. -->
+    <style name="FreeformKeepAlive" parent="@android:style/Theme.Material.Dialog.NoActionBar">
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowEnterAnimation">@null</item>
+        <item name="android:windowExitAnimation">@null</item>
+    </style>
+
+    <!-- Android 10+ mic sliver. A floating dialog is forced fullscreen on some
+         API 29 devices, and that launch is rejected so it cannot cover the
+         screen. Opaque, not translucent, so the task stays a real freeform
+         window; only the 48×32dp corner is on screen. -->
+    <style name="FreeformMicSliver" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:windowIsTranslucent">false</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowEnterAnimation">@null</item>
+        <item name="android:windowExitAnimation">@null</item>
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
 </resources>

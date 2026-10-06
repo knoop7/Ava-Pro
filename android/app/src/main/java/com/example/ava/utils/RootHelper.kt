@@ -48,13 +48,9 @@ object RootHelper {
             
             
             os.writeBytes("echo '#!/system/bin/sh' > /data/adb/service.d/ava_boot.sh\n")
-            os.writeBytes("echo 'sleep 30' >> /data/adb/service.d/ava_boot.sh\n")
-            
-            os.writeBytes("echo 'input keyevent 24' >> /data/adb/service.d/ava_boot.sh\n")
-            os.writeBytes("echo 'input keyevent 24' >> /data/adb/service.d/ava_boot.sh\n")
-            os.writeBytes("echo 'input keyevent 24' >> /data/adb/service.d/ava_boot.sh\n")
+            os.writeBytes("echo 'sleep 45' >> /data/adb/service.d/ava_boot.sh\n")
             os.writeBytes("echo '/system/bin/am start -n $packageName/.MainActivity' >> /data/adb/service.d/ava_boot.sh\n")
-            os.writeBytes("echo 'sleep 15' >> /data/adb/service.d/ava_boot.sh\n")
+            os.writeBytes("echo 'sleep 20' >> /data/adb/service.d/ava_boot.sh\n")
             
             os.writeBytes("echo 'for i in 1 2; do' >> /data/adb/service.d/ava_boot.sh\n")
             os.writeBytes("echo '  /system/bin/am startservice -n com.example.ava/com.example.ava.services.VoiceSatelliteService' >> /data/adb/service.d/ava_boot.sh\n")
