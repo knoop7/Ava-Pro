@@ -14,7 +14,6 @@ The project can be read and compared with the running app. The native library do
 | `esphomeproto/` | The ESPHome native API. `api.proto`, `api_options.proto`, plus the Kotlin for framing, the voice assistant, and the Bluetooth proxy. |
 | `microfeatures/` | Kotlin entry points for the native audio library. See the section below. |
 | `gradle/` | The version catalog `libs.versions.toml`, and the Gradle wrapper. |
-| `docs/` | Release notes for 0.7.3 through 0.7.7, in English and Chinese. |
 | `build.gradle.kts` | Root project. Declares the Android, Kotlin, and Compose plugins. |
 | `settings.gradle.kts` | Three modules: `:app`, `:esphomeproto`, `:microfeatures`. |
 | `gradle.properties` | Compiler memory, AndroidX, and parallel builds. No machine JDK path. |
