@@ -70,13 +70,14 @@ Ava pairs beautifully with community-built Home Assistant UI. For ready-made con
 
 ---
 
+
 ## Lineage 
 
 Special thanks to the original author for contributing the initial concept and design **@brownard**
 Ava Pro is based on the original [brownard/Ava](https://github.com/brownard/Ava) 
 
 
-Powered by [ESPHome](https://esphome.io/) 
+Powered by [Home Assistant](https://www.home-assistant.io/) | [ESPHome](https://esphome.io/) | [WebRTC](https://webrtc.org/) | [Music Assistant](https://music-assistant.io/) | [Sendspin](https://github.com/music-assistant/sendspin) | [openWakeWord](https://github.com/dscripka/openWakeWord) | [microWakeWord](https://github.com/kahrendt/microWakeWord) | [ONNX Runtime](https://onnxruntime.ai/) | [TensorFlow Lite](https://ai.google.dev/edge/litert) | [GeckoView](https://mozilla.github.io/geckoview/) | [Shizuku](https://github.com/RikkaApps/Shizuku) | [Jetpack Compose](https://developer.android.com/jetpack/compose) | [Media3](https://developer.android.com/media/media3) | [Protocol Buffers](https://protobuf.dev/) | [Opus](https://opus-codec.org/)
 
-
+Ava Pro is licensed under [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/): you may share it with attribution, and you may not use it commercially or distribute a copied or modified version.
 
