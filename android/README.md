@@ -23,7 +23,7 @@ The project can be read and compared with the running app. The native library do
 
 ## `app/`
 
-`app/build.gradle.kts` is the application module. The `lite` flavor uses the system WebView. The `gecko` flavor is the separate engine package. Release signing reads a local `keystore.properties`. That file and the keystore are not in the repository.
+`app/build.gradle.kts` is the application module. The default build uses the system WebView. The `gecko` flavor is the separate engine package. Release signing reads a local `keystore.properties`. That file and the keystore are not in the repository.
 
 | Path | What it is |
 | --- | --- |

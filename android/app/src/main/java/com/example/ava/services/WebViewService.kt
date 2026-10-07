@@ -518,13 +518,13 @@ class WebViewService : LifecycleService(), ViewModelStoreOwner, SavedStateRegist
             return BrowserEngine.shouldDelegateToGeckoPack(context, enginePref)
         }
 
-        /** Do not fall back to lite in-process WebView when Gecko pack is the configured engine. */
+        /** Do not fall back to the in-process system WebView when the Gecko pack is the configured engine. */
         private fun logGeckoDelegationFailure(context: Context, action: String, detail: String) {
             if (!wantsGeckoPackDelegation(context)) return
             Log.e(
                 TAG,
                 "Gecko pack delegation required but $action failed ($detail); " +
-                    "enginePref=${BrowserSettingsStore.getCachedEngine(context)} — not using lite WebView fallback"
+                    "enginePref=${BrowserSettingsStore.getCachedEngine(context)} — not using the system WebView fallback"
             )
         }
 
@@ -3682,7 +3682,7 @@ class WebViewService : LifecycleService(), ViewModelStoreOwner, SavedStateRegist
                             return true
                         }
                         // Gecko receives gestures at the container; block page scroll/pinch when
-                        // "允许滑动" is off while still allowing taps above.
+                        // "Enable Drag" is off while still allowing taps above.
                         if (shouldBlockPageDrag()) {
                             when (event.actionMasked) {
                                 MotionEvent.ACTION_MOVE,

@@ -34,7 +34,7 @@ import java.security.MessageDigest
 
 /**
  * Downloads and installs the separate `gecko` flavor APK (the version that bundles GeckoView).
- * The default lite APK does not contain GeckoView, so its size is unchanged; users on old devices
+ * The default APK does not contain GeckoView, so its size is unchanged; users on old devices
  * fetch this larger build on demand.
  *
  * Install pipeline (state machine):

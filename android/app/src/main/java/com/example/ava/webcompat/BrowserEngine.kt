@@ -22,7 +22,7 @@ import com.example.ava.utils.ShizukuUtils
  * must be merged into a manifest at build time. It therefore ships in a separate `gecko` product
  * flavor (a downloadable APK with applicationId `com.example.ava.gecko`).
  *
- * The lite APK detects whether the gecko engine pack is installed and delegates rendering to it.
+ * The main APK detects whether the gecko engine pack is installed and delegates rendering to it.
  */
 object BrowserEngine {
 
@@ -108,7 +108,7 @@ object BrowserEngine {
     /**
      * True when GeckoView is available for use:
      * - In the gecko flavor: always true (bundled).
-     * - In the lite flavor: true only if the gecko engine pack is installed.
+     * - In the default flavor: true only if the gecko engine pack is installed.
      */
     fun isGeckoAvailable(context: Context): Boolean {
         if (EngineCapabilities.GECKO_BUNDLED) return true
@@ -143,8 +143,8 @@ object BrowserEngine {
     }
 
     /**
-     * True when the lite host should hand browser overlay work to the external gecko pack.
-     * This is only true in the lite flavor when gecko pack is installed and user selected GECKO engine.
+     * True when the main app should hand browser overlay work to the external gecko pack.
+     * This is only true in the default flavor when the gecko pack is installed and the user selected the GECKO engine.
      */
     fun shouldDelegateToGeckoPack(context: Context, enginePreference: Int): Boolean {
         if (EngineCapabilities.GECKO_BUNDLED) return false
@@ -614,13 +614,13 @@ object BrowserEngine {
             }
             if (!stillWanted) return@postDelayed
             if (!isGeckoEnginePackInstalled(app)) {
-                Log.e(TAG, "Gecko overlay receipt missing and pack gone — not using lite WebView")
+                Log.e(TAG, "Gecko overlay receipt missing and pack gone — not using the system WebView")
                 return@postDelayed
             }
             Log.w(
                 TAG,
                 "Gecko overlay receipt missing token=$token; " +
-                    "retry ${retryIndex + 1}/${RECEIPT_RETRY_DELAYS_MS.size} — not using lite WebView",
+                    "retry ${retryIndex + 1}/${RECEIPT_RETRY_DELAYS_MS.size} — not using the system WebView",
             )
             dispatchGeckoWebViewService(
                 app,
@@ -640,7 +640,7 @@ object BrowserEngine {
             if (retryIndex + 1 < RECEIPT_RETRY_DELAYS_MS.size) {
                 scheduleOverlayReceiptWatchdog(app, token, retryIndex + 1)
             } else {
-                Log.e(TAG, "Gecko overlay never ACKed token=$token — not using lite WebView")
+                Log.e(TAG, "Gecko overlay never ACKed token=$token — not using the system WebView")
             }
         }, delay)
     }

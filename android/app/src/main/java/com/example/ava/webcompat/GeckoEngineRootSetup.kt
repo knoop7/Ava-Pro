@@ -11,7 +11,7 @@ import com.example.ava.utils.ShizukuUtils
 
 /**
  * The separate gecko engine pack needs SYSTEM_ALERT_WINDOW. When Shizuku/root is available
- * (same privilege plane as fleet scrcpy), the lite host grants it via shell so users do not
+ * (same privilege plane as fleet scrcpy), the main app grants it via shell so users do not
  * have to re-run `adb shell appops set …` after every engine reinstall.
  *
  * Android 7 kiosks also get a vendor kill-list whitelist; that step stays N/N_MR1-only.
@@ -30,7 +30,7 @@ object GeckoEngineRootSetup {
     @Volatile
     private var inProgress = false
 
-    /** Call from the lite host when the gecko pack may have been installed or is about to show. */
+    /** Call from the main app when the gecko pack may have been installed or is about to show. */
     fun maybeApply(context: Context) {
         if (EngineCapabilities.GECKO_BUNDLED) return
         val appContext = context.applicationContext

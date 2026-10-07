@@ -1,3 +1,6 @@
+import java.io.File
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -5,6 +8,22 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.google.protobuf)
 }
+
+// `java` in this script is the Java plugin extension, so package names
+// `java.util` / `java.io` do not resolve. Use the imports above.
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties()
+val hasReleaseKeystore = keystorePropertiesFile.exists()
+if (hasReleaseKeystore) {
+    keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
+}
+val releaseKeystoreFile: File? = keystoreProperties.getProperty("storeFile")
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?.let { storePath: String ->
+        val candidate = File(storePath)
+        if (candidate.isAbsolute) candidate else rootProject.file(storePath)
+    }
 
 android {
     namespace = "com.example.ava"
@@ -43,9 +62,9 @@ android {
     }
 
     // Two render engines from one codebase:
-    //  - lite : system WebView only. This is the main published APK; its size is unchanged.
+    //  - default: system WebView only. This is the main published APK; its size is unchanged.
     //  - gecko: bundles GeckoView for old devices. Shipped as a SEPARATE downloadable APK.
-    // Different applicationId so both can be installed side-by-side. The lite app detects
+    // Different applicationId so both can be installed side-by-side. The main app detects
     // and launches the gecko app when the user selects GeckoView as the render engine.
     flavorDimensions += "engine"
     productFlavors {
@@ -60,22 +79,10 @@ android {
         }
     }
 
-    val keystorePropertiesFile = rootProject.file("keystore.properties")
-    val keystoreProperties = java.util.Properties()
-    val hasReleaseKeystore = keystorePropertiesFile.exists()
-    if (hasReleaseKeystore) {
-        keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
-    }
-
     signingConfigs {
         if (hasReleaseKeystore) {
             create("release") {
-                val storePath = keystoreProperties.getProperty("storeFile")
-                storeFile = when {
-                    storePath.isNullOrBlank() -> null
-                    File(storePath).isAbsolute -> File(storePath)
-                    else -> rootProject.file(storePath)
-                }
+                storeFile = releaseKeystoreFile
                 storePassword = keystoreProperties.getProperty("storePassword")
                 keyAlias = keystoreProperties.getProperty("keyAlias")
                 keyPassword = keystoreProperties.getProperty("keyPassword")
@@ -104,7 +111,7 @@ android {
         }
     }
     compileOptions {
-        // GeckoView requires Java 17. Java 17 source/target is backward compatible for the lite flavor.
+        // GeckoView requires Java 17. Java 17 source/target stays compatible for the default flavor.
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
         isCoreLibraryDesugaringEnabled = true
@@ -121,8 +128,9 @@ android {
     }
 
     lint {
-        // 默认 true 会让每次 assembleRelease 都捎带跑 lintVital，本项目 Compose 量大，
-        // 这一步能占掉编译的一大截时间。要查 lint 时单独跑 ./gradlew :app:lintLiteRelease。
+        // The default true runs lintVital on every assembleRelease. This project's
+        // Compose surface is large, and that step eats a big slice of compile time.
+        // To lint, run ./gradlew :app:lintLiteRelease on its own.
         checkReleaseBuilds = false
     }
 
@@ -206,13 +214,17 @@ dependencies {
     implementation("androidx.dynamicanimation:dynamicanimation:1.0.0")
     // Settings LazyColumn fling: vendored Flinger 1.3 core under ui/scroll/fling (no Maven dep).
 
-    // GeckoView is only compiled into the `gecko` flavor, so the lite APK stays the same size.
-    // 稳定版（非 nightly），钉死版本保证可复现/不漂移。选 134 线的原因：
-    //   - 145 起 GeckoView 把最低要求提到 Android 8 (API 26)，会让旧设备(minSdk 21)装不上；
-    //     所以最高只能用 144。
-    //   - 版本越新体积越大（134≈76MB / 144≈81MB / 152≈85MB，arm64 aar），134 最小；
-    //   - 134 仍是较新的引擎，网页兼容性足够，且远新于旧设备自带的系统 WebView。
-    // 如需更新的引擎且仍兼容旧设备，可换成最后一个支持 API 21 的 144.0.20251027123126。
+    // GeckoView is only compiled into the `gecko` flavor, so the main APK stays the same size.
+    // Stable release (not nightly). Pin the version so builds stay reproducible.
+    // 134 is the line because:
+    //   - From 145, GeckoView requires Android 8 (API 26), so older devices
+    //     (minSdk 21) cannot install it; 144 is the newest that still fits.
+    //   - Newer builds are larger (134≈76MB / 144≈81MB / 152≈85MB, arm64 aar);
+    //     134 is the smallest.
+    //   - 134 is still a recent engine, compatible enough with the web, and far
+    //     newer than the system WebView on old devices.
+    // For a newer engine that still supports old devices, use the last API 21
+    // build: 144.0.20251027123126.
     "geckoImplementation"("org.mozilla.geckoview:geckoview:134.0.20250120135430")
 
     // Pure-Java xz decoder: the running app downloads the gecko engine as a single .apk.xz
