@@ -14,7 +14,7 @@ The project can be read and compared with the running app. The native library do
 | `esphomeproto/` | The ESPHome native API. `api.proto`, `api_options.proto`, plus the Kotlin for framing, the voice assistant, and the Bluetooth proxy. |
 | `microfeatures/` | Kotlin entry points for the native audio library. See the section below. |
 | `gradle/` | The version catalog `libs.versions.toml`, and the Gradle wrapper. |
-| `docs/` | Release notes for 0.7.3 through 0.7.7, in English and Chinese, plus three wake-word notes from 2026-09-07. |
+| `docs/` | Release notes for 0.7.3 through 0.7.7, in English and Chinese. |
 | `build.gradle.kts` | Root project. Declares the Android, Kotlin, and Compose plugins. |
 | `settings.gradle.kts` | Three modules: `:app`, `:esphomeproto`, `:microfeatures`. |
 | `gradle.properties` | Compiler memory, AndroidX, and parallel builds. No machine JDK path. |
@@ -33,7 +33,6 @@ The project can be read and compared with the running app. The native library do
 | `src/main/assets/` | Bundled wake words, prompt tones, VAD, the Fleet console page, and scripts used by the browser and screensaver. |
 | `src/main/aidl/` | `IShellService`, the binder used when a system command channel is required. |
 | `src/gecko/` | Engine entry and browser factory compiled only into the `gecko` flavor. |
-| `src/test/` | Unit tests. |
 | `libs/` | The reduced ONNX Runtime the app links, `onnxruntime-reduced.aar`. |
 
 ### Packages under `com.example.ava`
