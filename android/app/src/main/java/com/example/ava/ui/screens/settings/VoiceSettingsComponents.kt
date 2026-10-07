@@ -126,7 +126,7 @@ internal fun IdentityStatusCapsule(
     }
 }
 
-/** Compact "严格+" / "极致" tag shown beside a wake slot's chevron (level 1 / 2). */
+/** Compact "Strict+" / "Max" tag shown beside a wake slot's chevron (level 1 / 2). */
 @Composable
 internal fun ExtraStrictnessTag(level: Int) {
     val extreme = level >= 2

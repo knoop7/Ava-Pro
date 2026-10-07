@@ -164,7 +164,7 @@ fun GlassMusicPlayerView(
         modifier = modifier
             .fillMaxSize()
             .background(Color.Black)
-            // ~3s long-press wakes the shared top «返回» strip (auto-hide 3s).
+            // ~3s long-press wakes the shared top «Back» strip (auto-hide 3s).
             .revealMediaOverlayChromeOnLongPress(onRevealChrome)
     ) {
 

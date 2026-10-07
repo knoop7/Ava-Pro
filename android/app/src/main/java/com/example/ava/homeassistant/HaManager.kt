@@ -377,7 +377,7 @@ class HaManager private constructor(
      */
     suspend fun fetchAssistNames(entityIds: Collection<String>): Map<String, HaEntityNames> {
         // `cv.entity_ids` rejects the whole request on one bad id, and the expose list can
-        // carry non-entity keys (seen live: a bare "灯光5").
+        // carry non-entity keys (seen live: a bare "Light 5").
         val valid = entityIds.filter { VALID_ENTITY_ID.matches(it) }.distinct()
         if (valid.isEmpty()) return emptyMap()
         val entries = client.fetchEntityRegistryEntries(valid) ?: return emptyMap()

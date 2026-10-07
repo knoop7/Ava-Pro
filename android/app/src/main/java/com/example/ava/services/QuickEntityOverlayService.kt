@@ -625,7 +625,7 @@ class QuickEntityOverlayService : Service() {
     }
 
     /**
-     * 后备强制读: with the direct HA WebSocket signed in, re-read timer tiles
+     * Fallback forced read: with the direct HA WebSocket signed in, re-read timer tiles
      * from `get_states`. The cached pushes replayed on show/reload are only as
      * fresh as their last delivery, and HA never ticks a timer's `remaining`
      * attribute between transitions — the snapshot is always the current truth.
@@ -913,7 +913,7 @@ class QuickEntityOverlayView(
     private var dragTargetIndex = -1
     private val longPressThreshold = 400L
     private val dragThreshold = 20f
-    /** Same idea as media «返回»: hold, don't wake chrome on a tap. */
+    /** Same idea as media «Back»: hold, don't wake chrome on a tap. */
     private val chromeRevealHoldMs = 1_500L
     private val chromeRevealHandler = Handler(Looper.getMainLooper())
     private val chromeRevealRunnable = Runnable {

@@ -24,14 +24,14 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
- * Half layout for fullscreen 悬浮层 windows: browser, weather,
+ * Half layout for fullscreen floating-overlay windows: browser, weather,
  * quick entity, simple clock, dream clock, voice message, and the expanded
  * media player. The collapsed music button is not a layer.
  *
  * Portrait stacks top/bottom. Landscape places left/right. The two frames
  * meet at the ratio seam and together cover the real display, edge to edge.
  * A third layer stays full screen. The Esper sphere stays full-screen and
- * centered above the pair. 悬浮小窗 is not a layer.
+ * centered above the pair. The floating mini window is not a layer.
  */
 object OverlayLayerSplit {
     private const val TAG = "OverlayLayerSplit"

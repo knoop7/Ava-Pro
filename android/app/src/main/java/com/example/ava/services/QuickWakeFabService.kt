@@ -92,15 +92,15 @@ import kotlin.math.sqrt
  *
  * Gesture model ([MicrophoneSettingsStore.quickWakeTrigger]):
  * - TAP: short press → [VoiceSatelliteService.quickWake]. A tap during STT or TTS
- *   is the same abort as HA「闭嘴一下」([VoiceSatelliteService.stopVoiceSession]).
- *   Still-release after the drag-arm window is still a tap (open or 闭嘴).
- *   A swipe always repositions — idle after 闭嘴 included. Never drop the stream.
+ *   is the same abort as HA "Just stop" ([VoiceSatelliteService.stopVoiceSession]).
+ *   Still-release after the drag-arm window is still a tap (open or Just stop).
+ *   A swipe always repositions — idle after Just stop included. Never drop the stream.
  * - HOLD: long press → [QuickWakePushToTalk.begin]; release → end-of-speech marker.
  *   A tap after that, while STT or TTS is still running, is the same abort.
  *   Sliding past slop repositions the button and keeps the recording. Only a tap
- *   aborts — drag is never「闭嘴一下」.
+ *   aborts — drag is never "Just stop".
  * Connecting (HA uplink still down): tap-to-open and hold wait. A tap while a
- * listen is already in flight is 闭嘴. Drag always repositions.
+ * listen is already in flight is Just stop. Drag always repositions.
  *
  * The whole gesture lives in the window root's [View.onTouchEvent]: the disc child is not
  * clickable, so the ViewGroup intercept path has no target and the root must own the
@@ -522,7 +522,7 @@ class QuickWakeFabService : Service() {
          * "Picked up": the finger rested ≥ [DRAG_ARM_MS] without moving. Only now does
          * motion move the button at normal slop. Before that, small wander is still a
          * tap (a thumb never lands perfectly still) and a clear swipe is a drag —
-         * including idle after 闭嘴. Still-release after pickup is still a tap.
+         * including idle after Just stop. Still-release after pickup is still a tap.
          */
         private var pickedUp = false
         /** HOLD mode: long press started a push-to-talk recording. */
@@ -636,7 +636,7 @@ class QuickWakeFabService : Service() {
                     val connecting = isVoiceConnecting()
                     val liveTurn = isAssistTurnActive()
                     when {
-                        // Wait-mic / pending listen: only drag. Tap would 闭嘴 the
+                        // Wait-mic / pending listen: only drag. Tap would Just-stop the
                         // handshake; hold would start a recording into the void.
                         connecting -> handler.postDelayed(pickupRunnable, DRAG_ARM_MS)
                         liveTurn -> handler.postDelayed(pickupRunnable, DRAG_ARM_MS)
@@ -663,7 +663,7 @@ class QuickWakeFabService : Service() {
                             // becomes a recording; move and it becomes a drag. No dead zone.
                             trigger == QuickWakeTrigger.HOLD && !holding && moved > touchSlop * 1.5f -> beginDrag()
                             // TAP, before pickup: a clear swipe is always a drag.
-                            // Idle-after-闭嘴 used to abandon the stream and stick.
+                            // Idle-after-Just-stop used to abandon the stream and stick.
                             trigger == QuickWakeTrigger.TAP &&
                                 QuickWakeFabGestures.shouldDragOnTapWander(
                                     pickedUp = pickedUp,
@@ -704,7 +704,7 @@ class QuickWakeFabService : Service() {
                             finishDrag()
                         }
                         // Still-release is tap even after pickup. Connecting still
-                        // reaches onTap so a second tap can 闭嘴 the in-flight listen.
+                        // reaches onTap so a second tap can Just-stop the in-flight listen.
                         isUp && !dragging && !holding &&
                             (trigger == QuickWakeTrigger.TAP || isAssistTurnActive()) -> {
                             val heldMs = SystemClock.elapsedRealtime() - downAt
@@ -1974,7 +1974,7 @@ class QuickWakeFabService : Service() {
      * Climb when [OverlayZOrderCoordinator.stackGeneration] moved — another
      * overlay add/restack landed on top. Skip when it has not: a guess that
      * "something might have buried us" was the mic-glyph flash on every
-     * Esper / 飞书 / toast hide.
+     * Esper / Feishu / toast hide.
      */
     fun bringToFront() {
         if (OverlayZOrderCoordinator.shouldYieldVoiceToAod()) {

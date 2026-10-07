@@ -1030,7 +1030,7 @@ class ScreensaverWebViewService : Service() {
     /**
      * Prefer a carefully guessed icon when the stored one is a weak default
      * (HA logo / generic power / eye) that disagrees with entity id or label
-     * (e.g. switch showing "HOME 温度" with a power glyph).
+     * (e.g. switch showing "HOME temperature" with a power glyph).
      */
     private fun resolveDawnSlotIcon(
         slot: DawnEntitySlot,

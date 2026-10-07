@@ -4,10 +4,10 @@ package com.example.ava.esphome.voicesatellite
  * Official Assist *miss* replies (`no_valid_targets` family): the intent was recognised
  * but no usable area / floor / domain / entity was found, or the entity is not exposed.
  *
- * **Primary rear-guard trigger:** "抱歉，找不到名为 {} 的设备" (and the same family
+ * **Primary rear-guard trigger:** "Sorry, cannot find a device named {}" (and the same family
  * for area / floor). That sentence is why the local AI gets the user's original
- * transcript — not a reason to stop. TTS often drops `，` / `名为`; [isPrimaryDeviceMiss]
- * still hands off. Bare "找不到" in a long LLM essay does not.
+ * transcript — not a reason to stop. TTS often drops the comma or "named"; [isPrimaryDeviceMiss]
+ * still hands off. Bare "cannot find" in a long LLM essay does not.
  *
  * Templates: [HaAssistMissPhrases]. When the pipeline debug log is readable,
  * [com.example.ava.homeassistant.HaAssistVerdict] is a second path, not the first.
@@ -34,8 +34,8 @@ object HaAssistMissDetector {
 
     /**
      * THE handoff: Assist said it could not find that device / area / floor.
-     * Official zh-CN is `抱歉，找不到名为 {} 的设备`. Spoken forms without the
-     * comma or `名为` are the same miss.
+     * Official zh-CN is `Sorry, cannot find a device named {}`. Spoken forms without the
+     * comma or "named" are the same miss.
      */
     fun isPrimaryDeviceMiss(speech: String): Boolean {
         // First sentence only — an LLM tail ("which area?") must not hide the miss.
@@ -63,8 +63,8 @@ object HaAssistMissDetector {
     }
 
     /**
-     * Claw / conversation-LLM miss: "我没有找到名为灯光一的灯具…".
-     * Not the hassil template (no 抱歉, says 灯具 not 设备). Still a failed
+     * Claw / conversation-LLM miss: "I did not find a light fixture named Light 1…".
+     * Not the hassil template (no "sorry", says "light fixture" not "device"). Still a failed
      * named-target lookup — the local seat should take the transcript.
      */
     fun isNamedTargetMiss(speech: String): Boolean {

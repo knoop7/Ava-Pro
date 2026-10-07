@@ -9,12 +9,14 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /**
- * 音频静音段检测处理器
- * 
- * 原理：TTS语音在句子之间必然有静音停顿（通常150-400ms）
- * 通过实时检测音频振幅，当振幅低于阈值持续一定时间时，判定为句子边界
- * 
- * 这比基于字符权重估算精准得多，因为是直接测量音频数据
+ * Audio processor that detects silence between sentences.
+ *
+ * TTS always pauses between sentences (usually 150–400 ms).
+ * Watch amplitude in real time; when it stays under the threshold
+ * long enough, that gap is a sentence boundary.
+ *
+ * More accurate than estimating from character weights, because it
+ * measures the audio itself.
  */
 @UnstableApi
 class SilenceDetectingAudioProcessor : AudioProcessor {

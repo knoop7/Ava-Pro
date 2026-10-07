@@ -39,7 +39,7 @@ import kotlin.coroutines.coroutineContext
  * transcript without any reply to inspect.
  *
  * Two routes: the HA pipeline keeps its own Processing / RUN_END / idle. This
- * seat reports busy through [onBusy] so UI can stay on 处理中 after the channel
+ * seat reports busy through [onBusy] so UI can stay on Processing after the channel
  * has already gone idle.
  */
 class LocalIntentFallback(
@@ -111,7 +111,7 @@ class LocalIntentFallback(
         val remote = com.example.ava.localllm.remote.RemoteAiManager.get()
         if (remote?.isReady() != true) return ReplyDecision.Pass
 
-        // 1. Primary: "抱歉找不到…设备" (TTS may drop comma / 名为). Then no_intent + templates.
+        // 1. Primary: "抱歉找不到…设备" (TTS may drop the comma or "名为"). Then no_intent + templates.
         if (HaAssistMissDetector.shouldHandoff(speech)) {
             Log.i(TAG, "assist miss → local AI stt='${text.take(40)}' ha='${speech.take(40)}'")
             return claim(speech)

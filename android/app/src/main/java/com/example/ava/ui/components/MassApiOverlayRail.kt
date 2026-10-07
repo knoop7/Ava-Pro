@@ -2251,7 +2251,7 @@ private fun RailPlaylistDetailPage(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        // Air under the 「歌单」 sub-nav so cover/title are not jammed into it.
+                        // Air under the "Playlist" sub-nav so cover/title are not jammed into it.
                         .padding(top = m.gapMd + m.padV, bottom = m.gapMd),
                     verticalAlignment = Alignment.Top,
                 ) {

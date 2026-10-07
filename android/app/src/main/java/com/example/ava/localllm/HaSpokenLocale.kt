@@ -10,7 +10,7 @@ import org.json.JSONObject
 object HaSpokenLocale {
 
     /**
-     * Claw-style spoken ordinals: 灯光一 and 灯光1 are the same key.
+     * Claw-style spoken ordinals: "灯光一" and "灯光1" are the same key.
      * Replaces each CJK number run with its Arabic value; other characters stay.
      */
     fun foldDigits(raw: String): String {
@@ -104,7 +104,7 @@ object HaSpokenLocale {
         return null
     }
 
-    /** Claw `_KEY_ALIASES`: 亮度 → brightness_pct, 模式 → hvac_mode, … */
+    /** Claw `_KEY_ALIASES`: "亮度" → brightness_pct, "模式" → hvac_mode, … */
     fun canonicalizeArgs(raw: JSONObject, domain: String? = null): JSONObject {
         val aliases = KEY_ALIASES[domain].orEmpty()
         val out = JSONObject()

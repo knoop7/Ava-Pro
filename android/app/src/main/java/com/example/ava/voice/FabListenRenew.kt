@@ -3,7 +3,7 @@ package com.example.ava.voice
 /**
  * HA's VoiceCommandSegmenter hard-stops a listen at 15s, and also ends the
  * window on a short pause. FAB hold must not treat that pause as "send":
- * splice a new STT window (续期) until the finger comes up. Tap still
+ * splice a new STT window until the finger comes up. Tap still
  * commits on an early pause in the first window; after the first splice
  * it keeps chaining until [SESSION_RENEW_MS].
  */

@@ -15,7 +15,7 @@ import java.util.concurrent.ConcurrentHashMap
  * unseeable and undismissable while **all** floating windows sit at surface
  * alpha 0. Verified live on the vivo Android 11 device: three healthy mirrors
  * (`mPolicyVisibility=false mForceHideNonSystemOverlayWindow=true`) all went
- * invisible the moment 录音机 asked for a permission on display 4, and all
+ * invisible the moment the Voice Recorder app asked for a permission on display 4, and all
  * snapped back the instant that dialog died.
  *
  * Two layers of defense, both riding the privileged shell:

@@ -20,7 +20,7 @@ data class SendspinSettings(
     val syncOffsetMs: Int = 0,
     val volume: Int = 100,
     val muted: Boolean = false,
-    // 已配对的设备列表 (设备ID -> 设备名称)
+    // Paired device list (device ID -> device name)
     val pairedDevices: Map<String, String> = emptyMap(),
     /**
      * Legacy one-way flag (device → HA). Prefer [volumeFollowRule]; kept so existing installs
@@ -158,7 +158,7 @@ class SendspinSettingsStore(dataStore: DataStore<SendspinSettings>) :
         }
     }
     
-    // 添加配对设备
+    // Add a paired device
     suspend fun addPairedDevice(deviceId: String, deviceName: String) {
         update { settings ->
             val newPaired = settings.pairedDevices.toMutableMap()
@@ -167,7 +167,7 @@ class SendspinSettingsStore(dataStore: DataStore<SendspinSettings>) :
         }
     }
     
-    // 移除配对设备
+    // Remove a paired device
     suspend fun removePairedDevice(deviceId: String) {
         update { settings ->
             val newPaired = settings.pairedDevices.toMutableMap()
@@ -176,12 +176,12 @@ class SendspinSettingsStore(dataStore: DataStore<SendspinSettings>) :
         }
     }
     
-    // 清除所有配对设备
+    // Clear all paired devices
     suspend fun clearPairedDevices() {
         update { it.copy(pairedDevices = emptyMap()) }
     }
     
-    // 检查设备是否已配对（suspend — avoid runBlocking / ANR）
+    // Check whether a device is already paired (suspend — avoid runBlocking / ANR)
     suspend fun isPaired(deviceId: String): Boolean {
         return get().pairedDevices.containsKey(deviceId)
     }

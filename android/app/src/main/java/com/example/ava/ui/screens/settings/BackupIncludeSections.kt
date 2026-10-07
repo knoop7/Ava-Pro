@@ -298,7 +298,7 @@ internal object BackupIncludeMemory {
 
 private const val BACKUP_INCLUDE_PREVIEW_ROWS = 5
 private val BackupIncludeRowHeight = 56.dp
-/** Same trailing slot as Material3 Checkbox, so 全选 sits on the checkbox column. */
+/** Same trailing slot as Material3 Checkbox, so Select all sits on the checkbox column. */
 private val BackupIncludeCheckSlot = 48.dp
 
 private sealed class BackupIncludeLine {

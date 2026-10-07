@@ -215,7 +215,7 @@ class DreamClockService : Service() {
             setOnTouchListener { _, event -> handleOverlayTouch(event) }
         }
         // Face must be the stored one before the first paint. The default is FILL;
-        // an async apply after addView flashes 满幅 / 翻页 over 机械 (or the reverse).
+        // an async apply after addView flashes Full / Flip over Mechanical (or the reverse).
         runCatching {
             applyClockSettings(PlayerSettingsStore(playerSettingsStore).getCached())
         }
@@ -862,7 +862,7 @@ class DreamClockView(context: Context, private val clockSize: Int) : View(contex
         }
         aodCovering = true
         OverlayZOrderCoordinator.syncFabForAod()
-        // Cover owns the plate — «返回» and the settings FAB must not sit on AOD.
+        // Cover owns the plate — «Back» and the settings FAB must not sit on AOD.
         onAodCovering()
         startAodFade(aodMaskPercent / 100f)
     }
@@ -871,7 +871,7 @@ class DreamClockView(context: Context, private val clockSize: Int) : View(contex
     private fun aodOwnsPlate(): Boolean = aodCovering || aodAlpha > 0.01f
 
     /**
-     * AOD just took the plate. Hide «返回» and snap the settings FAB / sheet off
+     * AOD just took the plate. Hide «Back» and snap the settings FAB / sheet off
      * immediately — a fade would keep fighting the cover and can get stuck in it.
      */
     private fun onAodCovering() {
@@ -902,7 +902,7 @@ class DreamClockView(context: Context, private val clockSize: Int) : View(contex
 
     /**
      * Fade the cover out (if up) and restart the idle wait.
-     * Does not surface «返回» — an AOD tap only wakes; the strip is long-press after that.
+     * Does not surface «Back» — an AOD tap only wakes; the strip is long-press after that.
      */
     fun interruptAod() {
         handler.removeCallbacks(enterAodRunnable)
@@ -953,7 +953,7 @@ class DreamClockView(context: Context, private val clockSize: Int) : View(contex
     /** Overlay settings FAB + sheet. Mechanical is settings-app only. Lock does not hide this. */
     private fun overlaySettingsAllowed(): Boolean = face != DreamClockFace.MECHANICAL
 
-    /** Swipe faces / themes, theme strip, 秒 / 十二. Lock: only the sheet chips can change these. */
+    /** Swipe faces / themes, theme strip, sec / 12h. Lock: only the sheet chips can change these. */
     private fun overlayThemeGesturesAllowed(): Boolean =
         overlaySettingsAllowed() && !settingsLocked
 
@@ -1033,7 +1033,7 @@ class DreamClockView(context: Context, private val clockSize: Int) : View(contex
     private val chromeFadeMs = 420f
     private val chromeHideFadeMs = 720f
     private val chromeRevealHoldMs = 2_000L
-    // Long-press owns only the top «返回» strip; the bottom-right settings
+    // Long-press owns only the top «Back» strip; the bottom-right settings
     // button reveals on plain tap and hides on its own 5s clock.
     private val chromeRevealRunnable = Runnable {
         if (DashboardOverlayChrome.isShown(DashboardOverlayChrome.Kind.DREAM_CLOCK)) {
@@ -3736,9 +3736,9 @@ class DreamClockView(context: Context, private val clockSize: Int) : View(contex
     }
 
     /**
-     * FlipFlow-style timer strip: [5m] [10m] [25m] [自定义] [关闭]. Custom only when a
+     * FlipFlow-style timer strip: [5m] [10m] [25m] [Custom] [Stop]. Custom only when a
      * HA `timer.*` entity is bound; local-only mode keeps the three presets.
-     * While a countdown runs the strip collapses to [⏸/▶] [关闭].
+     * While a countdown runs the strip collapses to [⏸/▶] [Stop].
      */
     private fun drawTimerRow(
         canvas: Canvas,

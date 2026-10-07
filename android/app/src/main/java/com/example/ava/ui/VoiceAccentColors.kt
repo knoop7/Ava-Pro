@@ -10,7 +10,7 @@ object VoiceAccentColors {
     val WAKE_WORD_2 = Color.parseColor(DEFAULT_WAKE_WORD_2_HEX)
 
     /**
-     * Seven rainbow presets in spectrum order (红→橙→黄→绿→青→蓝→紫).
+     * Seven rainbow presets in spectrum order (red→orange→yellow→green→cyan→blue→purple).
      * Keys are stored in [PlayerSettings.voiceWakeWord1AccentColor] / word 2.
      */
     val RAINBOW_PRESETS: List<Pair<String, Int>> = listOf(

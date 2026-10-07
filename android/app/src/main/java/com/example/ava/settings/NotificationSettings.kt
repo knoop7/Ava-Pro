@@ -25,11 +25,11 @@ data class NotificationSettings(
     val soundUri: String = "",
     /** "fullscreen" | "banner" — global exclusive style. */
     val displayStyle: String = NotificationDisplayStyle.FULLSCREEN,
-    /** Banner 九宫格 0..8，行优先；默认 1 = 中上。 */
+    /** Banner 3x3 grid 0..8, row-major; default 1 = top center. */
     val bannerPosition: Int = 1,
-    /** Banner 底色 hex；空 = 默认白。 */
+    /** Banner background hex; empty = default white. */
     val bannerColor: String = "",
-    /** Banner 角落 Home Assistant 水印。 */
+    /** Home Assistant watermark in the banner corner. */
     val bannerLogoEnabled: Boolean = true,
 )
 

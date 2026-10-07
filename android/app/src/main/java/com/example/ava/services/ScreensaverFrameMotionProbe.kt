@@ -9,7 +9,7 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * Camera motion for screensaver: 人来退、人走开后再进。
+ * Camera motion for screensaver: leave when someone arrives, enter again after they leave.
  *
  * Kept deliberately sensitive enough to work on wall-panel HA video (often 1–5 fps):
  * - Two-frame luma diff + illumination compensate (three-frame pixel-AND was too strict).

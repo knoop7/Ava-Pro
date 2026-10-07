@@ -4,7 +4,7 @@ package com.example.ava.esphome.voicesatellite
  * Exact match against Home Assistant default-agent `responses.errors.no_intent`
  * (one fixed phrase per language pack). Not Ava-local copy.
  *
- * Kept tight on purpose: bare "sorry" / "抱歉" must never trigger the teaching tip.
+ * Kept tight on purpose: a bare "sorry" must never trigger the teaching tip.
  * Device-miss replies (`no_entity`, `no_device_class`, …) carry slots and live in
  * [HaAssistMissDetector], matched against the official templates.
  */

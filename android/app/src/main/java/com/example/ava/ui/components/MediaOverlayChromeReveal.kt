@@ -8,11 +8,11 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** Hold this long to wake the shared top «返回» strip (no mid-hold toast). */
+/** Hold this long to wake the shared top «Back» strip (no mid-hold toast). */
 private const val BACK_HOLD_REVEAL_MS = 2_000L
 
 /**
- * Music floating overlays only (Glass / Detailed): wake the shared top «返回»
+ * Music floating overlays only (Glass / Detailed): wake the shared top «Back»
  * strip on a **~2s long-press**. Single taps do not reveal — that stole play /
  * seek / Mass controls.
  *

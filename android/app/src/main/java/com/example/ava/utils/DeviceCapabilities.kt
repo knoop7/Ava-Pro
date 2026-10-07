@@ -70,7 +70,7 @@ object DeviceCapabilities {
     
     
     fun hasFrontCamera(context: Context): Boolean {
-        // 先用 PackageManager 快速检测，避免不必要的相机访问
+        // PackageManager first: fast, and it avoids touching the camera.
         try {
             if (context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_FRONT)) {
                 return true
@@ -79,7 +79,7 @@ object DeviceCapabilities {
             Log.w(TAG, "Failed to check FEATURE_CAMERA_FRONT", e)
         }
         
-        // PackageManager 检测失败时，尝试 CameraManager（可能占用相机资源）
+        // If PackageManager finds nothing, try CameraManager (this can occupy the camera).
         try {
             val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
             val cameraIds = cameraManager.cameraIdList
@@ -93,7 +93,7 @@ object DeviceCapabilities {
                         return true
                     }
                 } catch (e: android.hardware.camera2.CameraAccessException) {
-                    // 相机被占用或不可用，跳过此相机
+                    // Camera is busy or unavailable; skip it.
                     Log.w(TAG, "Camera $id not accessible: ${e.reason}", e)
                     continue
                 }
@@ -107,7 +107,7 @@ object DeviceCapabilities {
     
     
     fun hasBackCamera(context: Context): Boolean {
-        // 先用 PackageManager 快速检测，避免不必要的相机访问
+        // PackageManager first: fast, and it avoids touching the camera.
         try {
             if (context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA)) {
                 return true
@@ -116,7 +116,7 @@ object DeviceCapabilities {
             Log.w(TAG, "Failed to check FEATURE_CAMERA", e)
         }
         
-        // PackageManager 检测失败时，尝试 CameraManager（可能占用相机资源）
+        // If PackageManager finds nothing, try CameraManager (this can occupy the camera).
         try {
             val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
             val cameraIds = cameraManager.cameraIdList
@@ -130,7 +130,7 @@ object DeviceCapabilities {
                         return true
                     }
                 } catch (e: android.hardware.camera2.CameraAccessException) {
-                    // 相机被占用或不可用，跳过此相机
+                    // Camera is busy or unavailable; skip it.
                     Log.w(TAG, "Camera $id not accessible: ${e.reason}", e)
                     continue
                 }

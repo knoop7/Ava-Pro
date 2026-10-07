@@ -154,7 +154,7 @@ private fun BrowserSettingsRootScreen(navController: NavController) {
         navController = navController,
         title = stringResource(R.string.settings_group_browser),
     ) {
-        // HA 集成：默认在根页展开（对齐设备服务「首卡直接配置」）
+        // HA integration: expanded on the root page by default (aligned with device services "configure on the first card")
         item {
             SimpleCard {
                 BrowserHaIntegrationContent(
@@ -210,7 +210,7 @@ private fun BrowserSettingsRootScreen(navController: NavController) {
             }
         }
 
-        // 其余入口：总开关开启后才显示（与屏保入口卡一致）
+        // Other entries: shown only after the master switch is on (same as the screensaver entry card)
         if (haRemoteUrlEnabled) {
             item {
                 SimpleCard {

@@ -13,8 +13,8 @@
 #}
 
 # Preserve stack-trace line numbers so VsWakeWord/AEC crashes are diagnosable
-# after R8 minifies debug + release builds (matches the workflow tracked by
-# 开启R8编译.sh / 关闭R8编译.sh).
+# after R8 minifies debug + release builds (matches the enable-R8 / disable-R8
+# scripts `开启R8编译.sh` / `关闭R8编译.sh`).
 -keepattributes SourceFile,LineNumberTable
 
 # If you keep the line number information, uncomment this to

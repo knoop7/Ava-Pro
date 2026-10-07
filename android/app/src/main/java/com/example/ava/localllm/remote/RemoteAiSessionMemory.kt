@@ -77,7 +77,7 @@ internal class RemoteAiSessionMemory(private val now: () -> Long = System::curre
 
     private fun isFollowUp(t: String, browserOnly: Boolean): Boolean {
         if (browserOnly && DEVICE_REQUEST.containsMatchIn(t) && !Regex("网页|網頁|浏览器|瀏覽器|\\b(browser|page|website)\\b").containsMatchIn(t)) return false
-        // Bare 继续 / continue is not a host keyword. HA already treats it as
+        // Bare "继续" / continue is not a host keyword. HA already treats it as
         // media resume, and two characters is a real Chinese command.
         if (Regex("^(继续|繼續|接着|接著).+").containsMatchIn(t)) return true
         if (Regex("^(please\\s+)?(continue|resume)\\s+\\S").containsMatchIn(t)) return true

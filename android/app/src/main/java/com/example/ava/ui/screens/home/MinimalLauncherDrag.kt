@@ -66,7 +66,7 @@ import com.example.ava.R
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** Ghost fade-in / fade-out (transparent 渐隐渐出). */
+/** Ghost fade-in / fade-out (transparent fade-in and fade-out). */
 private const val GHOST_FADE_IN_MS = 140
 private const val GHOST_FADE_OUT_MS = 180
 /** Peak opacity while dragging — ghost stays translucent. */
@@ -638,7 +638,7 @@ fun MinimalLauncherDragOverlay(
             }
         }
 
-        // Ruler lines when magnetically snapped (标尺对齐).
+        // Ruler lines when magnetically snapped (ruler alignment).
         val snap = dropSnap
         val geo = pageGeometry
         val laidOut = origin

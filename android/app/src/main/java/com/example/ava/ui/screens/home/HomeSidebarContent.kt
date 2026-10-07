@@ -156,7 +156,7 @@ private val LocalSidebarCancelPress = staticCompositionLocalOf { false }
 
 /**
  * Vertical scroll can win after a row already emitted [PressInteraction.Press].
- * Without an explicit Cancel, the ripple/"预选" highlight sticks across day/night themes.
+ * Without an explicit Cancel, the ripple/"preselect" highlight sticks across day/night themes.
  */
 @Composable
 private fun rememberSidebarRowInteractionSource(
@@ -648,7 +648,7 @@ fun HomeSidebarContent(
                         )
                     }
                     if (showHaKiosk) {
-                        // Visible chrome → "Kiosk 收起"; hidden → "Kiosk 展开".
+                        // Visible chrome → "Kiosk collapse"; hidden → "Kiosk expand".
                         HomeSidebarEntryRow(
                             label = stringResource(
                                 if (haKioskOn) {

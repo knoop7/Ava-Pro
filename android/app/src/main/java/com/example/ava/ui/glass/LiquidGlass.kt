@@ -347,7 +347,7 @@ object LiquidGlass {
         view.background = drawable
         // API 21–27: an outline with alpha 0 is an empty clip. [getOutline] keeps
         // alpha at 0 unless a shadow is requested, so clipToOutline hides the view
-        // (the overlay «返回» pill never appears). Clip only where alpha is shadow-only.
+        // (the overlay «Back» pill never appears). Clip only where alpha is shadow-only.
         if (Build.VERSION.SDK_INT > Build.VERSION_CODES.O_MR1) {
             view.clipToOutline = true
             view.outlineProvider = android.view.ViewOutlineProvider.BACKGROUND

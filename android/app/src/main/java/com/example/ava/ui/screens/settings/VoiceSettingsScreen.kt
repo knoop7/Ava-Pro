@@ -1724,7 +1724,7 @@ private fun VoiceStreamingTtsSettingsScreen(
             }
         }
 
-        // —— 音频 ——
+        // —— Audio ——
         item {
             SettingsSectionLabel(stringResource(R.string.settings_voice_reply_section_audio))
         }
@@ -1862,7 +1862,7 @@ private fun VoiceStreamingTtsSettingsScreen(
             )
         }
 
-        // —— 界面 ——
+        // —— Interface ——
         item {
             SettingsSectionLabel(stringResource(R.string.settings_voice_reply_section_ui))
         }
@@ -1910,7 +1910,7 @@ private fun VoiceStreamingTtsSettingsScreen(
             }
         }
 
-        // —— 维护 ——
+        // —— Maintenance ——
         item {
             SettingsSectionLabel(stringResource(R.string.settings_voice_reply_section_maintain))
         }

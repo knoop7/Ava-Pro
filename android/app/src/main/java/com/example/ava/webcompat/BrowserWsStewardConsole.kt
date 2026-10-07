@@ -6,7 +6,7 @@ package com.example.ava.webcompat
  * Lovelace 2026.8 (`hui-root`, hass-frontend-20260826.1):
  * - Wide: icon button before the + (`ui.panel.lovelace.menu.add`).
  * - Narrow: first `ha-dropdown-item` inside `#dashboardmenu`, above
- *   「添加至 Home Assistant」 / "Add to Home Assistant".
+ *   "添加至 Home Assistant" / "Add to Home Assistant".
  *
  * The sheet shows health first (CPU, DOM nodes, heap, pressure),
  * then the subscribe list. Frame time stays on the spark only.

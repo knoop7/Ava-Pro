@@ -666,7 +666,7 @@ class VoiceSatelliteAudioInput(
      * misses one real sequence: wake chime -> short command -> fast HA response.
      * The far-end write-hold (1.5 s) bridges the chime into the TTS start, so
      * playback onset never shows as a fresh edge and the guard armed at chime
-     * time is already spent — exactly where isolated opening words ("你好")
+     * time is already spent — exactly where isolated opening words ("hello")
      * were reported firing.
      */
     @Volatile
@@ -846,7 +846,7 @@ class VoiceSatelliteAudioInput(
 
         fun allowUnverified(reason: String): Boolean {
             // Level 1 still uses the tight offline slack when a clip exists;
-            // missing evidence fail-opens so 严格+ cannot go fully deaf.
+            // missing evidence fail-opens so Strict+ cannot go fully deaf.
             val allowed = WakeWordCutoffPolicy.allowUnverifiedStreamingWake(
                 streamingConfidence,
                 manifestCutoff,
@@ -935,8 +935,8 @@ class VoiceSatelliteAudioInput(
      * offline engine (same thresholds, gates, and verifier heads as live streaming).
      *
      * Level 1 fail-opens on missing evidence (no mark / ring underrun / extract
-     * failure) so 严格+ cannot go deaf when streaming already cleared. Level 2
-     * stays fail-closed — that is the 极致 contract.
+     * failure) so Strict+ cannot go deaf when streaming already cleared. Level 2
+     * stays fail-closed — that is the Max contract.
      */
     private suspend fun verifyOpenWakeSample(
         wakeWordId: String,
@@ -1161,7 +1161,7 @@ class VoiceSatelliteAudioInput(
          * every onset: the hardware HAL canceller re-converges each time
          * playback starts, and the machine floor's learned gains under-predict
          * that transient (its double-talk gate skips learning on exactly those
-         * frames), letting isolated opening words ("你好", "行。") walk the
+         * frames), letting isolated opening words ("hello", "OK.") walk the
          * template. No DTD override — during the transient the residual itself
          * would qualify as evidence. Sentence gaps (~400 ms) do not re-arm:
          * the far-end ruler holds through them.
@@ -1265,7 +1265,7 @@ class VoiceSatelliteAudioInput(
          * phrase's final word on its own token boundary — streaming models score
          * the name, so "I'm Jarvis" self-wakes a "hey jarvis" model. Boundaries
          * only exclude adjacent Latin letters/digits: CJK text sets Latin names
-         * without spaces ("我是Jarvis"), which must still match, while "available"
+         * without spaces ("I am Jarvis" with no space), which must still match, while "available"
          * must not match a wake word "Ava".
          */
         internal fun ttsTextMentionsWakePhrase(text: String, phrases: List<String>): Boolean {
@@ -1300,8 +1300,8 @@ class VoiceSatelliteAudioInput(
 
         /**
          * CJK transliterations of wake-word name tokens. The Latin screen above cannot
-         * match these (贾维斯 never contains "jarvis"), yet their TTS echo can score on
-         * the model — 贾维斯 measured 0.57 against hey_jarvis at a −12 dB echo residual.
+         * match these (the transliteration "Jiaweisi" never contains "jarvis"), yet their TTS echo can score on
+         * the model — "Jiaweisi" measured 0.57 against hey_jarvis at a −12 dB echo residual.
          * Keyed by the Latin name token; entries are added on measured evidence plus
          * their common translation variants, since a spurious hold only bites while
          * far-end audio is actually playing.
@@ -2665,7 +2665,7 @@ class VoiceSatelliteAudioInput(
             // (hardware HAL or software) is re-converging: the residual runs
             // several times above the machine floor's learned prediction, and
             // the floor's double-talk gate skips learning on exactly those
-            // frames. Isolated opening words ("你好", "行。") walk the stop
+            // frames. Isolated opening words ("hello", "OK.") walk the stop
             // template through that gap. The detector keeps being fed (state
             // and gain learning stay continuous); only the dispatch is
             // withheld, mirroring the wake-side convergence window.

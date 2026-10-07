@@ -187,7 +187,7 @@ class VoiceSatellite(
     name,
     port,
     VoiceSatelliteEntities.buildEntities(
-        // 预热 availableWakeWords：在 Server accept 前强制 lazy 同步加载，确保收到 HA 配置请求时能瞬时返回完整列表
+        // Warm availableWakeWords: force the lazy load to finish synchronously before Server accept, so an HA config request returns the full list immediately
         audioInput.also { Log.d(TAG, "Preloaded ${it.availableWakeWords.size} wake words") },
         player,
         voiceChannelEnabled,
@@ -1747,7 +1747,7 @@ class VoiceSatellite(
         val wakeWords = audioInput.availableWakeWords.distinctBy { it.id }
         val activeWakeWords = audioInput.activeWakeWords.value.distinct().take(2)
 
-        // 绝不回空列表：若唤醒词未就绪，宁可不响应让 HA 超时保留旧选项
+        // Never reply with an empty list: if wake words are not ready, skip the response so HA times out and keeps the previous options
         if (wakeWords.isEmpty()) {
             Log.w(TAG, "sendVoiceAssistantConfiguration: availableWakeWords is empty, skipping response to prevent HA clearing options")
             return
@@ -1840,7 +1840,7 @@ class VoiceSatellite(
             showErrorToast(context.getString(R.string.pipeline_error_ha_disconnected))
         }
 
-        // HA 断开后清空场景占位符订阅记录，否则重连时 subscribeSceneEntities 会跳过已记录的实体
+        // After HA disconnects, clear scene-placeholder subscription records; otherwise subscribeSceneEntities skips those entities on reconnect
         subscribedSceneRefs.clear()
         sceneEntityStateCache.clear()
         sceneEntityUnitCache.clear()
@@ -2404,11 +2404,11 @@ class VoiceSatellite(
     @Volatile
     private var haServiceProbeTimeoutJob: Job? = null
 
-    // 通知场景占位符引用到的实体缓存（与 quickEntity 区分；可被任意 sensor 等使用）
+    // Entity cache referenced by notification-scene placeholders (distinct from quickEntity; any sensor and similar entities may use it)
     private val sceneEntityStateCache = mutableMapOf<String, String>()
     private val sceneEntityUnitCache = mutableMapOf<String, String>()
     private val sceneEntityAttributeCache = mutableMapOf<String, MutableMap<String, String>>()
-    // 已订阅过的 (entity_id, attribute) 集合，避免重复发 subscribe 响应
+    // Set of (entity_id, attribute) pairs already subscribed, so subscribe responses are not sent twice
     private val subscribedSceneRefs = mutableSetOf<Pair<String, String>>()
 
     fun getQuickEntityStateCache(): Map<String, String> = quickEntityStateCache.toMap()
@@ -2479,8 +2479,8 @@ class VoiceSatellite(
     }
 
     /**
-     * 扫描当前已加载的所有通知场景文本，订阅其中引用到的 HA 实体（state + 所需 attribute）。
-     * 可以重复调用：已订阅过的 (entity_id, attribute) 不会重复发送。
+     * Scan every loaded notification-scene text and subscribe to the HA entities it references (state + required attributes).
+     * Safe to call again: an (entity_id, attribute) pair that is already subscribed is not sent twice.
      */
     suspend fun subscribeSceneEntities() {
         try {
@@ -2490,7 +2490,7 @@ class VoiceSatellite(
                 }.toTypedArray()
             )
             if (refs.isEmpty()) return
-            // 每个实体至少订阅 state；sensor 类的额外订阅 unit_of_measurement（用于 {{...|unit}} 简写）
+            // Subscribe every entity to state at minimum; sensors also subscribe to unit_of_measurement (for the {{...|unit}} shorthand)
             val attrsByEntity = mutableMapOf<String, MutableSet<String>>()
             refs.forEach { ref ->
                 val set = attrsByEntity.getOrPut(ref.entityId) { mutableSetOf("") }
@@ -3025,7 +3025,7 @@ class VoiceSatellite(
                 }
             }
 
-            // 通知场景模板引用的实体：所有 subscribed 实体都顺带写入 scene cache（即便也被 quickEntity 用到）
+            // Entities referenced by notification-scene templates: every subscribed entity is also written into the scene cache (even if quickEntity uses it too)
             val sceneEntityId = entityId.lowercase()
             if (state.isNotEmpty() && subscribedSceneRefs.any { it.first == sceneEntityId }) {
                 when {
@@ -4245,7 +4245,7 @@ class VoiceSatellite(
         }
         scope.launch {
             if (isAssistTurnActive()) {
-                // Already in a turn: this is「闭嘴一下」, not barge-in-and-listen.
+                // Already in a turn: this is "be quiet for a moment", not barge-in-and-listen.
                 // Re-waking here cleared stopRequested and let stale TTS keep talking.
                 localIntentFallback.cancel()
                 stopVoiceSession()
@@ -4273,7 +4273,7 @@ class VoiceSatellite(
     /**
      * Mic is opening or already open. A hold-to-talk can latch onto this listen.
      * Processing / TTS / a remote-AI seat are not collecting — latching there
-     * would have to 闭嘴 the reply.
+     * would have to hush the reply.
      */
     fun isCollectingSpeech(): Boolean {
         if (_remoteAiHold.value || conversationEngineHold) return false
@@ -4401,7 +4401,7 @@ class VoiceSatellite(
         val currentState = _state.value
         val remoteSeat = _remoteAiHold.value
         // Remote AI keeps the spoken-stop gate armed after HA RUN_END, but the
-        // channel is already Connected. Same abort as FAB 闭嘴 / abortVoiceSession.
+        // channel is already Connected. Same abort as FAB hush / abortVoiceSession.
         if (currentState == Listening ||
             currentState == Processing ||
             currentState == Responding ||
@@ -5194,7 +5194,7 @@ class VoiceSatellite(
         val wasListeningWithoutEvent = !searchListenOnly &&
             (_state.value == Listening) && !haReceivedPipelineEvent && listeningDurationMs > 1500
         // Remote seat still owns the turn: unwind the HA channel only. Do not
-        // drop chrome / duck / chorus — that would flash 空闲 under the cloud model.
+        // drop chrome / duck / chorus — that would flash idle under the cloud model.
         // Yield-for-call is the same keep: TTS / remote job must outlive the mic handoff.
         val remoteSeat = _remoteAiHold.value
         val keepSeat = remoteSeat || yieldCaptureOnly

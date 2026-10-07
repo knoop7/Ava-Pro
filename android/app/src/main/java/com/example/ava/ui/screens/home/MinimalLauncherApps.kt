@@ -411,7 +411,7 @@ private val ARABIC_ANCHOR_SET = ARABIC_ANCHORS.toHashSet()
  *
  * Latin buckets are located by binary searching the collator, not by reading each
  * label's first character. That is what lets a Chinese locale drive a pinyin A–Z
- * strip with no romanisation table: ICU already collates 北京 between "b" and "c",
+ * strip with no romanisation table: ICU already collates Beijing between "b" and "c",
  * so asking where "B" would be inserted lands on exactly the right app.
  *
  * @param apps must already be ordered by [sortMinimalLauncherApps].

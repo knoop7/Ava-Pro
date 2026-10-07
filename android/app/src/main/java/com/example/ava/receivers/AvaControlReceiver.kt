@@ -28,9 +28,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 /**
- * 通用广播接收器，允许外部应用控制 Ava 功能
+ * Generic broadcast receiver so other apps can drive Ava.
  *
- * 使用示例 (adb):
+ * Examples (adb):
  * adb shell am broadcast -a com.example.ava.ACTION_TOGGLE_MIC
  * adb shell am broadcast -a com.example.ava.ACTION_GRANT_BLUETOOTH
  * adb shell am broadcast -a com.example.ava.ACTION_GRANT_OVERLAY
@@ -49,7 +49,7 @@ import kotlinx.coroutines.launch
  * adb shell am broadcast -a com.example.ava.ACTION_SHOW_TOAST -p com.example.ava --es message "Mic muted"
  * adb shell am broadcast -a com.example.ava.ACTION_SHOW_TOAST -p com.example.ava --es message "Downloading engine…" --es tag gecko --ez long true
  * # Long / spaced copy: prefer message_b64 (shell eats spaces inside --es message)
- * MSG=$(printf '%s' '长文带 空格' | base64 | tr -d '\n')
+ * MSG=$(printf '%s' 'Long text with spaces' | base64 | tr -d '\n')
  * adb shell am broadcast -a com.example.ava.ACTION_SHOW_TOAST -p com.example.ava --es message_b64 "$MSG"
  */
 class AvaControlReceiver : BroadcastReceiver() {

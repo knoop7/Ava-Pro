@@ -507,8 +507,8 @@ object TouchPadMath {
     }
 
     /**
-     * Pinch-in (收) or pinch-out (放). Spreading moves the centroid more, so
-     * 放 is allowed a bit more travel than 收 before it looks like a drag.
+     * Pinch-in or pinch-out. Spreading moves the centroid more, so
+     * pinch-out is allowed a bit more travel than pinch-in before it looks like a drag.
      */
     fun isThreeFingerPinch(
         startSpan: Float,

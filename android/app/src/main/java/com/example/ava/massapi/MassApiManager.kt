@@ -41,7 +41,7 @@ import java.security.cert.X509Certificate
  *   owns vinyl progress, seek, and PCM.
  * - **Mass API connected with a bound queue clock**: Mass takes over vinyl
  *   progress paint via [SendspinManager.applyQueueProgressUiBridge]; Sendspin
- *   keeps PCM / 首/活尾 internally. Never seek/PCM from Mass — elapsed
+ *   keeps PCM / head / audible tail internally. Never seek/PCM from Mass — elapsed
  *   already seats the bar; seeking only restarts Queue Flow (false pauses).
  * - Queue `state` may only promote playing; never freeze the bar on idle/paused
  *   flashes. Real pause follows Sendspin.

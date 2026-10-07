@@ -172,7 +172,7 @@ fun SystemStyleEdgeHandle(
     // mid-close (that would flash the bar before the drawer finishes retracting).
     // isDragging is a key: finger-down cancels this job (incl. the hide fade). On
     // release, re-arm AUTO_HIDE→fade even when revealTick is unchanged — otherwise
-    // closing the drawer leaves the bar stuck at PRESENT with no 渐出.
+    // closing the drawer leaves the bar stuck at PRESENT with no fade-out.
     var lastPresentedReveal by remember { mutableLongStateOf(-1L) }
     LaunchedEffect(canShow, revealTick, isDragging) {
         if (!canShow) {

@@ -168,7 +168,7 @@ fun RootSettingsScreen(navController: NavController) {
                 )
             }
         }
-        // Shizuku 最低要求 Android 6.0 (API 23)，安卓 5 (API 21/22) 直接隐藏整张卡片
+        // Shizuku requires at least Android 6.0 (API 23); on Android 5 (API 21/22) hide the whole card
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
         item {
             SimpleCard {

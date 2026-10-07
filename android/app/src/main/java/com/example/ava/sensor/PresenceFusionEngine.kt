@@ -16,18 +16,18 @@ import kotlinx.coroutines.flow.asStateFlow
  *    log-odds sum while active. Correlated sources share a [Group] and only the
  *    strongest member of a group counts, so one utterance can't double-vote.
  *
- * 2. Hive inertia (蜂箱) — sustained activity builds "capital" (capped at
+ * 2. Hive inertia — sustained activity builds "capital" (capped at
  *    [CAPITAL_MAX_MS]) which stretches the leave hold up to [MAX_HOLD_MULTIPLIER]×.
  *    Someone who has been in the room for minutes is not declared gone after a
  *    few quiet seconds; a brief walk-through decays quickly. The configured
  *    leave seconds are the floor, not the whole story.
  *
- * 3. Causal hysteresis (因果) — occupancy is directional. Flipping ON requires
+ * 3. Causal hysteresis — occupancy is directional. Flipping ON requires
  *    the posterior to cross the user threshold; flipping OFF requires it to fall
  *    below a lower release line ([RELEASE_MARGIN_PERCENT] under the threshold),
  *    so wobbling evidence never makes the state flap.
  *
- * 4. House prior (全屋) — the prior is not fixed. Peer Avas share their verdict
+ * 4. House prior — the prior is not fixed. Peer Avas share their verdict
  *    as an `occupied=` field on the existing identity beacon (UDP 19848); when
  *    another room sees (or just saw) someone, a person is provably home and
  *    this room's prior rises, so its first weak signals are believed sooner.

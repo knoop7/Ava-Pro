@@ -22,7 +22,7 @@ import kotlin.math.max
 /**
  * Snapshot window that hides the blank frame of a [WindowManager] remove+add restack.
  *
- * Same idea as [com.example.ava.services.QuickWakeFabService] / pinned 飞书:
+ * Same idea as [com.example.ava.services.QuickWakeFabService] / pinned Feishu:
  * draw the live view, float a pixel-identical not-touchable copy on top, restack
  * the real window underneath, drop the fake once the real one has painted.
  *

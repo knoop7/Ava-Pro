@@ -6,13 +6,13 @@ package com.example.ava.voice
  */
 object QuickWakeFabGestures {
     /**
-     * Whether UP should fire [onTap] (start listen, or 闭嘴 on a live turn).
+     * Whether UP should fire [onTap] (start listen, or hush on a live turn).
      *
      * Idle: a settling thumb may wander past slop and still be a tap.
      * A swipe past the wander slops starts a drag instead — including
-     * idle after 闭嘴. Still-release after the drag-arm window is still
+     * idle after a hush. Still-release after the drag-arm window is still
      * a tap; pickup does not kill open/close.
-     * Live turn: any move past slop is a reposition — lifting must not 闭嘴.
+     * Live turn: any move past slop is a reposition — lifting must not hush.
      */
     fun shouldCommitTap(
         liveTurn: Boolean,
@@ -31,7 +31,7 @@ object QuickWakeFabGestures {
     /**
      * TAP swipe before pickup. Always drag — idle, live, or just-closed.
      * Abandoning an idle swipe used to drop the rest of the finger stream,
-     * so the disc felt stuck after 闭嘴.
+     * so the disc felt stuck after a hush.
      */
     fun shouldDragOnTapWander(
         pickedUp: Boolean,
@@ -42,7 +42,7 @@ object QuickWakeFabGestures {
 
     /**
      * Second tap while a listen is bouncing / orbiting, or any tap on a
-     * live turn, is 闭嘴. Wait-mic with nothing in flight stays a no-op.
+     * live turn, is a hush. Wait-mic with nothing in flight stays a no-op.
      */
     fun shouldCloseOnTap(
         awaitingListen: Boolean,

@@ -144,7 +144,7 @@ object ScreensaverController {
 
     /**
      * Soft-pause screensaver **display** (hide only — never mirrors HA `screensaver_display`
-     * OFF). Same path as Settings → 后台暂停 / Background Pause:
+     * OFF). Same path as Settings → Background Pause:
      * - switch on + confirmed Ava process background (not cold host-only, not a blip), or
      * - full now-playing surface is up (must not cover the song container).
      */

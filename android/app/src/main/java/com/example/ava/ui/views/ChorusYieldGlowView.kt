@@ -10,7 +10,7 @@ import com.example.ava.ui.VoiceAccentColors
 import kotlin.math.sqrt
 
 /**
- * Three static dots at the bottom center for 一呼百应 losers.
+ * Three static dots at the bottom center for chorus-wake losers.
  * Wake-word accent color. Level only changes size; no extra glow layer.
  */
 class ChorusYieldGlowView @JvmOverloads constructor(

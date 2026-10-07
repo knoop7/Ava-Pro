@@ -110,7 +110,7 @@ fun getAccentColor(): Color {
 fun getMassChromeAccent(): Color {
     val isDarkMode = isDarkModeEnabled()
     return if (isDarkMode) {
-        // 透棕 — theme brown with alpha (soft over dark surfaces)
+        // Translucent brown — theme brown with alpha (soft over dark surfaces)
         AccentBrown.copy(alpha = 0.88f)
     } else {
         // Day: gray chrome for Mass surfaces only (not app-wide accent)

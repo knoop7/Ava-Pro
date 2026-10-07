@@ -1111,8 +1111,9 @@ class NotificationOverlayService : Service() {
     }
 
     /**
-     * 字号管理检测：按可用宽度用 StaticLayout 试排，标题超过 2 行就逐级降 2sp，
-     * 最低 [TITLE_MIN_SP]；仍放不下时由 maxLines+ellipsize 兜底。全 API 可用（minSdk 21）。
+     * Font-size fit check: trial-layout with StaticLayout at the available width. If the
+     * title exceeds 2 lines, step down 2sp at a time, down to [TITLE_MIN_SP]. If it still
+     * does not fit, maxLines + ellipsize is the fallback. Available on every API (minSdk 21).
      */
     private fun fitTitleTextSizeSp(view: TextView, text: String): Float {
         val availWidth = textAvailWidthPx
@@ -1134,8 +1135,9 @@ class NotificationOverlayService : Service() {
     }
 
     /**
-     * 用当前 VoiceSatelliteService 缓存里的实体值替换 {{entity_id}} / {{entity_id|attr}} 占位符。
-     * 服务未就绪或缓存里没有值时，占位符会变成 "--"。
+     * Replace {{entity_id}} / {{entity_id|attr}} placeholders with entity values from the
+     * current VoiceSatelliteService cache. If the service is not ready or the cache has
+     * no value, the placeholder becomes "--".
      */
     private fun resolveSceneText(text: String): String {
         if (!com.example.ava.notifications.SceneTemplateResolver.hasPlaceholders(text)) return text
@@ -1152,7 +1154,7 @@ class NotificationOverlayService : Service() {
         }
     }
 
-    /** VoiceSatellite 收到目标实体新状态时调用：若当前场景正在显示且引用了该实体，刷新文本。 */
+    /** Called when VoiceSatellite receives a new state for a target entity: if the current scene is showing and references that entity, refresh the text. */
     fun onSceneEntityChanged(entityId: String) {
         val scene = currentScene ?: return
         val fullscreenVisible = overlayView?.visibility == View.VISIBLE
@@ -1336,7 +1338,7 @@ class NotificationOverlayService : Service() {
         @Volatile
         private var instance: NotificationOverlayService? = null
 
-        /** 用于运行中的服务获取当前 overlay 实例（例如收到 HA 状态推送时刷新可见场景）。 */
+        /** Used by a running service to get the current overlay instance (for example, to refresh a visible scene when an HA state push arrives). */
         fun getInstance(): NotificationOverlayService? = instance
 
         fun bringToFrontIfVisible() {

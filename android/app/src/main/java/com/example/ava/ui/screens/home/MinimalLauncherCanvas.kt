@@ -15,7 +15,7 @@ import kotlin.math.sin
  * Free-canvas helpers for the minimal launcher workspace.
  *
  * Positions and widget sizes are stored as fractions of the page (0..1).
- * Placement uses finger drop + ruler snap (标尺对齐) by default.
+ * Placement uses finger drop + ruler snap (ruler alignment) by default.
  * Icons never stack: overlaps / zero-gap seats are auto-nudged apart.
  */
 
@@ -56,7 +56,7 @@ const val MINIMAL_LAUNCHER_ALIGN_THRESH_DP = 12f
 /** Frac fallback when density/page size unavailable. */
 const val MINIMAL_LAUNCHER_ALIGN_THRESH_FRAC = 0.03f
 
-/** Master switch — default ON (标尺定理). */
+/** Master switch — default ON (ruler principle). */
 const val MINIMAL_LAUNCHER_ALIGN_ENABLED = true
 
 /**
@@ -119,7 +119,7 @@ fun iconBoxNorm(
         else -> 1.28f
     }
     // Portrait packs horizontally (factor 1). Landscape packs vertically using
-    // the labelled seat height so "上下能放几行" matches on-screen rows.
+    // the labelled seat height so "how many rows fit top to bottom" matches on-screen rows.
     val packEdgePx = if (landscape) pageH else pageW
     val alongFactor = if (landscape) labelFactor else 1f
     // Sidebar handle is on the LEFT/RIGHT edge — only portrait (horizontal)

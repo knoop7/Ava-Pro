@@ -126,7 +126,7 @@ class QqMusicLyricsClient(
         val trimmedArtist = artist.trim()
         val trimmedAlbum = album.trim()
         // Search without parenthetical version noise; scoring still sees raw title.
-        // Album stays out of the search string (it kills QQ recall, e.g. 神选+赫鬼)
+        // Album stays out of the search string (it kills QQ recall, e.g. "神选+赫鬼")
         // and only participates in [QqLyricSongMatcher] ranking.
         val searchTitle = bareTitle.ifBlank { title.trim() }
         val query = if (trimmedArtist.isNotBlank()) {
@@ -259,7 +259,7 @@ object QqLyricSongMatcher {
     private val FEAT_SPLIT = Regex("""\b(?:feat\.?|ft\.?|featuring)\b""", RegexOption.IGNORE_CASE)
     /**
      * Split collaborative credits before normalize (which turns `&` / `,` into spaces).
-     * Bare `和` is NOT a splitter — it false-splits names like 平和. Prefer
+     * Bare `和` is NOT a splitter — it false-splits names like "平和". Prefer
      * punctuation / spaced joiners (`A 和 B`, `A/B`, `A、B`).
      */
     private val ARTIST_SPLIT = Regex(
@@ -436,7 +436,7 @@ object QqLyricSongMatcher {
         total -= versionPenalty("$title $artist $queryAlbum", songName, songAlbum, singers)
         total -= parenMismatchPenalty(title, songName)
         // Without artist, prefer singer script that matches the title script
-        // (avoids "Hey Jude" → 孙燕姿 cover when Beatles is also in the list).
+        // (avoids "Hey Jude" → a "孙燕姿" cover when Beatles is also in the list).
         if (artist.isBlank()) {
             total += scriptAffinity(title, singers.firstOrNull().orEmpty())
         }
@@ -494,7 +494,7 @@ object QqLyricSongMatcher {
     /**
      * Soft script affinity when artist is unknown.
      * Latin title + CJK-only singer → cover/localization penalty.
-     * CJK title + Latin-only singer → lighter penalty (e.g. 夜曲 piano vs 周杰伦).
+     * CJK title + Latin-only singer → lighter penalty (e.g. "夜曲" piano vs "周杰伦").
      */
     private fun scriptAffinity(title: String, primarySinger: String): Int {
         if (primarySinger.isBlank()) return 0

@@ -10,7 +10,7 @@ enum class SatelliteSetupTipKind {
 
     /**
      * HA default Assist intent library replied with `no_intent`
-     * ("抱歉，我无法理解…" / "Sorry, I couldn't understand that").
+     * ("Sorry, I couldn't understand…" / "Sorry, I couldn't understand that").
      * Guide user to another conversation agent or Claw Assistant (ha_claw).
      */
     ConversationNoIntent,

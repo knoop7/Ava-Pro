@@ -137,7 +137,7 @@ val NEW_USER_SIDEBAR_SETTINGS = SidebarSettings(
     itemOrder = DEFAULT_SIDEBAR_ITEM_ORDER,
 )
 
-/** Footer 「设置」 label, stored beside item names without becoming a list row. */
+/** Footer "Settings" label, stored beside item names without becoming a list row. */
 const val SIDEBAR_SETTINGS_LABEL_KEY = "Settings"
 
 /** User-chosen label for [key], or null to fall back to the built-in translation. */

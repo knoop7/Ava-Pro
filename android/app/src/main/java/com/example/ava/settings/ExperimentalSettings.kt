@@ -151,7 +151,7 @@ data class ExperimentalSettings(
     val mainThreadStallWatchdogEnabled: Boolean = false,
     
     val microphoneVolume: Float = 1.0f,
-    /** 一呼百应: LAN arbiter so only one nearby Ava answers the same wake. */
+    /** Chorus wake: LAN arbiter so only one nearby Ava answers the same wake. */
     val multiDeviceArbiterEnabled: Boolean = true,
     
     /** Sync dark mode state to Home Assistant as a switch entity. */

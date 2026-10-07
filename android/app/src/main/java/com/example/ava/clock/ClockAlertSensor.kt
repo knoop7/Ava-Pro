@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.map
 
 /**
  * Occupied clock-alert slots as HA `datetime.*` entities (date + time).
- * Names stay 任务事件(闹钟) / 任务事件(提醒)-N. Empty slots are not registered.
+ * Names stay "任务事件(闹钟)" / "任务事件(提醒)-N". Empty slots are not registered.
  */
 object ClockAlertSensor {
     const val SLOT_COUNT = 20

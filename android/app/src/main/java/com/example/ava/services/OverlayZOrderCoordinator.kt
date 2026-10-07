@@ -24,9 +24,9 @@ import com.example.ava.utils.ScreenBlankOverlay
  * a base/dashboard layer; voice, notification and control overlays must stay above it.
  *
  * Passive dashboard tier (below vinyl FAB): screensaver clock, dream clock, weather, quick entity.
- * Vinyl / mini cover FAB stays above that tier. The in-overlay «返回» dock rides inside
+ * Vinyl / mini cover FAB stays above that tier. The in-overlay «Back» dock rides inside
  * each of those windows (no second overlay). Active UI (HA switch, notifications, volume)
- * stays above vinyl. The Quick Wake mic is raised last among interactive overlays so 飞书 /
+ * stays above vinyl. The Quick Wake mic is raised last among interactive overlays so Feishu /
  * captions / toasts cannot bury it. Smart AOD and the screen-blank plate still cover the mic.
  *
  * Browser vs expanded music:
@@ -92,9 +92,9 @@ object OverlayZOrderCoordinator {
 
     /**
      * FLAG_FULLSCREEN + layout-in-screen is the Esper / FAB / caption WM sublayer.
-     * FLAG_HARDWARE_ACCELERATED matches 飞书 TextureView windows so software-composited
+     * FLAG_HARDWARE_ACCELERATED matches Feishu TextureView windows so software-composited
      * mic windows can actually climb them. FLAG_NOT_TOUCH_MODAL is load-bearing:
-     * vinyl / 飞书 / AI page all carry it; without it many ROMs keep those
+     * vinyl / Feishu / AI page all carry it; without it many ROMs keep those
      * windows above a NOT_FOCUSABLE-only mic no matter how often we remove+add.
      */
     fun voiceSublayerFlags(): Int =
@@ -163,7 +163,7 @@ object OverlayZOrderCoordinator {
     /**
      * Idle Smart AOD covers the mic. Clock / vinyl / entity plates are the
      * cover. The Web screensaver (even with its own dim) is not — the disc
-     * stays; the touch pad yields separately. A pinned 飞书 / AI page does
+     * stays; the touch pad yields separately. A pinned Feishu / AI page does
      * not cancel that yield — opening the window used to restore the disc
      * on top of the plate.
      */
@@ -217,7 +217,7 @@ object OverlayZOrderCoordinator {
         shouldHoldVoiceUnderNotificationScene() || AppWindowService.hasWindowAttached()
 
     /**
-     * Pinned app windows (飞书 etc.) land on top of the same overlay type via
+     * Pinned app windows (Feishu etc.) land on top of the same overlay type via
      * [WindowManager.addView]. Voice captions may climb them; the mic stays put —
      * a small floating window does not need the disc restacked over it.
      */
@@ -244,7 +244,7 @@ object OverlayZOrderCoordinator {
             ScreenBlankOverlay.bringToFrontIfVisible(stackGeneration)
             return
         }
-        // Vinyl mini FAB / 飞书 / Esper first. The mic is its own window —
+        // Vinyl mini FAB / Feishu / Esper first. The mic is its own window —
         // do not piggy-back it on the vinyl raise or it gets buried by the
         // rest of a later reassert pass.
         AppWindowService.bringPinnedToFront()
@@ -441,7 +441,7 @@ object OverlayZOrderCoordinator {
             !shouldSkipVoiceClimb() &&
             view.visibility == View.VISIBLE &&
             view.alpha > 0.02f
-        // Caller already has a snapshot up (飞书 TextureView / mic restack lambda).
+        // Caller already has a snapshot up (Feishu TextureView / mic restack lambda).
         if (!mask) {
             val ok = restack()
             if (ok && climbMic) {

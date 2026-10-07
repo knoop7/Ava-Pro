@@ -83,10 +83,10 @@ fun computeVoiceMessageUiScale(screenWidth: Float, screenHeight: Float): VoiceCa
     return VoiceCallUiScale(control = control, text = text)
 }
 
-/** [视频 | 挂断] plus the mute button, at control scale 1. */
+/** [Video | Hang up] plus the mute button, at control scale 1. */
 internal const val VoiceCallConnectedDesignWidthDp = 320f
 
-/** [视频 | 挂断] alone, at control scale 1. */
+/** [Video | Hang up] alone, at control scale 1. */
 internal const val VoiceCallBarDesignWidthDp = 248f
 
 /**

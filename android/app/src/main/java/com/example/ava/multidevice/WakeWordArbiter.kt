@@ -19,7 +19,7 @@ import kotlin.concurrent.thread
 import kotlin.math.abs
 
 /**
- * LAN wake-word arbiter for 一呼百应.
+ * LAN wake-word arbiter for chorus wake (one call, one nearby device answers).
  *
  * Uses a standing UDP listener on [PORT] — not 19847 (Bluetooth presence `AVA_CLAIM:`)
  * and not AvaVoice 19848/19849. Send uses a separate ephemeral socket so the listener

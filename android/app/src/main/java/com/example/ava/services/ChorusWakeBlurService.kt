@@ -22,7 +22,7 @@ import com.example.ava.ui.VoiceAccentColors
 import com.example.ava.ui.views.ChorusYieldGlowView
 
 /**
- * Light dim for 一呼百应 losers, plus three static dots at the bottom center.
+ * Light dim for chorus-wake losers, plus three static dots at the bottom center.
  * Dot color is the user's wake-word accent. Level only changes dot size.
  * Fade in / fade out only. Touches pass through.
  */

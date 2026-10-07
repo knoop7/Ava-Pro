@@ -160,7 +160,7 @@ class AppWindowScrcpy(
         // creation. This device carries enable_freeform_support=1 (the freeform
         // fallback path turns it on), which makes the new display default to
         // *freeform*: the app then opens as a small ~660x770 freeform window
-        // with black all around instead of filling the mirror — the "很小一块"
+        // with black all around instead of filling the mirror — the "tiny patch"
         // reported on the vivo Android 11 device. Turn it off so the display is
         // born fullscreen and the app fills it. Verified on-device: the same
         // recorder came up freeform 660x770 with the flag on, fullscreen

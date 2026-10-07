@@ -741,7 +741,7 @@ internal class NotificationBannerOverlay(private val context: Context) {
         }
 
     /**
-     * Light: keep a readable pastel of the pick (小清新 — white into color).
+     * Light: keep a readable pastel of the pick (fresh and light — white into color).
      * Dark: quieter ink wash so the card stays a dark surface.
      */
     private fun washTone(color: Int, isDark: Boolean): Int {

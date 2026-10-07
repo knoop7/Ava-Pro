@@ -106,14 +106,14 @@ data class LyricFollowPreset(
 }
 
 private val FOLLOW_PRESETS: Array<LyricFollowPreset> = arrayOf(
-    // 0 稳
+    // 0 steady
     LyricFollowPreset(3500, 5000, 280, 60, 160, 1800, 600, 200, 280),
-    // 1 稍稳
+    // 1 slightly steady
     LyricFollowPreset(3000, 4500, 250, 80, 140, 1500, 500, 175, 240),
-    // 2 默认 — shipped clock
+    // 2 default — shipped clock
     LyricFollowPreset(2500, 4000, 220, 100, 120, 1200, 400, 150, 200),
-    // 3 稍跟
+    // 3 slightly follow
     LyricFollowPreset(1800, 3000, 190, 130, 100, 900, 320, 75, 100),
-    // 4 跟
+    // 4 follow
     LyricFollowPreset(1200, 2000, 160, 160, 80, 600, 250, 0, 0),
 )

@@ -1526,7 +1526,7 @@ class SendspinClient(
 
     /**
      * Advance along the server timeline only when past [playThroughLateUs].
-     * Mild lateness must play through — skipping here is what makes sync "卡卡"
+     * Mild lateness must play through — skipping here is what makes sync "choppy"
      * and then look like it needs aggressive catch-up.
      */
     private fun alignChunkToTimeline(

@@ -321,7 +321,7 @@ class VinylCoverService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedS
 
     /**
      * First-run discoverability toast for the full-screen player: system Back is
-     * dead here (NOT_FOCUSABLE), so the exit gesture is long-press 3s → «返回».
+     * dead here (NOT_FOCUSABLE), so the exit gesture is long-press 3s → «Back».
      * Shown 1s after the player becomes visible, at most [LONG_PRESS_HINT_MAX_SHOWS]
      * times per device install (counted when actually displayed, persisted).
      */
@@ -692,7 +692,7 @@ class VinylCoverService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedS
                     // Compose 2s hold never finishes. These panels end the touch
                     // immediately (dumpsys: touchscreen UP, then mouse hover that
                     // is not delivered to this window), so wait-for-hold stays
-                    // cancelled and «返回» never leaves GONE. Show it on release
+                    // cancelled and «Back» never leaves GONE. Show it on release
                     // after the click has already been delivered.
                     if (!chromeAlreadyShown) {
                         revealLegacyBackChrome()
@@ -1347,7 +1347,7 @@ class VinylCoverService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedS
      * so the system Back key is delivered to whatever sits behind the overlay.
      * The Compose 2s hold is also dead here: the digitizer finishes the touch at
      * once and the rest of the contact arrives as mouse hover, which this window
-     * never sees. Pop «返回» on finger-up instead. Newer APIs keep the 2s hold.
+     * never sees. Pop «Back» on finger-up instead. Newer APIs keep the 2s hold.
      */
     private fun revealLegacyBackChrome() {
         if (Build.VERSION.SDK_INT > Build.VERSION_CODES.O_MR1) return
@@ -1361,7 +1361,7 @@ class VinylCoverService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedS
 
     /**
      * Full-screen expand covers the launcher and is NOT_FOCUSABLE (system Back is
-     * dead). Surface «返回» without the 3s long-press so cold-start empty shell
+     * dead). Surface «Back» without the 3s long-press so cold-start empty shell
      * stays escapable.
      */
     private fun revealChromeForForcedExpand() {
@@ -2706,7 +2706,7 @@ class VinylCoverService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedS
     }
 
     /**
-     * Bind the shared dashboard «返回» strip only while the full media overlay
+     * Bind the shared dashboard «Back» strip only while the full media overlay
      * is expanded (same chrome as weather / clock). Mini FAB stays unbound.
      * Also mirrors expanded visibility onto HA `vinyl_cover_display` when exposed.
      */
@@ -2720,7 +2720,7 @@ class VinylCoverService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedS
             DashboardOverlayChrome.bringToFront()
             if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) {
                 // Long-press never completes on these panels, and a tap-to-reveal
-                // hides again in 3s. Keep «返回» up for the whole expanded session
+                // hides again in 3s. Keep «Back» up for the whole expanded session
                 // so the player can actually be put away.
                 DashboardOverlayChrome.reveal(
                     DashboardOverlayChrome.Kind.MEDIA_PLAYER,
@@ -3109,7 +3109,7 @@ class VinylCoverService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedS
         private const val CROSSFADE_IN_MS = 260
         private const val COLLAPSE_FADE_MS = 240
         private const val CROSSFADE_SAFETY_MS = 900L
-        /** Keep «返回» up longer on empty waiting shell — no media controls to discover exit. */
+        /** Keep «Back» up longer on empty waiting shell — no media controls to discover exit. */
         private const val EMPTY_SHELL_CHROME_AUTO_HIDE_MS = 12_000L
 
         /** First-run long-press hint: delay after the full player becomes visible. */

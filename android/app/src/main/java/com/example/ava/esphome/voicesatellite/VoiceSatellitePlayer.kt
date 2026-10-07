@@ -79,8 +79,8 @@ class VoiceSatellitePlayer(
     
     private val _notificationScene = MutableStateFlow(SceneReset.IDLE)
     val notificationScene = _notificationScene.asStateFlow()
-    // 展示用的触发流：StateFlow 会去重，HA 连续写入同一场景时第二次不会发射，
-    // 通知就无法重新弹出、倒计时也不会重置。
+    // Display trigger stream: StateFlow dedupes, so a second HA write of the same scene does not emit,
+    // the notification cannot pop again, and the countdown does not reset.
     private val _notificationSceneRequests = kotlinx.coroutines.flow.MutableSharedFlow<String>(
         replay = 0,
         extraBufferCapacity = 8,

@@ -171,7 +171,7 @@ object OpenWakeWordCutoffPolicy {
 
     /**
      * Missing ring / extract / mark: level 1 fail-opens (streaming already cleared
-     * the native bar; an infrastructure miss must not deafen 严格+). Level 2 stays
+     * the native bar; an infrastructure miss must not deafen strict+). Level 2 stays
      * fail-closed — that is the "max verify, soft far-field may miss" contract.
      */
     fun extraStrictnessAllowUnverified(extraLevel: Int): Boolean = extraLevel in 1 until 2

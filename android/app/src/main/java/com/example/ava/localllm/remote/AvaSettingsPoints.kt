@@ -304,7 +304,7 @@ internal object AvaSettingsPoints {
         return Intent.NONE
     }
 
-    /** True when the utterance is 设置 / settings plus openers, and nothing else. */
+    /** True when the utterance is "设置" / settings plus openers, and nothing else. */
     internal fun isBareSettings(utterance: String): Boolean {
         var rest = utterance.lowercase(Locale.ROOT)
         if (SETTINGS_KEYS.none { rest.contains(it) }) return false
@@ -317,7 +317,7 @@ internal object AvaSettingsPoints {
         return rest.replace(Regex("[\\s\\p{Punct}]+"), "").isEmpty()
     }
 
-    /** 设置闹钟 / 设置提醒 — do not open the settings tree. */
+    /** "设置闹钟" / "设置提醒" — do not open the settings tree. */
     internal fun refuseSettingsOpen(spoken: String): Boolean {
         val q = spoken.trim().ifBlank { lastUtterance }
         if (q.length < 2) return false

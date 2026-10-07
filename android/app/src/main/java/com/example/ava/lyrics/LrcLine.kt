@@ -73,7 +73,7 @@ object LrcParser {
 
     /**
      * QQ Music (and similar) often return a timed placeholder for non-singable tracks, e.g.
-     * 「此歌曲为纯音乐，请您欣赏」 / 「此歌曲为没有填词的口白，请您欣赏」.
+     * "此歌曲为纯音乐，请您欣赏" / "此歌曲为没有填词的口白，请您欣赏".
      * When every lyric line is that notice, treat as no lyrics.
      */
     fun isInstrumentalOnly(lines: List<LrcLine>): Boolean {
@@ -88,7 +88,7 @@ object LrcParser {
      * marker, soft-cap by language-aware speech length so karaoke does not
      * crawl through an unmarked instrumental gap.
      *
-     * Soft-cap is sweep-only — it does **not** invent a ♫ row. Visible 卡间奏
+     * Soft-cap is sweep-only — it does **not** invent a ♫ row. A visible interlude card
      * still requires a blank stamp that passes [isDisplayableInterlude] (≥2 marks).
      */
     fun singingEndMs(lines: List<LrcLine>, index: Int): Long {
@@ -141,7 +141,7 @@ object LrcParser {
 
     /**
      * How many interlude marks (0..5) for [spanMs].
-     * Sub-3s gaps → 0 (too short for a real 卡间奏 — keep timeline, hide ♫).
+     * Sub-3s gaps → 0 (too short for a real interlude card — keep timeline, hide ♫).
      * Longer instrumental → 2..5.
      * **Never 1** — a single-note row is unreliable telemetry; skip straight to 0 or ≥2.
      */
@@ -170,7 +170,7 @@ object LrcParser {
     }
 
     /**
-     * Mid-song blank stamp long enough to show as 卡间奏 (≥2 ♫).
+     * Mid-song blank stamp long enough to show as an interlude card (≥2 ♫).
      * Brief gaps and trailing outro stamps stay in the timeline but are not rows.
      */
     fun isDisplayableInterlude(lines: List<LrcLine>, index: Int): Boolean {
@@ -329,11 +329,11 @@ object LrcParser {
             .replace("。", "")
         if (normalized.isEmpty()) return false
         val enjoy = normalized.contains("请您欣赏") || normalized.contains("请欣赏")
-        // 「此歌曲为纯音乐，请您欣赏」
+        // Instrumental notice: "此歌曲为纯音乐，请您欣赏"
         if (normalized.contains("此歌曲为纯音乐")) return true
         if (normalized.contains("纯音乐") && enjoy) return true
         if (normalized.contains("此歌曲") && normalized.contains("纯音乐") && enjoy) return true
-        // 「此歌曲为没有填词的口白，请您欣赏」
+        // Spoken-word notice: "此歌曲为没有填词的口白，请您欣赏"
         if (normalized.contains("没有填词的口白")) return true
         if (normalized.contains("此歌曲") && normalized.contains("口白") && enjoy) return true
         if (normalized.contains("没有填词") && normalized.contains("口白")) return true

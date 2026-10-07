@@ -44,7 +44,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
- * In-overlay «返回» chrome. Each fullscreen overlay hosts its own strip as the
+ * In-overlay «Back» chrome. Each fullscreen overlay hosts its own strip as the
  * last child of its existing FrameLayout — never a second WindowManager window.
  *
  * Hidden stays [View.GONE] in the tree (alpha 0) — still attached, never a

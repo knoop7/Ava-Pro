@@ -112,7 +112,7 @@ fun guessDawnSlotIcon(entityId: String, displayHint: String = ""): String {
     if (id.isEmpty()) return "mdi:home-assistant"
     val domain = id.substringBefore('.', missingDelimiterValue = "")
     val objectId = id.substringAfter('.', missingDelimiterValue = id)
-    // Friendly name / label often carries 温度·湿度 when the object_id does not.
+    // Friendly name / label often carries temperature · humidity when the object_id does not.
     val hint = displayHint.trim().lowercase(Locale.ROOT)
     val haystack = "$objectId $hint"
 
@@ -131,7 +131,7 @@ fun guessDawnSlotIcon(entityId: String, displayHint: String = ""): String {
             }
         }
         "switch" -> {
-            // Temperature-named switches (e.g. label "HOME 温度") are not power outlets.
+            // Temperature-named switches (e.g. label "HOME temperature") are not power outlets.
             if (isTemperatureHint(haystack)) return "mdi:thermometer"
             if (isHumidityHint(haystack)) return "mdi:water-percent"
             // Many HA setups expose wall lights as switch.*_light — treat as bulb,
@@ -215,7 +215,7 @@ private fun isLightFixtureName(objectId: String): Boolean {
     ) {
         return true
     }
-    // Chinese bare 灯, but not 光照/亮度 sensors
+    // Chinese bare "light", but not illuminance/brightness sensors
     if (objectId.contains("灯") &&
         !objectId.contains("光照") &&
         !objectId.contains("亮度") &&
@@ -266,7 +266,7 @@ data class ScreensaverSettings(
     val haSwitchTwoWayEnabled: Boolean = false,
     val screensaverUrl: String = "https://flipflow.neverup.cn/clock.html",
     val screensaverUrlVisible: Boolean = false,
-    /** 黎明 · 画报屏保 master switch. SerialName keeps existing installs. */
+    /** Dawn · Magazine Screensaver master switch. SerialName keeps existing installs. */
     @SerialName("xiaomiWallpaperEnabled")
     val dawnWallpaperEnabled: Boolean = false,
     /**

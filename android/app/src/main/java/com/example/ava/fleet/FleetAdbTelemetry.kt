@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * Modes:
  * - [lite]: getprop + uptime only (display identity; cheap, soft-cached)
- * - full / deep: dumpsys + cpu sample (user-triggered「刷新传感器」)
+ * - full / deep: dumpsys + cpu sample (user-triggered "Refresh sensors")
  */
 object FleetAdbTelemetry {
     private const val LITE_CACHE_MS = 90_000L

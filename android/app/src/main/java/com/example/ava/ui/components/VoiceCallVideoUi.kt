@@ -389,7 +389,7 @@ fun VoiceCallFlipCameraButton(
     }
 }
 
-/** V4 bottom capsule: [视频 | 挂断] */
+/** V4 bottom capsule: [Video | Hang up] */
 @Composable
 fun VoiceCallV4ControlBar(
     modifier: Modifier = Modifier,

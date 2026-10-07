@@ -29,15 +29,15 @@ data class NotificationScene(
     val dividerColor: String,   
     val dotColor: String,       
     val animation: String,
-    /** 场景专属提示音；null = 未配置，回退到全局通知提示音设置。 */
+    /** Scene-specific alert sound; null = unset, fall back to the global notification sound. */
     val soundUri: String? = null,
-    /** false = 该场景静音；null = 未配置，回退全局。 */
+    /** false = this scene is muted; null = unset, fall back to the global setting. */
     val soundEnabled: Boolean? = null,
 ) {
 
     /**
-     * 解析本场景应播放的提示音 URI。
-     * 优先级：soundEnabled=false 静音 → soundUri → 全局 notificationSettings。
+     * Resolve the alert-sound URI this scene should play.
+     * Priority: soundEnabled=false mutes, then soundUri, then global notificationSettings.
      */
     fun resolveSoundUri(global: com.example.ava.settings.NotificationSettings): String? {
         if (soundEnabled == false) return null
@@ -305,7 +305,7 @@ object NotificationScenes {
     var refreshCount = androidx.compose.runtime.mutableStateOf(0)
         private set
 
-    /** 场景列表加载/刷新后回调，供外部（VoiceSatelliteService）重新订阅占位符引用的 HA 实体。 */
+    /** After the scene list loads or refreshes, so callers (VoiceSatelliteService) can resubscribe HA entities referenced by placeholders. */
     @Volatile
     var onScenesReloaded: (() -> Unit)? = null
 
@@ -541,8 +541,8 @@ object NotificationScenes {
             return
         }
 
-        // 开机时 Wi-Fi 经常还没有地址。先把这个 URL 上次成功的结果放出来，
-        // 失败的请求不能把列表清掉。换了 URL 则不能继续显示上一份。
+        // On boot Wi-Fi often has no address yet. Show this URL's last successful result first.
+        // A failed request must not clear the list. A different URL must not keep showing the previous one.
         val cached = loadCustomCache(url)
         if (cached != null) {
             if (publishCustomScenes(generation, cached)) {
@@ -668,8 +668,8 @@ object NotificationScenes {
                     saveCustomCache(url, jsonString, generation)
                     return CustomFetchResult.APPLIED
                 }
-                // 门户页或其它 200 HTML 不是场景列表，等网络就绪后再试。
-                // 合法的空 JSON 则停下来，已经显示的缓存保持不动。
+                // A portal page or other HTTP 200 HTML is not a scene list; retry once the network is ready.
+                // Valid empty JSON stops here; the cache already on screen stays put.
                 val trimmed = jsonString.trim().removePrefix("\uFEFF")
                 if (!trimmed.startsWith("[") && !trimmed.startsWith("{")) {
                     return CustomFetchResult.RETRY
@@ -743,7 +743,7 @@ object NotificationScenes {
             return
         }
         if (!customNetworkRetryInFlight.compareAndSet(false, true)) {
-            // 同一次加载里，onAvailable 和 validated 会连着到。这次失败后再补一次。
+            // In one load, onAvailable and validated arrive back to back. After this failure, try once more.
             if (customNetworkRetryOwner.get() == generation) {
                 customNetworkRetryQueued.set(true)
             }

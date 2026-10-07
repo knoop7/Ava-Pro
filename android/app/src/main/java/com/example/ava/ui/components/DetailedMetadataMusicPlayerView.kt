@@ -681,7 +681,7 @@ fun DetailedMetadataMusicPlayerView(
         }
 
     val logoLayout = OverlayLogoBadge.rememberLayoutDp()
-    // Mass rail owns the top edge while open — hide «返回» so it cannot steal taps.
+    // Mass rail owns the top edge while open — hide «Back» so it cannot steal taps.
     LaunchedEffect(massRailOpen) {
         if (massRailOpen) {
             DashboardOverlayChrome.hide(animated = true)
@@ -720,7 +720,7 @@ fun DetailedMetadataMusicPlayerView(
         modifier = modifier
             .fillMaxSize()
             .background(Color.Black)
-            // ~3s long-press wakes «返回» (auto-hide 3s). Skip while Mass rail is open.
+            // ~3s long-press wakes «Back» (auto-hide 3s). Skip while Mass rail is open.
             .then(
                 if (!massRailOpen) {
                     Modifier.revealMediaOverlayChromeOnLongPress(onRevealChrome)
@@ -1114,7 +1114,7 @@ fun DetailedMetadataMusicPlayerView(
         // (BadTokenException). Use [MediaPlayerStatsPanel] inside this ComposeView.
         // Poll runs only while the panel is composed (incl. brief exit animation).
         // Handle visibility locks to [DashboardOverlayChrome.stripVisible] — same
-        // touch-reveal / auto-hide as the «返回» strip (quick fade only).
+        // touch-reveal / auto-hide as the «Back» strip (quick fade only).
         var showMediaPlayerStatsSheet by remember { mutableStateOf(false) }
         val chromeStripVisible by DashboardOverlayChrome.stripVisible.collectAsState()
         LaunchedEffect(isSendspinSource, fullPlayerActive) {
@@ -2153,7 +2153,7 @@ private fun WaitingForMediaCenteredShell(
                 textAlign = TextAlign.Center,
                 stackArtistBelow = true,
                 prominent = true,
-                // At least as wide as the cover so 「等待媒体」 never clips mid-label.
+                // At least as wide as the cover so "Waiting for media" never clips mid-label.
                 modifier = Modifier.width(coverSide.coerceAtLeast(metaMinWidth)),
             )
         }
@@ -2806,7 +2806,7 @@ private fun KaraokeTrackingLyricLine(
         if (overflowing) (rawOverflowPx + dissolveEndPadPx).coerceAtLeast(0f) else 0f
 
     // Sweep head: soft between ~50ms ticks; hard-align at line open / seek-back
-    // so each verse still lands on the stamp (no soft lag at 开头).
+    // so each verse still lands on the stamp (no soft lag at the start).
     val drawnSweepAnim = remember { Animatable(0f) }
     LaunchedEffect(active, sweepKaraoke, sweepFraction) {
         if (!active || !sweepKaraoke) {
@@ -3526,7 +3526,7 @@ private const val LYRIC_PENDING_SEEK_TIMEOUT_MS = 2_500L
 private fun lyricDisplayText(lines: List<LrcLine>, index: Int): String {
     val line = lines.getOrNull(index) ?: return ""
     if (!line.isInterlude) return line.text
-    // Brief / outro blanks: keep for span math, never show a one-♫ 卡间奏.
+    // Brief / outro blanks: keep for span math, never show a one-♫ interlude card.
     if (!LrcParser.isDisplayableInterlude(lines, index)) return ""
     return LrcParser.interludeDisplayText(LrcParser.interludeSpanMs(lines, index))
 }
@@ -5316,7 +5316,7 @@ private const val LYRIC_OPEN_LEAD_MAX_MS = 4_000L
 /**
  * Upstream may lag the local fill-in by this much (Intent / 200ms ticker skew)
  * without treating it as a seek. Within the window we still **cap** how far
- * lyrics may sit ahead — never ignore and free-run (that caused 抢拍).
+ * lyrics may sit ahead — never ignore and free-run (that caused rushing the beat).
  */
 private const val LYRIC_STALE_PROGRESS_TOLERANCE_MS = 200L
 /**

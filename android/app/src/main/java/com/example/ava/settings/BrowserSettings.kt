@@ -183,8 +183,8 @@ data class BrowserSettings(
     val splitViewRatioRight: Int = 5,
     /**
      * Hide HA header/sidebar chrome: `off` | `auto` | `css` | `plugin`.
-     * Default `off` (same as Kiosk Satellite) — sidebar shows "Kiosk 覆盖";
-     * when on, sidebar shows "展开" and flips back to `off`.
+     * Default `off` (same as Kiosk Satellite) — sidebar shows "Kiosk cover";
+     * when on, sidebar shows "Expand" and flips back to `off`.
      * Turning on restores [haKioskModeLast] (default `auto`).
      */
     val haKioskMode: String = "off",

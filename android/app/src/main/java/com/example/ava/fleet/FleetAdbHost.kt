@@ -271,7 +271,7 @@ object FleetAdbHost {
         }
         val host = target.substringBeforeLast(':')
         // Connecting to this phone's own LAN IP is not a peer — adb may print "connected to"
-        // but the target never appears as a manageable device (or is folded into 本机).
+        // but the target never appears as a manageable device (or is folded into this device).
         if (isLoopbackOrLocalHost(host, context)) {
             return CmdResult(false, -1, "", "", error = "self_connect")
         }

@@ -1276,7 +1276,7 @@ class VoiceSatelliteService() : LifecycleService() {
         registerMemoryTrimCallback()
         scheduleDeferredStartupInit()
 
-        // 通知场景模板：场景列表加载/刷新后，重新订阅占位符引用的 HA 实体
+        // Notification scene templates: after the scene list loads or refreshes, resubscribe to the HA entities referenced by placeholders
         // Keep our own reference to each callback: both live on process-wide
         // singletons that outlive this Service, and onDestroy must be able to
         // clear exactly what we registered (never a successor's registration).
@@ -3830,7 +3830,7 @@ class VoiceSatelliteService() : LifecycleService() {
     fun getSceneEntityAttributes(): Map<String, Map<String, String>> =
         _voiceSatellite.value?.getSceneEntityAttributeCache() ?: emptyMap()
 
-    /** 通知场景列表（重新）加载后调用，订阅新引用的实体。 */
+    /** Called after the notification scene list is loaded or reloaded; subscribe to newly referenced entities. */
     suspend fun resubscribeSceneEntities() {
         _voiceSatellite.value?.subscribeSceneEntities()
         refreshHaEntityInterest()
@@ -3891,7 +3891,7 @@ class VoiceSatelliteService() : LifecycleService() {
         }
     }
 
-    /** 播放场景 JSON 中配置的提示音（asset / http）。 */
+    /** Play the prompt sound configured in the scene JSON (asset / http). */
     fun playSceneNotificationSound(uri: String) {
         if (uri.isBlank()) return
         _voiceSatellite.value?.player?.wakeSoundPlayer?.play(uri) {}
@@ -4684,7 +4684,7 @@ class VoiceSatelliteService() : LifecycleService() {
 
         /**
          * Quick Wake FAB: silent manual listen when idle. A tap during an active
-         * turn is [stopVoiceSession] (闭嘴), not barge-in-and-listen.
+         * turn is [stopVoiceSession] (Just stop), not barge-in-and-listen.
          */
         fun quickWake() {
             instance?._voiceSatellite?.value?.triggerManualWake(silent = true)

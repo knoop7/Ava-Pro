@@ -398,7 +398,7 @@ object AvaVoiceTools {
         return stripIdentityCaption(s.ifBlank { raw.trim() })
     }
 
-    /** Drop a leftover 名字（类型，型号） caption if the model still copied one. */
+    /** Drop a leftover name (type, model) caption if the model still copied one. */
     private fun stripIdentityCaption(raw: String): String {
         var s = raw.trim()
         if (s.endsWith("）")) {

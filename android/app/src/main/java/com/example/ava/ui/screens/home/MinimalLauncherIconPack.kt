@@ -36,7 +36,7 @@ import kotlin.math.min
 /**
  * Icon shape options:
  * - circle: perfect circle mask
- * - squircle: iOS-style super-ellipse (default, 方圆形)
+ * - squircle: iOS-style super-ellipse (default, squircle)
  * - rounded_square: large corner radius rectangle
  * - system: no mask — raw drawable as device provides
  */

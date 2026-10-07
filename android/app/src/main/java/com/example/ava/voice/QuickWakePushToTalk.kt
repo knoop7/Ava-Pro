@@ -22,7 +22,7 @@ import kotlinx.coroutines.launch
  *
  * If a listen is already open (wake word won the hold-arm race), [begin] latches
  * onto that uplink instead of calling [VoiceSatelliteService.quickWake], which
- * would 闭嘴 the turn. A reply already in flight is left alone — the hold is skipped.
+ * would hush the turn. A reply already in flight is left alone — the hold is skipped.
  *
  * Guard rails:
  * - A hold shorter than [MIN_HOLD_MS] is a brush, not speech — the session is aborted
@@ -75,7 +75,7 @@ object QuickWakePushToTalk {
     /**
      * How [begin] should treat the current satellite turn.
      * [WAKE]: idle — open a silent listen.
-     * [LATCH]: mic already collecting — keep that uplink, do not 闭嘴.
+     * [LATCH]: mic already collecting — keep that uplink, do not hush.
      * [SKIP]: reply / remote seat — do not start PTT and do not cut the turn.
      */
     enum class BeginAction { WAKE, LATCH, SKIP }

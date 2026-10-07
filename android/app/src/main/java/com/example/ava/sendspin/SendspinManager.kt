@@ -228,7 +228,7 @@ class SendspinManager(
     private var hasReceivedFirstMetadata = false
     private var cachedSendspinTitle: String? = null
     /**
-     * Track generation whose 首/活尾/duration are currently loaded.
+     * Track generation whose head/live tail/duration are currently loaded.
      *
      * Separate from [cachedSendspinTitle] because MA may pre-write that field for
      * instant identity paint ([applyKnownTrackIdentity]) before the Sendspin
@@ -336,9 +336,9 @@ class SendspinManager(
      * Mutex (exclusive paint ownership — do not race):
      * - **active**: only [OverlayProgressWriter.MassApiBridge] / local scrub
      *   may call [pushOverlayProgress]. Sendspin PCM / ticker / track_progress
-     *   keep internal 首/活尾 but must not paint vinyl.
+     *   keep internal head/live tail but must not paint vinyl.
      * - **inactive**: Sendspin alone owns the bar (pre-Mass behavior).
-     * Never writes PCM / 首 / 活尾 — paint seat only.
+     * Never writes PCM / head / live tail — paint seat only.
      */
     private var bridgedUiProgressActive: Boolean = false
     private var bridgedUiProgressMs: Long? = null
@@ -410,11 +410,11 @@ class SendspinManager(
     @Volatile
     private var lastGoodOverlayProgressMs: Long = 0L
     /**
-     * Self-maintained UI progress (HA-style 首尾):
-     * - 首 [progressHead*]: trusted upstream / seek anchor; local clock runs from here
-     * - 活尾 [audibleTailMs]: last written chunk mapped to track ms — UI must not run ahead
-     * - 硬尾 [cachedDurationMs]: track duration clamp
-     * Fake-zero / stop flashes never become a new 首.
+     * Self-maintained UI progress (HA-style head/tail):
+     * - head [progressHead*]: trusted upstream / seek anchor; local clock runs from here
+     * - live tail [audibleTailMs]: last written chunk mapped to track ms — UI must not run ahead
+     * - hard tail [cachedDurationMs]: track duration clamp
+     * Fake-zero / stop flashes never become a new head.
      */
     @Volatile
     private var progressHeadMs: Long? = null
@@ -651,7 +651,7 @@ class SendspinManager(
     /**
      * After PCM reseat pause→play: keep "still playing" intent until audible
      * (or hold expiry). Prevents our own reseat pause ACK from sticking as a
-     * real user pause (换歌后必须再点播放).
+     * real user pause (must tap play again after a track change).
      */
     private var reseatPlayingHoldUntilElapsed: Long = 0L
     /**
@@ -1392,7 +1392,7 @@ class SendspinManager(
         if (!snap.hasDisplayableContent()) return
         if (cachedSendspinTitle.isNullOrEmpty() && snap.songTitle.isNotEmpty()) {
             cachedSendspinTitle = snap.songTitle
-            // Same-track restore below re-seats 首/活尾/duration for this very track,
+            // Same-track restore below re-seats head/live tail/duration for this very track,
             // so claim the generation too — otherwise its first packet wipes them.
             progressIdentityTitle = snap.songTitle
         }
@@ -2591,14 +2591,14 @@ class SendspinManager(
     /**
      * Mass API queue clock → vinyl **progress bar** UI only.
      *
-     * Exclusive mutex (有 / 没有):
+     * Exclusive mutex (held / not held):
      * - **Active**: MA takes over vinyl progress paint. Sendspin PCM / ticker /
-     *   track_progress keep internal 首/活尾 but must not call
+     *   track_progress keep internal head/live tail but must not call
      *   [VinylCoverService.updateProgress] (see [pushOverlayProgress] writer gate).
      * - **Cleared / never set**: Sendspin alone owns the bar (unchanged).
      *
-     * Does **not** seat 首/活尾, calibrate audible mapper, or seek.
-     * Lyrics keep tracking audible via lag vs 活尾.
+     * Does **not** seat head/live tail, calibrate audible mapper, or seek.
+     * Lyrics keep tracking audible via lag vs live tail.
      */
     fun applyQueueProgressUiBridge(
         positionMs: Long,
@@ -5585,7 +5585,7 @@ class SendspinManager(
         if (metadata.trackDurationMs != null && metadata.trackDurationMs > 0L) {
             cachedDurationMs = metadata.trackDurationMs
         }
-        // Progress / speed: gated. Accepted samples become a new 首 only — never drive UI alone.
+        // Progress / speed: gated. Accepted samples become a new head only — never drive UI alone.
         applyUpstreamProgressFields(
             trackProgressMs = metadata.trackProgressMs,
             metadataTimestampUs = metadata.metadataTimestampUs,
@@ -5614,7 +5614,7 @@ class SendspinManager(
     }
 
     /**
-     * Local clock from 首. Paused / speed≤0 / pre-PCM / PCM-silent → frozen.
+     * Local clock from head. Paused / speed≤0 / pre-PCM / PCM-silent → frozen.
      * While PCM is flowing, this only fills gaps between audible emits; live
      * position authority is [audibleTailMs] via [displayProgressMs].
      */
@@ -5649,7 +5649,7 @@ class SendspinManager(
      * Lyrics must not consume this fill-in lead — [overlayLyricAudibleLagMs]
      * adds it so highlight tracks the speaker / audible tail after lag subtract.
      *
-     * Drift fix is [handleAudibleProgress] reseating 首 on every write — not a
+     * Drift fix is [handleAudibleProgress] reseating head on every write — not a
      * razor-thin slack. Slack must cover one audible-emit interval (~180ms) so
      * the bar does not freeze then jump; 250ms-without-reseat was the old bug
      * (rate nudge sawtooth). With reseat, ~one emit gap is enough and safe.
@@ -5833,7 +5833,7 @@ class SendspinManager(
     private fun interpolatedProgressMs(): Long? = localProgressFromHeadMs()?.let { clampToDuration(it) }
 
     /**
-     * Audible PCM write → update 活尾. Primary bar authority while playing;
+     * Audible PCM write → update live tail. Primary bar authority while playing;
      * lyrics undo bar fill-in via [overlayLyricAudibleLagMs].
      * First mapped write after a wait starts the wall-clock fill-in.
      */
@@ -6110,7 +6110,7 @@ class SendspinManager(
     }
 
     /**
-     * Seat 首 (and optionally clear 活尾). Used by seek / resume / trusted metadata.
+     * Seat head (and optionally clear live tail). Used by seek / resume / trusted metadata.
      */
     private fun seatProgressHead(
         positionMs: Long,
@@ -6119,7 +6119,7 @@ class SendspinManager(
         resetAudibleTail: Boolean,
     ) {
         var clamped = clampToDuration(positionMs)
-        // Mid-play / resume: never seat 首 ahead of 活尾 (metadata often leads ~0.5–1s).
+        // Mid-play / resume: never seat head ahead of live tail (metadata often leads ~0.5–1s).
         if (!resetAudibleTail) {
             audibleTailMs?.let { tail ->
                 clamped = clamped.coerceAtMost(tail + PROGRESS_METADATA_LEAD_SLACK_MS)
@@ -6169,7 +6169,7 @@ class SendspinManager(
     }
 
     private fun updateProgressCache(metadata: SendspinMetadata) {
-        // Duration only — progress 首 was applied in mergeSendspinMetadata.
+        // Duration only — progress head was applied in mergeSendspinMetadata.
         metadata.trackDurationMs?.takeIf { it > 0L }?.let { cachedDurationMs = it }
     }
 
@@ -7170,7 +7170,7 @@ class SendspinManager(
         return clampToDuration(best)
     }
 
-    /** Drop 首/活尾 (next / previous / title change). */
+    /** Drop head/live tail (next / previous / title change). */
     private fun clearHeldProgressForTrackChange() {
         cachedProgressMs = null
         lastGoodOverlayProgressMs = 0L
@@ -7211,7 +7211,7 @@ class SendspinManager(
     }
 
     /**
-     * Seat 首 at [positionMs] but keep the wall-clock frozen until the first
+     * Seat head at [positionMs] but keep the wall-clock frozen until the first
      * audible mapped write. Used by resume / protocol playing / seek so the bar
      * does not race the 1–2s AudioTrack / stream restart gap.
      * Always nearest-second hard seat so pause→play can +1s or −1s vs a floored
@@ -7285,7 +7285,7 @@ class SendspinManager(
         }
     }
 
-    /** Freeze 首 + 活尾 at the current displayed playhead (pause / stop). */
+    /** Freeze head + live tail at the current displayed playhead (pause / stop). */
     private fun freezeProgressAtCurrent(claimEpoch: Boolean = false) {
         val now = SystemClock.elapsedRealtime()
         playResumeGraceUntilElapsed = 0L
@@ -7416,7 +7416,7 @@ class SendspinManager(
             }
             return frozen
         }
-        // Playing: trust displayProgressMs (already 首/尾 capped).
+        // Playing: trust displayProgressMs (already head/tail capped).
         val clamped = clampToDuration(positionMs)
         if (clamped >= PROGRESS_FAKE_ZERO_ANCHOR_MS) {
             lastGoodOverlayProgressMs = clamped
@@ -7773,7 +7773,7 @@ class SendspinManager(
         progressOverlayJob = scope.launch {
             while (isActive) {
                 if (!VinylCoverService.ownsOverlayProgress(fromSendspin = true)) break
-                // Under Mass ownership, do not soft-freeze SP 首/活尾 from PCM gaps —
+                // Under Mass ownership, do not soft-freeze SP head/live tail from PCM gaps —
                 // that would stomp lyric lag math while the MA bar keeps moving.
                 maybeWatchDeadStream()
                 if (!bridgedUiProgressActive &&
@@ -8018,7 +8018,7 @@ class SendspinManager(
          */
         private const val PAUSED_ROLLBACK_CONFIRM_WINDOW_MS = 15_000L
         /**
-         * How far metadata may sit ahead of 活尾 when seating 首 / picking resume.
+         * How far metadata may sit ahead of live tail when seating head / picking resume.
          * Larger values re-introduce the ~1s pause/resume lead.
          */
         private const val PROGRESS_METADATA_LEAD_SLACK_MS = 250L
@@ -8027,11 +8027,11 @@ class SendspinManager(
          * Must cover [SendspinClient] audible-emit throttle (~180ms), with a
          * little margin for Intent/ticker skew — tighter than that freezes the
          * bar between emits (reads as lag). Cumulative drift is prevented by
-         * reseating 首 on every write, not by starving the fill-in.
+         * reseating head on every write, not by starving the fill-in.
          */
         private const val PROGRESS_AUDIBLE_SMOOTH_SLACK_MS = 160L
         /**
-         * Max 活尾 forward jump from one audible sample unless seek-sized.
+         * Max live tail forward jump from one audible sample unless seek-sized.
          * Blocks pending-arm stamping metadata lead onto the write clock.
          */
         private const val PROGRESS_AUDIBLE_TAIL_MAX_FORWARD_MS = 450L

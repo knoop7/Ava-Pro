@@ -26,7 +26,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 
-/** Drop ASCII / fullwidth parentheticals from titles (Remastered, 现场, etc.). */
+/** Drop ASCII / fullwidth parentheticals from titles (Remastered, Live, etc.). */
 fun stripParenthetical(title: String): String =
     title
         .replace(Regex("\\s*\\([^)]*\\)"), "")
