@@ -65,8 +65,9 @@ data class RemoteAiSettings(
      */
     val thinking: Boolean = true,
     /**
-     * When on, slot 1 is the voice primary. Later slots that are filled are
-     * tried in order after the current model fails twice. Off: [selectedId] only.
+     * When on, the first ready slot is the voice primary. Later ready slots are
+     * tried in order after the current model fails twice, or at once when it
+     * refuses the request (401 / 403 / 404 / 400). Off: [selectedId] only.
      */
     val fallbackEnabled: Boolean = false,
     /** Bumped once tokens on disk are sealed by [SecretBox]; forces the migrating write. */
@@ -155,18 +156,16 @@ fun RemoteAiSettings.pickedProfile(): RemoteAiProfile? =
 
 fun RemoteAiSettings.wireKey(): String = pickedProfile()?.wireKey().orEmpty()
 
-/** Slot used for the live voice seat. Continuation on: always slot 1. */
+/** Slot used for the live voice seat. Continuation on: the first ready slot. */
 fun RemoteAiSettings.voiceProfile(): RemoteAiProfile? =
-    if (fallbackEnabled) slotList().firstOrNull()?.takeIf { it.ready() } else selected()
+    if (fallbackEnabled) slotList().firstOrNull { it.ready() } else selected()
 
 fun RemoteAiSettings.voiceWireKey(): String = voiceProfile()?.wireKey().orEmpty()
 
-/** Primary first, then each later slot that is filled. Empty when none are ready. */
+/** Ready slots in slot order; a slot that is not filled is skipped. Empty when none are ready. */
 fun RemoteAiSettings.failoverChain(): List<RemoteAiProfile> {
     if (!fallbackEnabled) return listOfNotNull(selected())
-    val slots = slotList()
-    val first = slots.firstOrNull()?.takeIf { it.ready() } ?: return emptyList()
-    return listOf(first) + slots.drop(1).filter { it.ready() }
+    return slotList().filter { it.ready() }
 }
 
 /** Log line only — never the token. */
@@ -285,6 +284,11 @@ class RemoteAiSettingsStore(dataStore: DataStore<RemoteAiSettings>) :
         }
     }
 
+    /**
+     * Saves one slot. Does not move the live model: [selectedId] changes only
+     * through [useSlot], except when nothing usable is selected yet and this
+     * save makes a ready slot (no voice turn can be running on a dead slot).
+     */
     suspend fun upsert(profile: RemoteAiProfile) {
         update { current ->
             val slots = current.slotList().toMutableList()
@@ -294,8 +298,26 @@ class RemoteAiSettingsStore(dataStore: DataStore<RemoteAiSettings>) :
             val i = slots.indexOfFirst { it.id == saved.id }
             if (i >= 0) slots[i] = saved
             else if (slots.size < REMOTE_AI_SLOT_MAX) slots += saved
-            current.copy(profiles = slots, selectedId = saved.id)
+            val liveReady = slots.firstOrNull { it.id == current.selectedId }?.ready() == true
+            val selected = if (!liveReady && saved.ready() && slots.any { it.id == saved.id }) {
+                saved.id
+            } else {
+                current.selectedId
+            }
+            current.copy(profiles = slots, selectedId = selected)
         }
+    }
+
+    /** Explicit "use this slot". Refuses a slot that is not ready; returns true when it is now selected. */
+    suspend fun useSlot(id: String): Boolean {
+        var ok = false
+        update { current ->
+            val slot = current.slotList().firstOrNull { it.id == id }
+            if (slot == null || !slot.ready()) return@update current
+            ok = true
+            if (current.selectedId == id) current else current.copy(selectedId = id)
+        }
+        return ok
     }
 
     suspend fun addSlot(): String? {
@@ -312,26 +334,39 @@ class RemoteAiSettingsStore(dataStore: DataStore<RemoteAiSettings>) :
                 baseUrl = kind.defaultBaseUrl(),
             )
             created = next.id
-            current.copy(profiles = slots + next, selectedId = next.id)
+            // A new slot is empty: open it for editing, never make it the live model.
+            current.copy(profiles = slots + next)
         }
         return created
     }
 
-    suspend fun removeSlot(id: String) {
+    /**
+     * Drops a slot (never slot 1) and renumbers. The live slot keeps its
+     * selection under its new number; only removing the live slot itself
+     * moves selection, to the first ready slot (else slot 1).
+     * Returns the slot id the editor should open next, or null when nothing changed.
+     */
+    suspend fun removeSlot(id: String): String? {
+        var open: String? = null
         update { current ->
             val slots = current.slotList()
             val index = slots.indexOfFirst { it.id == id }
             if (index <= 0) return@update current
+            val liveIndex = slots.indexOfFirst { it.id == current.selectedId }
             val kept = slots.filterIndexed { i, _ -> i != index }
             val renumbered = kept.mapIndexed { i, profile ->
                 val n = i + 1
                 profile.copy(id = remoteAiSlotId(n), label = n.toString())
             }
-            val pick = (index - 1).coerceAtLeast(0)
-            current.copy(
-                profiles = renumbered,
-                selectedId = renumbered.getOrNull(pick)?.id ?: renumbered.first().id,
-            )
+            val selected = when {
+                liveIndex < 0 || liveIndex == index ->
+                    (renumbered.firstOrNull { it.ready() } ?: renumbered.first()).id
+                liveIndex > index -> renumbered[liveIndex - 1].id
+                else -> renumbered[liveIndex].id
+            }
+            open = renumbered.getOrNull((index - 1).coerceAtLeast(0))?.id ?: renumbered.first().id
+            current.copy(profiles = renumbered, selectedId = selected)
         }
+        return open
     }
 }

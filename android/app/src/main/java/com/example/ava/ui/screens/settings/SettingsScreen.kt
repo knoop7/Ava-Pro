@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -341,7 +342,11 @@ fun SettingsScreen(
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = backgroundColor,
-        contentWindowInsets = avaContentWindowInsets(isLandscape),
+        contentWindowInsets = if (masterPane) {
+            WindowInsets(0, 0, 0, 0)
+        } else {
+            avaContentWindowInsets(isLandscape)
+        },
         topBar = {
             SettingsHeaderBar(
                 title = stringResource(R.string.label_settings),

@@ -148,6 +148,8 @@ import com.example.ava.lyrics.LyricsRepository
 import com.example.ava.massapi.MassApiClient
 import com.example.ava.massapi.MassApiManager
 import com.example.ava.services.DashboardOverlayChrome
+import com.example.ava.services.OverlayLayerSplit
+import com.example.ava.settings.SettingsStyleSession
 import com.example.ava.ui.OverlayLogoBadge
 import com.example.ava.ui.rememberCompactSquareScreen
 import com.example.ava.ui.stripParenthetical
@@ -773,26 +775,46 @@ fun DetailedMetadataMusicPlayerView(
         // counted a square panel (often rotation 90) as landscape, so the Mass
         // rail opened the side-push instead of the portrait overlay. Landscape
         // is a clearly wide pane only — same 1.2 gate as the clock.
+        // A left/right slice stays the portrait stack until the user drags it
+        // past that gate. Width < 92% of the screen is not enough: the divider
+        // never opens a pane that wide, so the old check never released.
         val compactSquare = rememberCompactSquareScreen()
         val deviceWide = !compactSquare && screenW > screenH * 1.2f
-        val sideBySidePane = deviceWide &&
-            maxWidth.value < screenW * 0.92f &&
-            maxHeight.value > screenH * 0.72f
+        val splitOn = SettingsStyleSession.overlaySplitEnabled.value
+        val splitSideBySide = OverlayLayerSplit.isSideBySidePane(view) ||
+            (splitOn &&
+                deviceWide &&
+                maxWidth.value < screenW * 0.92f &&
+                maxHeight.value > screenH * 0.72f)
+        // Top/bottom slice: full width, not full height. A 5:5 cut of a portrait
+        // screen is often wider than 1.2× tall, and that was taking the landscape
+        // cover column — the hero ratio for a tall phone, not this short pane.
+        val splitStacked = OverlayLayerSplit.isStackedPane(view) ||
+            (splitOn &&
+                !deviceWide &&
+                !splitSideBySide &&
+                maxHeight.value < screenH * 0.92f &&
+                maxWidth.value > screenW * 0.72f)
         val paneWide = !compactSquare && maxWidth.value > maxHeight.value * 1.2f
-        val isLandscape = !compactSquare && !sideBySidePane && paneWide
-        val paneW = if (sideBySidePane) maxWidth.value else null
-        val paneH = if (sideBySidePane) maxHeight.value else null
+        val sideBySidePane = splitSideBySide && !paneWide
+        // Stay on the stacked frame for the whole top/bottom slice. Crossing a
+        // height gate swapped in the full-page hero and the cover jumped.
+        val stackedPane = splitStacked
+        val isLandscape = !compactSquare && paneWide && !splitStacked
+        val inSplitPane = splitSideBySide || splitStacked
+        val paneW = if (inSplitPane) maxWidth.value else null
+        val paneH = if (inSplitPane) maxHeight.value else null
         val metrics = rememberDetailOverlayMetrics(
             isLandscape,
             paneW,
             paneH,
-            splitHero = sideBySidePane,
+            splitHero = sideBySidePane || stackedPane,
         )
         val basePortraitMetrics = rememberDetailOverlayMetrics(
             false,
             paneW,
             paneH,
-            splitHero = sideBySidePane,
+            splitHero = sideBySidePane || stackedPane,
         )
         val massPushFraction by animateFloatAsState(
             targetValue = if (massRailOpen && massRailAvailable && isLandscape) 0.58f else 0f,
@@ -901,22 +923,26 @@ fun DetailedMetadataMusicPlayerView(
             )
         }
 
-        logoBitmap?.let { bitmap ->
-            // Square panes: match the flat content frame (not the 32dp logo floor).
-            val logoEdge = if (metrics.compactLyricBandSingleLine) {
-                metrics.contentPaddingTop
-            } else {
-                logoLayout.edgeInsetDp
+        // Split slices hide the corner mark. A left/right pane brings it back
+        // once the user drags that slice wider than 1.2× tall.
+        if (!sideBySidePane && !stackedPane) {
+            logoBitmap?.let { bitmap ->
+                // Square panes: match the flat content frame (not the 32dp logo floor).
+                val logoEdge = if (metrics.compactLyricBandSingleLine) {
+                    metrics.contentPaddingTop
+                } else {
+                    logoLayout.edgeInsetDp
+                }
+                Image(
+                    bitmap = bitmap.asImageBitmap(),
+                    contentDescription = if (isSendspinSource) "Music Assistant" else "Home Assistant",
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = logoEdge, end = logoEdge)
+                        .size(logoLayout.sizeDp)
+                        .alpha(0.25f),
+                )
             }
-            Image(
-                bitmap = bitmap.asImageBitmap(),
-                contentDescription = if (isSendspinSource) "Music Assistant" else "Home Assistant",
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = logoEdge, end = logoEdge)
-                    .size(logoLayout.sizeDp)
-                    .alpha(0.25f),
-            )
         }
 
         // Mass rail: landscape = side push + left NP morphs to portrait column;
@@ -1003,33 +1029,39 @@ fun DetailedMetadataMusicPlayerView(
                                 )
                             }
                         } else {
-                            LandscapeDetailContent(
-                                metrics = metrics,
-                                title = effectiveTitle,
-                                artist = effectiveArtist,
-                                album = effectiveAlbum,
-                                coverBitmap = effectiveCoverBitmap,
-                                lyricLines = displayLyricLines,
-                                lyricSource = displayLyricSource,
-                                trackKey = trackKey,
-                                lyricUiKey = titleKey,
-                                lyricsFocus = lyricsFocus,
-                                onToggleLyricsFocus = toggleLyricsFocus,
-                                isPlaying = isPlaying,
-                                positionMs = displayPositionMs,
-                                lyricPositionMs = lyricPositionMs,
-                                durationMs = effectiveTotalTimeMs,
-                                repeatMode = repeatMode,
-                                shuffleEnabled = shuffleEnabled,
-                                onPlayPauseClick = onPlayPauseClick,
-                                onPreviousClick = onPreviousClick,
-                                onNextClick = onNextClick,
-                                onRepeatClick = onRepeatClick,
-                                onShuffleClick = onShuffleClick,
-                                onSeekClick = boundOnSeekClick,
-                                karaokeLyrics = karaokeLyrics,
-                                waitingForMedia = isWaitingForMedia,
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(LandscapeContentInset),
+                            ) {
+                                LandscapeDetailContent(
+                                    metrics = metrics,
+                                    title = effectiveTitle,
+                                    artist = effectiveArtist,
+                                    album = effectiveAlbum,
+                                    coverBitmap = effectiveCoverBitmap,
+                                    lyricLines = displayLyricLines,
+                                    lyricSource = displayLyricSource,
+                                    trackKey = trackKey,
+                                    lyricUiKey = titleKey,
+                                    lyricsFocus = lyricsFocus,
+                                    onToggleLyricsFocus = toggleLyricsFocus,
+                                    isPlaying = isPlaying,
+                                    positionMs = displayPositionMs,
+                                    lyricPositionMs = lyricPositionMs,
+                                    durationMs = effectiveTotalTimeMs,
+                                    repeatMode = repeatMode,
+                                    shuffleEnabled = shuffleEnabled,
+                                    onPlayPauseClick = onPlayPauseClick,
+                                    onPreviousClick = onPreviousClick,
+                                    onNextClick = onNextClick,
+                                    onRepeatClick = onRepeatClick,
+                                    onShuffleClick = onShuffleClick,
+                                    onSeekClick = boundOnSeekClick,
+                                    karaokeLyrics = karaokeLyrics,
+                                    waitingForMedia = isWaitingForMedia,
+                                )
+                            }
                         }
                     }
                 }
@@ -1074,6 +1106,8 @@ fun DetailedMetadataMusicPlayerView(
                 massRailExpanded = portraitNpCompact,
                 waitingForMedia = isWaitingForMedia,
                 fitCoverToSeat = sideBySidePane,
+                equalFrame = stackedPane,
+                logoClearance = if (stackedPane) logoLayout.sizeDp else 0.dp,
             )
             AnimatedVisibility(
                 visible = massPortraitOpen,
@@ -1400,6 +1434,12 @@ private fun PortraitDetailContent(
      * full-screen fraction.
      */
     fitCoverToSeat: Boolean = false,
+    /**
+     * Top/bottom slice. One equal inset on every edge, and the cover is capped
+     * so it cannot grow into the corner logo or jump to the pane width.
+     */
+    equalFrame: Boolean = false,
+    logoClearance: Dp = 0.dp,
 ) {
     // Lines are not required to open the page — the focus tree falls back to its
     // no-lyrics middle state. Only the idle shell keeps the cover inert.
@@ -1414,14 +1454,25 @@ private fun PortraitDetailContent(
         massRailExpanded ||
         fitCoverToSeat ||
         metrics.compactLyricBandSingleLine
-    val padMod = Modifier
-        .fillMaxSize()
-        .padding(
-            start = metrics.contentPaddingH,
-            end = metrics.contentPaddingH,
-            top = metrics.contentPaddingTop,
-            bottom = metrics.contentPaddingBottom,
-        )
+    // Left/right split keeps this portrait stack. Its own insets are ~14dp,
+    // which sits on the screen edge in landscape. Portrait phones do not set
+    // [fitCoverToSeat], so they stay on the tuned padding.
+    // Top/bottom replaces those uneven pads with one inset on every side.
+    val splitInset = if (fitCoverToSeat) LandscapeContentInset else 0.dp
+    val padMod = if (equalFrame) {
+        Modifier
+            .fillMaxSize()
+            .padding(StackedFrameInset)
+    } else {
+        Modifier
+            .fillMaxSize()
+            .padding(
+                start = metrics.contentPaddingH + splitInset,
+                end = metrics.contentPaddingH + splitInset,
+                top = metrics.contentPaddingTop + splitInset,
+                bottom = metrics.contentPaddingBottom + splitInset,
+            )
+    }
     if (waitingForMedia) {
         WaitingForMediaCenteredShell(
             metrics = metrics,
@@ -1432,7 +1483,8 @@ private fun PortraitDetailContent(
             lyricUiKey = lyricUiKey,
             massPushCompact = massPushCompact,
             padMod = padMod,
-            fitCoverToSeat = fitCoverToSeat,
+            equalFrame = equalFrame,
+            logoClearance = logoClearance,
         )
         return
     }
@@ -1470,20 +1522,23 @@ private fun PortraitDetailContent(
                                 stackMeta = true,
                                 hasArtist = artist.isNotBlank(),
                             )
-                        } else if (fitCoverToSeat) {
-                            val meta = metrics.lyricsFocusCoverTitleGap +
-                                metrics.titleLineHeightSolo.value.dp +
-                                metrics.titleArtistGap +
-                                metrics.artistLineHeightSolo.value.dp
-                            defaultCoverSide(
-                                maxWidth = maxWidth,
-                                maxHeight = (maxHeight - meta).coerceAtLeast(0.dp),
-                                fillFraction = 1f,
-                            )
                         } else {
-                            (minOf(maxWidth, maxHeight) * metrics.coverFillFractionSolo)
-                                .coerceAtMost(maxWidth * 0.82f)
-                                .coerceAtMost(maxHeight * 0.56f)
+                            // Same centered album as waiting-for-media: no transport
+                            // foot, so the cover is the page, not a leftover sliver.
+                            centeredCoverSide(
+                                maxWidth = maxWidth,
+                                maxHeight = maxHeight,
+                                titleBlock = idleTitleBlock(metrics, artist.isNotBlank()),
+                            ).let { side ->
+                                if (equalFrame) {
+                                    minOf(
+                                        side,
+                                        stackedCoverCap(maxWidth, maxHeight, logoClearance),
+                                    )
+                                } else {
+                                    side
+                                }
+                            }
                         }
                         Column(
                             modifier = Modifier
@@ -1539,12 +1594,16 @@ private fun PortraitDetailContent(
                         },
                     ) {
                         BoxWithConstraints(Modifier.fillMaxWidth()) {
-                        val focusCoverSize = if (fitCoverToSeat) {
-                            minOf(maxWidth * 0.36f, maxHeight * 0.30f)
-                                .coerceIn(56.dp, 140.dp)
-                        } else {
-                            metrics.lyricsFocusCoverSize
-                        }
+                        val idleSide = centeredCoverSide(
+                            maxWidth = maxWidth,
+                            maxHeight = maxHeight,
+                            titleBlock = idleTitleBlock(metrics, artist.isNotBlank()),
+                        )
+                        val focusCoverSize = lyricWallCoverSide(
+                            idleSide = idleSide,
+                            maxWidth = maxWidth,
+                            maxHeight = maxHeight,
+                        )
                         LyricsFocusChrome(
                             metrics = metrics,
                             title = title,
@@ -1684,64 +1743,76 @@ private fun PortraitDetailContent(
         } else {
             // Default OFF — original player layout. Cover size is static (no
             // morph / fraction animation); only solo vs with-lyrics fraction.
-            Column(modifier = padMod) {
+            // When the foot is taller than the pane (a short split slice), scale
+            // the stack down so the cover and the controls both stay on screen.
+            BoxWithConstraints(modifier = padMod) {
+            val stackArtist = lyricLines.isEmpty() || !metrics.compactLyricBandSingleLine
+            val foot = playingFootHeight(
+                metrics = metrics,
+                hasLyrics = lyricLines.isNotEmpty(),
+                singleLine = forceSingleLineLyric,
+                stackArtist = stackArtist,
+                hasArtist = artist.isNotBlank(),
+            )
+            val minCover = minOf(72.dp, maxHeight * 0.22f)
+            val fitted = metrics.scaledBy(paneFitScale(maxHeight, foot + minCover))
+            val coverCap = if (equalFrame) {
+                stackedCoverCap(maxWidth, maxHeight, logoClearance)
+            } else {
+                null
+            }
+            Column(modifier = Modifier.fillMaxSize()) {
                 BoxWithConstraints(
                     modifier = Modifier
-                        .weight(if (fitCoverToSeat) 1.55f else 1f)
+                        .weight(1f)
                         .fillMaxWidth()
-                        .padding(bottom = metrics.portraitCoverBottomGap),
+                        .padding(bottom = fitted.portraitCoverBottomGap),
                     contentAlignment = Alignment.Center,
                 ) {
                     CoverCard(
                         coverBitmap = coverBitmap,
                         trackKey = lyricUiKey,
-                        cornerRadius = metrics.coverCornerRadius,
-                        shadowElevation = metrics.coverShadowElevation,
+                        cornerRadius = fitted.coverCornerRadius,
+                        shadowElevation = fitted.coverShadowElevation,
                         onClick = if (canFocusLyrics) onToggleLyricsFocus else null,
-                        // Unexpanded: fixed fraction — never animate / never solo-swap.
-                        // Split pane: this box is the hero share (~60%). Fill it.
-                        // Do not use the square-device 0.56 air fraction here.
+                        // Leftover after the foot. One square, centered. A fixed
+                        // hero share (0.96 / 1.55) pushed the buttons off a narrow pane.
                         modifier = Modifier
                             .size(
-                                defaultCoverSide(
-                                    maxWidth = maxWidth,
-                                    maxHeight = maxHeight,
-                                    fillFraction = if (fitCoverToSeat) 0.96f else metrics.coverFillFraction,
-                                ),
+                                fittedCoverSide(maxWidth, maxHeight).let { side ->
+                                    if (coverCap != null) minOf(side, coverCap) else side
+                                },
                             )
                             .aspectRatio(1f),
                     )
                 }
 
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .then(if (fitCoverToSeat) Modifier.weight(1f) else Modifier),
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                 TrackMeta(
                     title = title,
                     artist = artist,
                     trackKey = trackKey,
-                    metrics = metrics,
+                    metrics = fitted,
                     textAlign = TextAlign.Center,
                     // Square + lyrics: one "title · artist" line (same as landscape).
                     // No lyrics / phone portrait: keep stacked rows.
-                    stackArtistBelow = lyricLines.isEmpty() ||
-                        !metrics.compactLyricBandSingleLine,
+                    stackArtistBelow = stackArtist,
                 )
 
                 if (lyricLines.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(metrics.metaLyricsGap))
+                    Spacer(modifier = Modifier.height(fitted.metaLyricsGap))
                     // Same SyncedLyricsSection instance: rail open → 1-line, closed → 3-line.
                     // Keeps lead / latch / highlight across the mode flip (no dual lyric systems).
                     // Portrait overlay: tween height down only; restore uses snap() so
                     // close does not play the reverse (NP chrome bouncing up).
                     val railShrinksBand = massRailExpanded &&
-                        !metrics.compactLyricBandSingleLine
+                        !fitted.compactLyricBandSingleLine
                     val bandTargetH = if (forceSingleLineLyric) {
-                        metrics.lyricsLineHeightDp
+                        fitted.lyricsLineHeightDp
                     } else {
-                        metrics.lyricsBlockHeight
+                        fitted.lyricsBlockHeight
                     }
                     val bandH by animateDpAsState(
                         targetValue = bandTargetH,
@@ -1756,11 +1827,11 @@ private fun PortraitDetailContent(
                         lines = lyricLines,
                         lyricSource = null,
                         positionMsState = lyricPositionMs,
-                        metrics = metrics,
+                        metrics = fitted,
                         textAlign = TextAlign.Center,
                         trackKey = lyricUiKey,
                         singleLine = forceSingleLineLyric,
-                        modifier = if (metrics.compactLyricBandSingleLine) {
+                        modifier = if (fitted.compactLyricBandSingleLine) {
                             Modifier
                         } else {
                             Modifier
@@ -1769,25 +1840,25 @@ private fun PortraitDetailContent(
                                 .clipToBounds()
                         },
                     )
-                    Spacer(modifier = Modifier.height(metrics.lyricsProgressGap))
+                    Spacer(modifier = Modifier.height(fitted.lyricsProgressGap))
                 } else {
-                    Spacer(modifier = Modifier.height(metrics.metaProgressGap))
+                    Spacer(modifier = Modifier.height(fitted.metaProgressGap))
                 }
 
                 ProgressSection(
                     positionMs = positionMs,
                     durationMs = durationMs,
-                    metrics = metrics,
+                    metrics = fitted,
                     onSeekClick = onSeekClick,
                 )
 
-                Spacer(modifier = Modifier.height(metrics.progressTransportGap))
+                Spacer(modifier = Modifier.height(fitted.progressTransportGap))
 
                 TransportRow(
                     isPlaying = isPlaying,
                     repeatMode = repeatMode,
                     shuffleEnabled = shuffleEnabled,
-                    metrics = metrics,
+                    metrics = fitted,
                     onPlayPauseClick = onPlayPauseClick,
                     onPreviousClick = onPreviousClick,
                     onNextClick = onNextClick,
@@ -1795,6 +1866,7 @@ private fun PortraitDetailContent(
                     onShuffleClick = onShuffleClick,
                 )
                 }
+            }
             }
         }
     }
@@ -1997,54 +2069,84 @@ private fun LandscapeDetailContent(
                         .fillMaxHeight(),
                     contentAlignment = Alignment.CenterStart,
                 ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
+                    BoxWithConstraints(Modifier.fillMaxSize()) {
+                        val hasLyrics = lyricLines.isNotEmpty()
+                        val threeLineFoot = playingFootHeight(
+                            metrics = metrics,
+                            hasLyrics = hasLyrics,
+                            singleLine = false,
+                            stackArtist = !hasLyrics,
+                            hasArtist = artist.isNotBlank(),
+                            coverGap = false,
+                        )
+                        // Drop to one lyric line before shrinking type, so a short
+                        // pane keeps readable controls instead of a tiny three-line band.
+                        val singleLine = hasLyrics && threeLineFoot > maxHeight
+                        val foot = if (singleLine) {
+                            playingFootHeight(
+                                metrics = metrics,
+                                hasLyrics = true,
+                                singleLine = true,
+                                stackArtist = false,
+                                hasArtist = artist.isNotBlank(),
+                                coverGap = false,
+                            )
+                        } else {
+                            threeLineFoot
+                        }
+                        val fitted = metrics.scaledBy(paneFitScale(maxHeight, foot))
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .align(Alignment.CenterStart),
+                        ) {
                         TrackMeta(
                             title = title,
                             artist = artist,
                             trackKey = trackKey,
-                            metrics = metrics,
+                            metrics = fitted,
                             // With lyrics: title · artist one line + shared marquee.
-                            stackArtistBelow = lyricLines.isEmpty(),
+                            stackArtistBelow = !hasLyrics,
                         )
 
-                        if (lyricLines.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(metrics.metaLyricsGap))
+                        if (hasLyrics) {
+                            Spacer(modifier = Modifier.height(fitted.metaLyricsGap))
                             // Rail closed (this composable only mounts when not side-pushed):
                             // force 3-line band — never source caption / 1-line.
                             SyncedLyricsSection(
                                 lines = lyricLines,
                                 lyricSource = null,
                                 positionMsState = lyricPositionMs,
-                                metrics = metrics,
+                                metrics = fitted,
                                 trackKey = lyricUiKey,
+                                singleLine = singleLine,
                             )
-                            Spacer(modifier = Modifier.height(metrics.lyricsProgressGap))
+                            Spacer(modifier = Modifier.height(fitted.lyricsProgressGap))
                         } else {
-                            Spacer(modifier = Modifier.height(metrics.metaProgressGap))
+                            Spacer(modifier = Modifier.height(fitted.metaProgressGap))
                         }
 
                         ProgressSection(
                             positionMs = positionMs,
                             durationMs = durationMs,
-                            metrics = metrics,
+                            metrics = fitted,
                             onSeekClick = onSeekClick,
                         )
 
-                        Spacer(modifier = Modifier.height(metrics.progressTransportGap))
+                        Spacer(modifier = Modifier.height(fitted.progressTransportGap))
 
                         TransportRow(
                             isPlaying = isPlaying,
                             repeatMode = repeatMode,
                             shuffleEnabled = shuffleEnabled,
-                            metrics = metrics,
+                            metrics = fitted,
                             onPlayPauseClick = onPlayPauseClick,
                             onPreviousClick = onPreviousClick,
                             onNextClick = onNextClick,
                             onRepeatClick = onRepeatClick,
                             onShuffleClick = onShuffleClick,
                         )
+                        }
                     }
                 }
             }
@@ -2066,7 +2168,8 @@ private fun WaitingForMediaCenteredShell(
     lyricUiKey: String,
     massPushCompact: Boolean,
     padMod: Modifier,
-    fitCoverToSeat: Boolean = false,
+    equalFrame: Boolean = false,
+    logoClearance: Dp = 0.dp,
 ) {
     BoxWithConstraints(
         modifier = if (massPushCompact) {
@@ -2077,9 +2180,8 @@ private fun WaitingForMediaCenteredShell(
             padMod.fillMaxSize()
         },
     ) {
-        // Waiting shell: only cover + title — size like a real solo cover so
-        // landscape does not collapse to a tiny badge in the middle of the pane.
-        val isLandscapePane = maxWidth > maxHeight
+        // Waiting shell: cover + title as one centered block. Same square as
+        // the no-lyric focus page — see centeredCoverSide.
         val coverSide = if (massPushCompact) {
             // Side-push left pane: full massPushCoverSide (no lyrics foot) reads a
             // bit large — trim gently by short-side class, keep it clearly a hero.
@@ -2097,32 +2199,24 @@ private fun WaitingForMediaCenteredShell(
                 shortSide >= 320.dp -> 0.88f
                 else -> 0.90f
             }
-            (base * trim)
+            val capped = (base * trim)
                 .coerceAtMost(maxWidth * 0.78f)
                 .coerceAtMost(maxHeight * 0.58f)
-                .coerceAtLeast(120.dp)
-        } else if (fitCoverToSeat) {
-            val meta = metrics.lyricsFocusCoverTitleGap +
-                metrics.titleLineHeightSolo.value.dp +
-                metrics.titleArtistGap +
-                if (artist.isNotBlank()) metrics.artistLineHeightSolo.value.dp else 0.dp
-            defaultCoverSide(
-                maxWidth = maxWidth,
-                maxHeight = (maxHeight - meta).coerceAtLeast(0.dp),
-                fillFraction = 1f,
-            )
-        } else if (isLandscapePane) {
-            // Short side drives the square; keep ~2/3 of pane height so the
-            // placeholder reads as the hero (controls are already hidden).
-            (minOf(maxWidth, maxHeight) * 0.78f)
-                .coerceAtMost(maxWidth * 0.42f)
-                .coerceAtMost(maxHeight * 0.68f)
-                .coerceAtLeast(if (minOf(maxWidth, maxHeight) < 680.dp) 120.dp else 180.dp)
+            // Floor must not undo the cap — a short top/bottom slice is under 120dp.
+            capped.coerceAtLeast(minOf(120.dp, capped))
         } else {
-            (minOf(maxWidth, maxHeight) * metrics.coverFillFractionSolo)
-                .coerceAtMost(maxWidth * 0.82f)
-                .coerceAtMost(maxHeight * if (minOf(maxWidth, maxHeight) < 680.dp) 0.46f else 0.52f)
-                .coerceAtLeast(if (minOf(maxWidth, maxHeight) < 680.dp) 120.dp else 160.dp)
+            // No transport. Same centered album as the no-lyric focus page.
+            centeredCoverSide(
+                maxWidth = maxWidth,
+                maxHeight = maxHeight,
+                titleBlock = idleTitleBlock(metrics, artist.isNotBlank()),
+            ).let { side ->
+                if (equalFrame) {
+                    minOf(side, stackedCoverCap(maxWidth, maxHeight, logoClearance))
+                } else {
+                    side
+                }
+            }
         }
         val metaMinWidth = if (maxWidth < 680.dp) 160.dp else 240.dp
         Column(
@@ -2158,6 +2252,54 @@ private fun WaitingForMediaCenteredShell(
             )
         }
     }
+}
+
+/** Title stack under a centered cover (gap + title, artist only when present). */
+private fun idleTitleBlock(metrics: DetailOverlayMetrics, hasArtist: Boolean): Dp {
+    return metrics.lyricsFocusCoverTitleGap +
+        metrics.titleLineHeightSolo.value.dp +
+        if (hasArtist) {
+            metrics.titleArtistGap + metrics.artistLineHeightSolo.value.dp
+        } else {
+            0.dp
+        }
+}
+
+/**
+ * Centered album: waiting-for-media, and lyrics-focus before a wall exists.
+ * Both are cover + title and nothing else, so they share one square.
+ *
+ * The group (square + title) is 74% of the pane height, so air stays above
+ * and below and the title does not sit on the edge. Width is 78% of the pane,
+ * which is what binds on a tall phone — a real cover, not a stamp in the
+ * middle of a black screen. Checked against the playing leftover:
+ * short square ~426×354 content → waiting ~190dp, playing leftover ~150dp;
+ * phone ~360×800 content → waiting ~78% of the content width, playing fills
+ * the leftover width above the foot.
+ */
+private fun centeredCoverSide(maxWidth: Dp, maxHeight: Dp, titleBlock: Dp): Dp {
+    val byWidth = maxWidth * 0.78f
+    val byHeight = (maxHeight * 0.74f - titleBlock).coerceAtLeast(0.dp)
+    val side = minOf(byWidth, byHeight)
+    val room = (maxHeight - titleBlock).coerceAtLeast(0.dp)
+    val floor = minOf(maxWidth, maxHeight) * 0.46f
+    return side
+        .coerceAtLeast(minOf(floor, room))
+        .coerceAtMost(minOf(maxWidth, room).coerceAtLeast(1.dp))
+}
+
+/**
+ * Lyrics wall header. About half the centered album, and at most 28% of the
+ * pane height, so the wall below stays the page and the art is still readable.
+ * Short square ~88dp; phone ~100dp; both sit under the idle cover and above
+ * the playing leftover only when the foot is what shrank the playing square.
+ */
+private fun lyricWallCoverSide(idleSide: Dp, maxWidth: Dp, maxHeight: Dp): Dp {
+    val cap = minOf(idleSide, maxWidth * 0.36f, maxHeight * 0.28f).coerceAtLeast(1.dp)
+    val side = minOf(idleSide * 0.46f, cap)
+    // 64dp is the phone floor. A short slice cannot honor it or the wall disappears.
+    val floor = minOf(64.dp, cap)
+    return side.coerceAtLeast(floor).coerceAtMost(cap)
 }
 
 @Composable
@@ -4752,8 +4894,9 @@ private fun ProgressSection(
 }
 
 /**
- * Weighted five-slot row: shuffle/repeat pin to the same left/right edges as the
- * progress bar; center cluster stays balanced across DPIs and aspect ratios.
+ * Five controls, one row. Sizes come from the pane width: a wide phone keeps
+ * the metric sizes; a narrow column scales the whole cluster down together
+ * so shuffle and repeat stay inside the edges.
  */
 @Composable
 private fun TransportRow(
@@ -4768,17 +4911,60 @@ private fun TransportRow(
     onShuffleClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        val fit = transportControlScale(maxWidth, metrics)
+        TransportRowFitted(
+            isPlaying = isPlaying,
+            repeatMode = repeatMode,
+            shuffleEnabled = shuffleEnabled,
+            playSize = metrics.playButtonSize * fit,
+            skipSize = metrics.skipIconSize * fit,
+            auxSize = metrics.auxIconSize * fit,
+            tapPadding = metrics.controlTapPadding * fit,
+            onPlayPauseClick = onPlayPauseClick,
+            onPreviousClick = onPreviousClick,
+            onNextClick = onNextClick,
+            onRepeatClick = onRepeatClick,
+            onShuffleClick = onShuffleClick,
+        )
+    }
+}
+
+/** Shrink the five controls together so a narrow pane never clips the outer buttons. */
+private fun transportControlScale(width: Dp, metrics: DetailOverlayMetrics): Float {
+    // Two middle buttons add horizontal tap inset (0.35 × 2 each). Edge buttons do not.
+    val natural = metrics.auxIconSize * 2 +
+        metrics.skipIconSize * 2 +
+        metrics.playButtonSize +
+        metrics.controlTapPadding * 1.4f
+    if (width <= 0.dp || natural <= 0.dp) return 1f
+    return (width.value / natural.value).coerceIn(0.36f, 1f)
+}
+
+@Composable
+private fun TransportRowFitted(
+    isPlaying: Boolean,
+    repeatMode: String,
+    shuffleEnabled: Boolean,
+    playSize: Dp,
+    skipSize: Dp,
+    auxSize: Dp,
+    tapPadding: Dp,
+    onPlayPauseClick: () -> Unit,
+    onPreviousClick: () -> Unit,
+    onNextClick: () -> Unit,
+    onRepeatClick: () -> Unit,
+    onShuffleClick: () -> Unit,
+) {
     Row(
-        modifier = modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier.weight(1f),
-            contentAlignment = Alignment.CenterStart,
-        ) {
+        Box(contentAlignment = Alignment.CenterStart) {
             DetailControlButton(
                 onClick = onShuffleClick,
-                tapPadding = metrics.controlTapPadding,
+                tapPadding = tapPadding,
                 edgeAligned = true,
             ) {
                 val shuffleAlpha by animateFloatAsState(
@@ -4790,60 +4976,42 @@ private fun TransportRow(
                     imageVector = Icons.Filled.Shuffle,
                     contentDescription = "Shuffle",
                     tint = Color.White.copy(alpha = shuffleAlpha),
-                    modifier = Modifier.size(metrics.auxIconSize),
+                    modifier = Modifier.size(auxSize),
                 )
             }
         }
-        Box(
-            modifier = Modifier.weight(1f),
-            contentAlignment = Alignment.Center,
+        DetailControlButton(
+            onClick = onPreviousClick,
+            tapPadding = tapPadding,
         ) {
-            DetailControlButton(
-                onClick = onPreviousClick,
-                tapPadding = metrics.controlTapPadding,
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.SkipPrevious,
-                    contentDescription = "Previous",
-                    tint = Color.White.copy(alpha = 0.85f),
-                    modifier = Modifier.size(metrics.skipIconSize),
-                )
-            }
-        }
-        Box(
-            modifier = Modifier.weight(1.15f),
-            contentAlignment = Alignment.Center,
-        ) {
-            SolidPlayButton(
-                isPlaying = isPlaying,
-                sizeDp = metrics.playButtonSize,
-                iconSizeDp = metrics.playButtonSize * 0.46f,
-                onClick = onPlayPauseClick,
+            Icon(
+                imageVector = Icons.Filled.SkipPrevious,
+                contentDescription = "Previous",
+                tint = Color.White.copy(alpha = 0.85f),
+                modifier = Modifier.size(skipSize),
             )
         }
-        Box(
-            modifier = Modifier.weight(1f),
-            contentAlignment = Alignment.Center,
+        SolidPlayButton(
+            isPlaying = isPlaying,
+            sizeDp = playSize,
+            iconSizeDp = playSize * 0.46f,
+            onClick = onPlayPauseClick,
+        )
+        DetailControlButton(
+            onClick = onNextClick,
+            tapPadding = tapPadding,
         ) {
-            DetailControlButton(
-                onClick = onNextClick,
-                tapPadding = metrics.controlTapPadding,
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.SkipNext,
-                    contentDescription = "Next",
-                    tint = Color.White.copy(alpha = 0.85f),
-                    modifier = Modifier.size(metrics.skipIconSize),
-                )
-            }
+            Icon(
+                imageVector = Icons.Filled.SkipNext,
+                contentDescription = "Next",
+                tint = Color.White.copy(alpha = 0.85f),
+                modifier = Modifier.size(skipSize),
+            )
         }
-        Box(
-            modifier = Modifier.weight(1f),
-            contentAlignment = Alignment.CenterEnd,
-        ) {
+        Box(contentAlignment = Alignment.CenterEnd) {
             DetailControlButton(
                 onClick = onRepeatClick,
-                tapPadding = metrics.controlTapPadding,
+                tapPadding = tapPadding,
                 edgeAligned = true,
             ) {
                 AnimatedContent(
@@ -4871,19 +5039,19 @@ private fun TransportRow(
                             imageVector = Icons.Filled.RepeatOne,
                             contentDescription = "Repeat One",
                             tint = Color.White.copy(alpha = tintAlpha),
-                            modifier = Modifier.size(metrics.auxIconSize),
+                            modifier = Modifier.size(auxSize),
                         )
                         "all" -> Icon(
                             imageVector = Icons.Filled.Repeat,
                             contentDescription = "Repeat All",
                             tint = Color.White.copy(alpha = tintAlpha),
-                            modifier = Modifier.size(metrics.auxIconSize),
+                            modifier = Modifier.size(auxSize),
                         )
                         else -> Icon(
                             imageVector = Icons.Filled.Repeat,
                             contentDescription = "Repeat Off",
                             tint = Color.White.copy(alpha = tintAlpha),
-                            modifier = Modifier.size(metrics.auxIconSize),
+                            modifier = Modifier.size(auxSize),
                         )
                     }
                 }
@@ -5482,6 +5650,14 @@ private data class DetailOverlayMetrics(
  * portrait-unexpanded stack, fixed [MassPushInset], larger foot controls.
  */
 private val MassPushInset = 24.dp
+/** Extra frame on the landscape player only. Portrait padding stays as tuned. */
+private val LandscapeContentInset = 20.dp
+/**
+ * Equal inset on every edge of a top/bottom slice. The split-hero pads were
+ * 8–16dp on the sides and 12–14dp on the vertical edges, which crowded the
+ * corner logo.
+ */
+private val StackedFrameInset = 32.dp
 /** Lyrics-focus (karaoke) chrome in the side-push left pane: nudge cover + meta right. */
 private val MassPushKaraokeChromeNudge = 15.dp
 
@@ -5650,19 +5826,134 @@ private fun massPushCoverSide(
 }
 
 /**
- * Cover square for the two **default** (unexpanded) seats: the portrait hero box above
- * the meta stack, and the landscape cover column.
- *
- * Both used to be `fillMaxSize(fraction).aspectRatio(1f)`, which sizes off **width
- * only**: `fillMaxSize` hands `aspectRatio` two fixed, non-square constraints, none of
- * its enforcing passes can satisfy them, and the fallback pass matches `maxWidth` while
- * ignoring the height. On a square pane (480×480 → sw426dp) the seat is far shorter than
- * `fraction × width`, so the square spilled out of it — clipped at the top edge and
- * painted under the title / lyric band.
- *
- * [maxHeight] here is already the seat *after* the foot took its share, so the height
- * term also absorbs the lyric band appearing or disappearing. Phones and tablets stay on
- * the width term, unchanged.
+ * Height of the title / lyric / progress / transport stack.
+ * Used to shrink that stack when a split slice is shorter than a full page.
+ */
+private fun playingFootHeight(
+    metrics: DetailOverlayMetrics,
+    hasLyrics: Boolean,
+    singleLine: Boolean,
+    stackArtist: Boolean,
+    hasArtist: Boolean,
+    coverGap: Boolean = true,
+): Dp {
+    val title = metrics.titleLineHeight.value.dp +
+        if (stackArtist && hasArtist) {
+            metrics.titleArtistGap + metrics.artistLineHeight.value.dp
+        } else {
+            0.dp
+        }
+    val lyrics = when {
+        !hasLyrics -> 0.dp
+        singleLine -> metrics.lyricsLineHeightDp
+        else -> metrics.lyricsBlockHeight
+    }
+    val afterMeta = if (hasLyrics) {
+        metrics.metaLyricsGap + metrics.lyricsProgressGap
+    } else {
+        metrics.metaProgressGap
+    }
+    val progress = metrics.progressBarHeight +
+        metrics.progressTimeTopGap +
+        (metrics.timeSp.value * 1.35f).dp
+    val transport = maxOf(
+        metrics.playButtonSize,
+        metrics.skipIconSize + metrics.controlTapPadding * 1.3f,
+    )
+    val coverGapDp = if (coverGap) metrics.portraitCoverBottomGap else 0.dp
+    // Font padding and marquee slots run a little past the line-height numbers.
+    return (coverGapDp + title + lyrics + afterMeta + progress +
+        metrics.progressTransportGap + transport + 8.dp) * 1.06f
+}
+
+/** 1 when [natural] fits. Otherwise the factor that makes it equal [available]. */
+private fun paneFitScale(available: Dp, natural: Dp): Float {
+    if (available <= 0.dp || natural <= 0.dp || natural <= available) return 1f
+    return (available.value / natural.value).coerceIn(0.05f, 1f)
+}
+
+private fun DetailOverlayMetrics.scaledBy(factor: Float): DetailOverlayMetrics {
+    if (factor >= 0.995f) return this
+    val s = factor.coerceIn(0.05f, 1f)
+    fun Dp.fit(): Dp = (value * s).dp
+    fun TextUnit.fit(): TextUnit = (value * s).sp
+    return copy(
+        contentPaddingH = contentPaddingH.fit(),
+        contentPaddingTop = contentPaddingTop.fit(),
+        contentPaddingBottom = contentPaddingBottom.fit(),
+        sectionGap = sectionGap.fit(),
+        portraitCoverBottomGap = portraitCoverBottomGap.fit(),
+        metaProgressGap = metaProgressGap.fit(),
+        progressTransportGap = progressTransportGap.fit(),
+        titleSp = titleSp.fit(),
+        titleLineHeight = titleLineHeight.fit(),
+        titleLetterSpacing = titleLetterSpacing.fit(),
+        artistSp = artistSp.fit(),
+        artistLineHeight = artistLineHeight.fit(),
+        titleSpSolo = titleSpSolo.fit(),
+        titleLineHeightSolo = titleLineHeightSolo.fit(),
+        artistSpSolo = artistSpSolo.fit(),
+        artistLineHeightSolo = artistLineHeightSolo.fit(),
+        titleArtistGap = titleArtistGap.fit(),
+        lyricsBlockHeight = lyricsBlockHeight.fit(),
+        lyricsLineHeightDp = lyricsLineHeightDp.fit(),
+        lyricsLineGap = lyricsLineGap.fit(),
+        lyricsCurrentSp = lyricsCurrentSp.fit(),
+        lyricsCurrentLineHeight = lyricsCurrentLineHeight.fit(),
+        lyricsAdjacentSp = lyricsAdjacentSp.fit(),
+        lyricsAdjacentLineHeight = lyricsAdjacentLineHeight.fit(),
+        lyricsFocusCoverSize = lyricsFocusCoverSize.fit(),
+        lyricsFocusCoverLandscapeSize = lyricsFocusCoverLandscapeSize.fit(),
+        lyricsFocusBridgeHeight = lyricsFocusBridgeHeight.fit(),
+        lyricsFocusCoverTitleGap = lyricsFocusCoverTitleGap.fit(),
+        lyricsFocusCoverBesideGap = lyricsFocusCoverBesideGap.fit(),
+        lyricsFocusTitleSp = lyricsFocusTitleSp.fit(),
+        lyricsFocusTitleLineHeight = lyricsFocusTitleLineHeight.fit(),
+        lyricsFocusArtistSp = lyricsFocusArtistSp.fit(),
+        lyricsFocusArtistLineHeight = lyricsFocusArtistLineHeight.fit(),
+        lyricsFocusLetterSpacing = lyricsFocusLetterSpacing.fit(),
+        lyricsExpandedLineHeightDp = lyricsExpandedLineHeightDp.fit(),
+        lyricsExpandedLineGap = lyricsExpandedLineGap.fit(),
+        lyricsExpandedEdgePad = lyricsExpandedEdgePad.fit(),
+        lyricsExpandedCurrentSp = lyricsExpandedCurrentSp.fit(),
+        lyricsExpandedCurrentLineHeight = lyricsExpandedCurrentLineHeight.fit(),
+        lyricsExpandedAdjacentSp = lyricsExpandedAdjacentSp.fit(),
+        lyricsExpandedAdjacentLineHeight = lyricsExpandedAdjacentLineHeight.fit(),
+        metaLyricsGap = metaLyricsGap.fit(),
+        lyricsProgressGap = lyricsProgressGap.fit(),
+        timeSp = timeSp.fit(),
+        progressBarHeight = progressBarHeight.fit(),
+        progressTimeTopGap = progressTimeTopGap.fit(),
+        playButtonSize = playButtonSize.fit(),
+        skipIconSize = skipIconSize.fit(),
+        auxIconSize = auxIconSize.fit(),
+        controlTapPadding = controlTapPadding.fit(),
+        coverCornerRadius = coverCornerRadius.fit(),
+        coverShadowElevation = coverShadowElevation.fit(),
+        landscapeGutter = landscapeGutter.fit(),
+        landscapeVisualShiftLeft = landscapeVisualShiftLeft.fit(),
+    )
+}
+
+/**
+ * Largest square for a top/bottom slice.
+ * Height fraction stops the art filling a wide band when the foot gets shorter.
+ * Width keeps the square clear of the corner logo on both sides.
+ */
+private fun stackedCoverCap(maxWidth: Dp, maxHeight: Dp, logoClearance: Dp): Dp {
+    val clearOfLogo = (maxWidth - logoClearance * 2).coerceAtLeast(64.dp)
+    return minOf(maxWidth * 0.62f, maxHeight * 0.42f, clearOfLogo)
+}
+
+/** Square that fills the leftover box and stays inside it. Centered by the caller. */
+private fun fittedCoverSide(maxWidth: Dp, maxHeight: Dp): Dp {
+    val breath = (minOf(maxWidth, maxHeight) * 0.04f).coerceIn(2.dp, 8.dp)
+    return minOf(maxWidth, (maxHeight - breath).coerceAtLeast(0.dp))
+}
+
+/**
+ * Landscape cover column. [maxHeight] is the column after padding.
+ * Width fraction stays under 1 so the square does not touch the meta column.
  */
 private fun defaultCoverSide(
     maxWidth: Dp,
@@ -5710,28 +6001,28 @@ private fun rememberDetailOverlayMetrics(
         }
         val textScale = scale * landscapeTextBoost
 
-        // Square panes (480×480) have no bezel to hide behind. Frame them with one flat
-        // inset on all four sides. Flat, not scaled: fixed 36dp margin; the square
-        // ladder already sits at scale ≈ 1. Everything below is either weighted (cover)
-        // or measured off the padded seat, so the stack absorbs the loss.
-        val squarePaneInset = 36f
+        // Extra pull on every edge, square and portrait alike. This panel was
+        // ~20dp; a 360-wide phone was 28dp on the sides. Both now sit ~14dp
+        // further in, same amount on left, right, top, and bottom.
+        val edgePull = (vmin * 0.04f).coerceIn(12f, 16f)
+        val squarePaneInset = (vmin * 0.055f).coerceIn(12f, 28f) + edgePull
         val horizontalPad = when {
-            splitHero -> 18f
+            splitHero -> (screenW * 0.045f).coerceIn(8f, 16f)
             isLandscape -> 40f * scale
             compact && squareish -> squarePaneInset
-            else -> 28f * scale
+            else -> 28f * scale + edgePull
         }
         val topPad = when {
             splitHero -> 14f
             isLandscape -> 28f * scale
             compact && squareish -> squarePaneInset
-            else -> 44f * scale
+            else -> 44f * scale + edgePull
         }
         val bottomPad = when {
             splitHero -> 12f
             isLandscape -> 28f * scale
             compact && squareish -> squarePaneInset
-            else -> 34f * scale
+            else -> 34f * scale + edgePull
         }
         val lyricLineH = (24f * scale).coerceIn(if (compact && squareish) 18f else 20f, 30f)
         val lyricGap = (if (compact && squareish) 8f else 12f) * scale

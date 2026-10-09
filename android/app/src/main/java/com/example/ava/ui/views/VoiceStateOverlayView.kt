@@ -22,6 +22,7 @@ import com.example.ava.audio.PlaybackEnergyMonitor
 import com.example.ava.settings.PlayerSettings
 import com.example.ava.ui.VoiceAccentColors
 import com.example.ava.utils.DeviceFeatureManager
+import kotlin.math.exp
 import kotlin.math.min
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -59,6 +60,22 @@ class VoiceStateOverlayView @JvmOverloads constructor(
         const val MAX_LEVEL_GAIN = 3.5f
         /** Still preview overlay: a held energy so gain densifies the stack without jumping. */
         private const val PREVIEW_STATIC_ENERGY = 0.62f
+        /** SPEAKING level easing time constants (frame-time based, seconds). */
+        private const val SPEAKING_ATTACK_S = 0.040f
+        private const val SPEAKING_RELEASE_S = 0.180f
+        /** A playback sample older than this no longer drives the glow. */
+        private const val SPEAKING_STALE_MS = 150L
+        private const val SPEAKING_FLOOR = 0.01f
+        /**
+         * A64 green center glow is a TTS-playback cue only (plus the PROCESSING
+         * breathe). It stays while a TTS sample was heard within this long, so the
+         * short pauses between sentences do not blink it.
+         */
+        private const val CENTER_TTS_HOLD_MS = 450L
+        /** showSpeaking → first audible TTS sample: keep the glow bridged this long. */
+        private const val CENTER_TTS_BRIDGE_MS = 900L
+        private const val CENTER_ATTACK_S = 0.12f
+        private const val CENTER_RELEASE_S = 0.18f
         /** extraAmplitude at the old slider max (gain = 2) — default → mid stack. */
         private const val INWARD_MID_REACH = 1f
         /** extraAmplitude from old max to new max (gain 2 → 3.5) — mid → far stack. */
@@ -137,6 +154,21 @@ class VoiceStateOverlayView @JvmOverloads constructor(
     private var targetIntensity = 0.66f
     private var audioEnergy = 0f
     private var targetAudioEnergy = 0f
+    /** TTS audio ended while still in SPEAKING (continue wait / chime): level eases to 0. */
+    private var speakingAudioEnded = false
+    /** 0–1 visibility of the A64 green center glow (TTS playing / PROCESSING only). */
+    private var centerVis = 0f
+    /**
+     * 0–1 visibility of the whole edge glow ring (every device). Follows TTS that is
+     * really audible, plus the PROCESSING breathe; the continue gap after a reply
+     * (SPEAKING with the audio ended, then the re-opened LISTENING) draws nothing.
+     */
+    private var glowVis = 0f
+    /** LISTENING entered from SPEAKING / PROCESSING = continuous-dialogue gap. */
+    private var listenAfterReply = false
+    /** When the current SPEAKING phase began, and whether TTS was audible in it yet. */
+    private var speakingSinceNanos = 0L
+    private var speakingHeardAudio = false
     /** 1 = designed level response; higher = stronger energy swing. */
     private var levelGain = MIN_LEVEL_GAIN
     /** 1 = designed opacity; lower = more translucent (never fully clear). */
@@ -201,8 +233,18 @@ class VoiceStateOverlayView @JvmOverloads constructor(
                 audioEnergy += (targetAudioEnergy - audioEnergy) * (0.24f + dt * 9f)
                 targetAudioEnergy *= (0.90f - dt * 0.35f).coerceAtLeast(0.82f)
             } else if (phase == Phase.SPEAKING) {
-                targetAudioEnergy = PlaybackEnergyMonitor.currentLevel()
-                audioEnergy += (targetAudioEnergy - audioEnergy) * (0.34f + dt * 12f)
+                // Follow what is heard: a stale sample (no fresh audio) or ended audio
+                // targets 0, and the release eases there instead of freezing.
+                targetAudioEnergy = if (speakingAudioEnded ||
+                    PlaybackEnergyMonitor.sampleAgeMs() > SPEAKING_STALE_MS
+                ) {
+                    0f
+                } else {
+                    PlaybackEnergyMonitor.currentLevel()
+                }
+                val tau = if (targetAudioEnergy > audioEnergy) SPEAKING_ATTACK_S else SPEAKING_RELEASE_S
+                audioEnergy += (targetAudioEnergy - audioEnergy) * (1f - exp(-dt / tau))
+                if (targetAudioEnergy == 0f && audioEnergy < SPEAKING_FLOOR) audioEnergy = 0f
             } else if (phase == Phase.LISTENING) {
                 if (previewLevelDrive) {
                     audioEnergy = PREVIEW_STATIC_ENERGY
@@ -223,6 +265,19 @@ class VoiceStateOverlayView @JvmOverloads constructor(
             }
             if (useA64EnhancedOverlay && !previewLevelDrive) {
                 a64AnimTime += dt
+            }
+            if (!windingDown) {
+                // Wind-down keeps its own fade; freezing here avoids a ramp-up flash.
+                val glowTarget = if (glowWanted()) 1f else 0f
+                val gtau = if (glowTarget > glowVis) CENTER_ATTACK_S else CENTER_RELEASE_S
+                glowVis += (glowTarget - glowVis) * (1f - exp(-dt / gtau))
+                if (glowTarget == 0f && glowVis < 0.01f) glowVis = 0f
+            }
+            if (useA64EnhancedOverlay) {
+                val centerTarget = if (centerGlowWanted()) 1f else 0f
+                val ctau = if (centerTarget > centerVis) CENTER_ATTACK_S else CENTER_RELEASE_S
+                centerVis += (centerTarget - centerVis) * (1f - exp(-dt / ctau))
+                if (centerTarget == 0f && centerVis < 0.01f) centerVis = 0f
             }
 
             frameSkip = !frameSkip
@@ -255,8 +310,10 @@ class VoiceStateOverlayView @JvmOverloads constructor(
         if (phase != Phase.NONE && fadeAlpha > 0f) {
             if (phase == Phase.LISTENING) return
             if (phase == Phase.SPEAKING || phase == Phase.PROCESSING) {
+                // No snap: the level eases down from where it is.
                 targetAudioEnergy = 0f
-                audioEnergy *= 0.45f
+                // Continuous-dialogue gap: no ring until the next reply is audible.
+                listenAfterReply = true
             }
             transitionTo(Phase.LISTENING)
         } else {
@@ -279,7 +336,6 @@ class VoiceStateOverlayView @JvmOverloads constructor(
         breatheTime = 0f
         driftTime = 0f
         targetAudioEnergy = 0f
-        audioEnergy *= 0.35f
         targetIntensity = 0.64f
         if (!frameActive) {
             startFrameLoop()
@@ -293,8 +349,25 @@ class VoiceStateOverlayView @JvmOverloads constructor(
             overlayColor = color
             transitionTo(Phase.SPEAKING)
         }
+        speakingAudioEnded = false
+        speakingSinceNanos = System.nanoTime()
+        speakingHeardAudio = false
         targetMotionSpeed = 1.05f
         targetIntensity = 0.72f
+    }
+
+    /**
+     * TTS audio really ended but the session stays in SPEAKING (continue decision,
+     * chime). Ease the level to 0 and drop the speaking motion to the resting one.
+     * The next phase or a new [showSpeaking] takes over as usual.
+     */
+    fun endSpeakingAudio() {
+        if (phase != Phase.SPEAKING) return
+        speakingAudioEnded = true
+        targetAudioEnergy = 0f
+        targetMotionSpeed = 0.22f
+        targetIntensity = 0.66f
+        if (!frameActive) startFrameLoop()
     }
 
     fun setLevelGain(gain: Float) {
@@ -427,6 +500,8 @@ class VoiceStateOverlayView @JvmOverloads constructor(
         a64AnimTime = 0f
         audioEnergy = 0f
         targetAudioEnergy = 0f
+        speakingAudioEnded = false
+        listenAfterReply = false
         // Fade in from transparent so the glow never pops in at full strength.
         fadeAlpha = 0f
         fadeAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
@@ -458,6 +533,7 @@ class VoiceStateOverlayView @JvmOverloads constructor(
             cancelWindDownAndRestore()
         }
         phase = newPhase
+        speakingAudioEnded = false
         if (!frameActive) {
             startFrameLoop()
         }
@@ -524,6 +600,11 @@ class VoiceStateOverlayView @JvmOverloads constructor(
         targetIntensity = 0.66f
         audioEnergy = 0f
         targetAudioEnergy = 0f
+        speakingAudioEnded = false
+        centerVis = 0f
+        glowVis = 0f
+        listenAfterReply = false
+        speakingHeardAudio = false
         previewLevelDrive = false
         invalidate()
     }
@@ -846,6 +927,42 @@ class VoiceStateOverlayView @JvmOverloads constructor(
         canvas.drawBitmap(bmp, null, glowDstRect, a64VignettePaint)
     }
 
+    /**
+     * A64 green center glow is wanted only while TTS is really audible in SPEAKING
+     * (bridged briefly from showSpeaking to the first sample), or in PROCESSING
+     * (the thinking breathe). LISTENING, the continue gap after the audio ended,
+     * and the end-of-session wind-down never show it.
+     */
+    private fun centerGlowWanted(): Boolean {
+        if (previewLevelDrive) return true
+        if (windingDown) return false
+        return when (phase) {
+            Phase.PROCESSING -> true
+            Phase.SPEAKING -> {
+                if (speakingAudioEnded) return false
+                val audible = PlaybackEnergyMonitor.sampleAgeMs() <= CENTER_TTS_HOLD_MS
+                if (audible) speakingHeardAudio = true
+                audible || (!speakingHeardAudio &&
+                    System.nanoTime() - speakingSinceNanos < CENTER_TTS_BRIDGE_MS * 1_000_000L)
+            }
+            else -> false
+        }
+    }
+
+    /**
+     * Edge glow ring wanted: TTS audible (same rule as [centerGlowWanted]), PROCESSING
+     * breathe, or a session-opening LISTENING (wake turn without floating captions).
+     * The LISTENING re-opened after a reply is the continue gap and stays empty.
+     */
+    private fun glowWanted(): Boolean {
+        if (previewLevelDrive) return true
+        return when (phase) {
+            Phase.LISTENING -> !listenAfterReply
+            Phase.NONE -> false
+            else -> centerGlowWanted()
+        }
+    }
+
     private fun drawA64CenterPulse(
         canvas: Canvas,
         w: Float,
@@ -856,13 +973,17 @@ class VoiceStateOverlayView @JvmOverloads constructor(
         colorG: Int,
         colorB: Int
     ) {
+        // Not drawn at all outside TTS playback / PROCESSING: no resting breathe in the
+        // continue gap or while listening, so it can never sit there stuck.
+        val vis = centerVis.coerceIn(0f, 1f)
+        if (vis <= 0f) return
         val cx = w * 0.5f
         val cy = h * 0.5f
         val vmin = min(w, h)
         val breathe = (sin(a64AnimTime * 1.6f) + 1f) * 0.5f
         val p = pulse.coerceIn(0f, 1f)
         val radius = vmin * (0.20f + breathe * 0.05f + p * 0.03f)
-        val coreAlpha = strength * (0.035f + breathe * 0.025f + p * 0.045f)
+        val coreAlpha = vis * strength * (0.035f + breathe * 0.025f + p * 0.045f)
         val midAlpha = coreAlpha * 0.45f
 
         a64CenterPaint.shader = RadialGradient(
@@ -882,6 +1003,8 @@ class VoiceStateOverlayView @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         if (phase == Phase.NONE || fadeAlpha <= 0f) return
+        // Continue gap / audio ended: nothing on screen, not a resting ring.
+        if (glowVis <= 0.01f) return
 
         val w = contentWidth().toFloat()
         val h = contentHeight().toFloat()
@@ -923,7 +1046,7 @@ class VoiceStateOverlayView @JvmOverloads constructor(
                     .coerceIn(0.38f, 0.85f) * fadeAlpha
             }
         }
-        strength *= opacityMul
+        strength *= opacityMul * glowVis
 
         if (useA64EnhancedOverlay) {
             drawA64EnhancedOverlay(canvas, w, h, pulse, strength, colorR, colorG, colorB, phase, drawGain)

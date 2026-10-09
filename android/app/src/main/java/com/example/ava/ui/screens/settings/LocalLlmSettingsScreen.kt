@@ -1,5 +1,6 @@
 package com.example.ava.ui.screens.settings
 
+import android.content.Context
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -32,8 +33,13 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.RadioButtonChecked
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -74,6 +80,9 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.Hyphens
 import androidx.compose.ui.text.style.LineBreak
@@ -99,10 +108,12 @@ import com.example.ava.settings.REMOTE_AI_HISTORY_TURNS_MIN
 import com.example.ava.settings.RemoteAiKind
 import com.example.ava.settings.RemoteAiProfile
 import com.example.ava.settings.defaultBaseUrl
+import com.example.ava.settings.ready
 import com.example.ava.settings.resolvedPath
 import com.example.ava.settings.slotIndexOrNull
 import com.example.ava.settings.slotList
 import com.example.ava.settings.snapRemoteHistoryTurns
+import com.example.ava.settings.voiceProfile
 import com.example.ava.ui.AvaToast
 import com.example.ava.ui.Screen
 import com.example.ava.ui.screens.settings.components.BoxedSelectPopup
@@ -241,21 +252,49 @@ fun RemoteAiSettingsScreen(navController: NavController) {
                         launchSingleTop = true
                     }
                 },
-                onSelect = { id -> scope.launch { remoteStore.selectedId.set(id) } },
-                onUpsert = { profile -> scope.launch { remoteStore.upsert(profile) } },
-                onSwitchSlot = { current, nextId ->
-                    scope.launch {
-                        remoteStore.upsert(current)
-                        remoteStore.selectedId.set(nextId)
+                onSave = { profile ->
+                    val missing = remoteAiMissing(context, profile)
+                    if (missing != null) {
+                        remoteAiToast(context, context.getString(R.string.remote_ai_save_missing, missing))
+                    } else {
+                        scope.launch {
+                            remoteStore.upsert(profile)
+                            val after = remoteStore.get()
+                            val slot = profile.slotIndexOrNull() ?: 1
+                            val line = when {
+                                after.voiceProfile()?.id == profile.id -> R.string.remote_ai_saved_live
+                                after.fallbackEnabled -> R.string.remote_ai_saved_backup
+                                else -> R.string.remote_ai_saved_idle
+                            }
+                            remoteAiToast(context, context.getString(line, slot))
+                        }
                     }
                 },
-                onAddSlot = { current ->
-                    scope.launch {
-                        remoteStore.upsert(current)
-                        remoteStore.addSlot()
+                onUseSlot = { profile ->
+                    val missing = remoteAiMissing(context, profile)
+                    if (missing != null) {
+                        remoteAiToast(context, context.getString(R.string.remote_ai_save_missing, missing))
+                    } else {
+                        scope.launch {
+                            remoteStore.upsert(profile)
+                            if (remoteStore.useSlot(profile.id)) {
+                                remoteAiToast(
+                                    context,
+                                    context.getString(R.string.remote_ai_now_in_use, profile.slotIndexOrNull() ?: 1),
+                                )
+                            }
+                        }
                     }
                 },
-                onClearSlot = { id -> scope.launch { remoteStore.removeSlot(id) } },
+                // Browsing keeps an edited draft; it never moves the live model.
+                onKeepDraft = { draft -> scope.launch { remoteStore.upsert(draft) } },
+                onAddSlot = { draft, opened ->
+                    scope.launch {
+                        if (draft != null) remoteStore.upsert(draft)
+                        opened(remoteStore.addSlot())
+                    }
+                },
+                onClearSlot = { id, opened -> scope.launch { opened(remoteStore.removeSlot(id)) } },
                 onHistoryTurns = { n -> scope.launch { remoteStore.historyTurns.set(n) } },
                 onStreaming = { on -> scope.launch { remoteStore.streaming.set(on) } },
                 onThinking = { on -> scope.launch { remoteStore.thinking.set(on) } },
@@ -269,21 +308,26 @@ private fun RemoteAiCard(
     settings: com.example.ava.settings.RemoteAiSettings,
     accent: Color,
     onPrompt: () -> Unit,
-    onSelect: (String) -> Unit,
-    onUpsert: (RemoteAiProfile) -> Unit,
-    onSwitchSlot: (RemoteAiProfile, String) -> Unit,
-    onAddSlot: (RemoteAiProfile) -> Unit,
-    onClearSlot: (String) -> Unit,
+    onSave: (RemoteAiProfile) -> Unit,
+    onUseSlot: (RemoteAiProfile) -> Unit,
+    onKeepDraft: (RemoteAiProfile) -> Unit,
+    /** Draft to keep (or null), then the new slot id to open (null when full). */
+    onAddSlot: (RemoteAiProfile?, (String?) -> Unit) -> Unit,
+    /** Slot to drop, then the slot id to open next. */
+    onClearSlot: (String, (String?) -> Unit) -> Unit,
     onHistoryTurns: (Int) -> Unit,
     onStreaming: (Boolean) -> Unit,
     onThinking: (Boolean) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     val slots = remember(settings.profiles, settings.selectedId) { settings.slotList() }
-    var draftId by remember(settings.selectedId) {
+    // Slot open in the editor. UI-only: viewing or adding a slot never changes the live model.
+    var draftId by remember {
         mutableStateOf(slots.firstOrNull { it.id == settings.selectedId }?.id ?: slots.first().id)
     }
     val stored = slots.firstOrNull { it.id == draftId } ?: slots.first()
+    val liveId = settings.voiceProfile()?.id
     var draftKind by remember(stored.id, stored.kind) { mutableStateOf(stored.kind) }
     var draftUrl by remember(stored.id, stored.baseUrl) { mutableStateOf(stored.baseUrl) }
     var draftModel by remember(stored.id, stored.model) { mutableStateOf(stored.model) }
@@ -300,6 +344,12 @@ private fun RemoteAiCard(
         model = draftModel,
         token = draftToken,
     )
+    /**
+     * Edited draft worth keeping when the user leaves this slot. An unfinished
+     * edit to the live slot is not written: that would take voice off the air.
+     */
+    fun draftToKeep(): RemoteAiProfile? =
+        profile.copy(enabled = true).takeIf { profile != stored && (profile.ready() || stored.id != liveId) }
     val kinds = remember { RemoteAiKind.entries.toList() }
     val anthropic = stringResource(R.string.remote_ai_kind_anthropic)
     val openai = stringResource(R.string.remote_ai_kind_openai)
@@ -350,14 +400,14 @@ private fun RemoteAiCard(
                 onSelect = { index ->
                     val next = slots.firstOrNull { it.slotIndexOrNull() == index } ?: return@RemoteAiSlotStrip
                     if (next.id == stored.id) return@RemoteAiSlotStrip
-                    onSwitchSlot(profile.copy(enabled = true), next.id)
+                    draftToKeep()?.let(onKeepDraft)
                     draftId = next.id
                     fetchedModels = emptyList()
                     modelMenu = false
                 },
                 onAdd = {
                     if (slots.size >= REMOTE_AI_SLOT_MAX) return@RemoteAiSlotStrip
-                    onAddSlot(profile.copy(enabled = true))
+                    onAddSlot(draftToKeep()) { id -> if (id != null) draftId = id }
                     fetchedModels = emptyList()
                     modelMenu = false
                 },
@@ -426,6 +476,7 @@ private fun RemoteAiCard(
         RemoteFadeField(
             value = draftToken,
             label = stringResource(R.string.remote_ai_token),
+            secret = true,
         ) { draftToken = it }
         RemoteFadeField(
             value = draftModel,
@@ -448,10 +499,20 @@ private fun RemoteAiCard(
                             fetching = true
                             modelMenu = false
                             scope.launch {
-                                fetchedModels = runCatching { RemoteAiClient.listModels(profile) }
-                                    .getOrDefault(emptyList())
+                                // Also the connection check: say what happened instead of failing quietly.
+                                val result = runCatching { RemoteAiClient.listModels(profile) }
                                 fetching = false
+                                result.exceptionOrNull()?.let { if (it is kotlinx.coroutines.CancellationException) throw it }
+                                fetchedModels = result.getOrDefault(emptyList())
                                 modelMenu = fetchedModels.isNotEmpty()
+                                val line = result.fold(
+                                    onSuccess = { models ->
+                                        if (models.isEmpty()) context.getString(R.string.remote_ai_fetch_empty)
+                                        else context.getString(R.string.remote_ai_fetch_ok, models.size)
+                                    },
+                                    onFailure = { e -> context.getString(R.string.remote_ai_fetch_error, remoteAiErrorText(e)) },
+                                )
+                                remoteAiToast(context, line)
                             }
                         }
                         .padding(horizontal = 10.dp, vertical = 8.dp),
@@ -486,6 +547,10 @@ private fun RemoteAiCard(
         )
         SettingsChevronIcon(tint = getSlateMutedColor(), base = 20f)
     }
+    val editingLive = stored.id == liveId
+    // Continuation on: the first ready slot is live and the rest are backups, so
+    // only the live slot shows the (disabled) Current button; backups show none.
+    val showUse = editingLive || !settings.fallbackEnabled
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -493,11 +558,44 @@ private fun RemoteAiCard(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
+        if (showUse) {
+            val useTint = if (editingLive) getSlateMutedColor() else accent
+            Row(
+                modifier = Modifier
+                    .clickable(enabled = !editingLive) { onUseSlot(profile.copy(enabled = true)) }
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                Icon(
+                    // One live slot among many: filled radio = this slot is live.
+                    imageVector = if (editingLive) {
+                        Icons.Filled.RadioButtonChecked
+                    } else {
+                        Icons.Filled.RadioButtonUnchecked
+                    },
+                    contentDescription = null,
+                    tint = useTint,
+                    modifier = Modifier.size(22.dp),
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = stringResource(
+                        if (editingLive) R.string.remote_ai_current else R.string.remote_ai_use_slot,
+                    ),
+                    fontSize = settingsTitleTextSize(base = 18f),
+                    fontWeight = FontWeight.SemiBold,
+                    color = useTint,
+                    maxLines = 1,
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+        }
         val slot = stored.slotIndexOrNull() ?: 1
         if (slot > 1) {
             Row(
                 modifier = Modifier
-                    .clickable { onClearSlot(stored.id) }
+                    .clickable { onClearSlot(stored.id) { id -> if (id != null) draftId = id } }
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
@@ -520,10 +618,7 @@ private fun RemoteAiCard(
         }
         Row(
             modifier = Modifier
-                .clickable {
-                    onSelect(profile.id)
-                    onUpsert(profile.copy(enabled = true))
-                }
+                .clickable { onSave(profile.copy(enabled = true)) }
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
@@ -546,11 +641,37 @@ private fun RemoteAiCard(
     }
 }
 
+/** Same rule as [ready]: what this slot still needs, joined for a toast; null when complete. */
+private fun remoteAiMissing(context: Context, profile: RemoteAiProfile): String? {
+    if (profile.ready()) return null
+    val missing = buildList {
+        if (profile.baseUrl.isBlank()) add(context.getString(R.string.remote_ai_base_url))
+        if (profile.model.isBlank()) add(context.getString(R.string.remote_ai_model))
+        if (profile.kind != RemoteAiKind.OLLAMA && profile.token.isBlank()) add(context.getString(R.string.remote_ai_token))
+    }
+    return missing.joinToString(context.getString(R.string.remote_ai_list_separator))
+}
+
+/** Provider reason for a failed check; the HTTP body hint never carries the token. */
+private fun remoteAiErrorText(e: Throwable): String {
+    val msg = e.message.orEmpty().removePrefix("remote AI ").replace('\n', ' ').trim()
+    return when {
+        msg.isNotEmpty() -> msg.take(160).trimEnd('.', '。', '!', '！')
+        else -> RemoteAiClient.httpStatus(e)?.let { "HTTP $it" } ?: e.javaClass.simpleName
+    }
+}
+
+private fun remoteAiToast(context: Context, text: String) {
+    AvaToast.show(context, text, tag = "remote-ai-settings", durationMs = AvaToast.LONG_MS)
+}
+
 @Composable
 private fun RemoteFadeField(
     value: String,
     label: String,
     floatLabel: Boolean = true,
+    /** Masked with a show / hide toggle, password keyboard, no autocorrect or suggestions. */
+    secret: Boolean = false,
     trailing: (@Composable () -> Unit)? = null,
     leading: (@Composable () -> Unit)? = null,
     menuItems: List<String> = emptyList(),
@@ -563,6 +684,7 @@ private fun RemoteFadeField(
     val fieldClicks = remember { MutableInteractionSource() }
     val labelClicks = remember { MutableInteractionSource() }
     var focused by remember { mutableStateOf(false) }
+    var reveal by remember { mutableStateOf(false) }
     var triggerWidthPx by remember { mutableIntStateOf(0) }
     var triggerHeightPx by remember { mutableIntStateOf(0) }
     var triggerTopInWindowPx by remember { mutableIntStateOf(0) }
@@ -610,7 +732,7 @@ private fun RemoteFadeField(
                     interactionSource = fieldClicks,
                     indication = null,
                 ) { focus.requestFocus() }
-                .padding(start = if (leading != null) 4.dp else 12.dp, end = if (trailing != null) 4.dp else 12.dp),
+                .padding(start = if (leading != null) 4.dp else 12.dp, end = if (trailing != null || secret) 4.dp else 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (leading != null) {
@@ -648,6 +770,12 @@ private fun RemoteFadeField(
                         color = getTitleColor(),
                     ),
                     cursorBrush = SolidColor(accent),
+                    visualTransformation = if (secret && !reveal) PasswordVisualTransformation() else VisualTransformation.None,
+                    keyboardOptions = if (secret) {
+                        KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false)
+                    } else {
+                        KeyboardOptions.Default
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .fillMaxHeight()
@@ -670,6 +798,20 @@ private fun RemoteFadeField(
                             inner()
                         }
                     },
+                )
+            }
+            if (secret) {
+                Icon(
+                    imageVector = if (reveal) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                    contentDescription = stringResource(
+                        if (reveal) R.string.remote_ai_token_hide else R.string.remote_ai_token_show,
+                    ),
+                    tint = hintColor,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .clickable { reveal = !reveal }
+                        .padding(10.dp)
+                        .size(20.dp),
                 )
             }
             if (trailing != null) trailing()

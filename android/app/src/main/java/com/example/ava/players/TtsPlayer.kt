@@ -38,6 +38,12 @@ class TtsPlayer
     var onTtsPlaybackError: (() -> Unit)? = null
     /** Permanent audio-focus loss while URL TTS is active (Sendspin GAIN, etc.). */
     var onAudioFocusLoss: (() -> Unit)? = null
+    /**
+     * Playback audio really stopped (ended, drained, cancelled, stopped): fired once
+     * per armed [PlaybackEnergyMonitor] when [disablePlaybackEnergyTap] disarms it.
+     * Persistent (not cleared per clip); may run on any thread.
+     */
+    var onTtsAudioEnded: (() -> Unit)? = null
     
     private var progressHandler: android.os.Handler? = null
     private var progressRunnable: Runnable? = null
@@ -64,6 +70,73 @@ class TtsPlayer
         progressHandler = null
     }
 
+    private var clipWatchdogHandler: android.os.Handler? = null
+    private var clipWatchdogRunnable: Runnable? = null
+
+    /**
+     * [playSound] clips (HA announcements, timer ring) have no session watchdog.
+     * Once audio started, a rebuffer with no new data for a while (stream left
+     * open after its last chunk) or a jump backwards (ExoPlayer restarting a
+     * stream of unknown length) means the clip is over: [onTrip].
+     * Main thread only, like the player itself.
+     */
+    private fun startClipWatchdog(onTrip: (reason: String) -> Unit) {
+        stopClipWatchdog()
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        var maxPositionMs = 0L
+        var bufferingSinceMs = 0L
+        var lastBufferedPositionMs = 0L
+        val runnable = object : Runnable {
+            override fun run() {
+                if (clipWatchdogRunnable !== this) return
+                if (player.isStopped) {
+                    // Idle/ended: the normal completion path owns this.
+                    stopClipWatchdog()
+                    return
+                }
+                val positionMs = player.currentPosition
+                if (maxPositionMs >= CLIP_REPLAY_MIN_PROGRESS_MS &&
+                    maxPositionMs - positionMs >= CLIP_REPLAY_BACKJUMP_MS
+                ) {
+                    stopClipWatchdog()
+                    onTrip("replay (pos=${positionMs}ms after ${maxPositionMs}ms)")
+                    return
+                }
+                if (positionMs > maxPositionMs) maxPositionMs = positionMs
+                if (player.isBuffering) {
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    val bufferedMs = player.bufferedPosition
+                    if (bufferingSinceMs == 0L || bufferedMs > lastBufferedPositionMs) {
+                        // Buffering just began, or data is still arriving (slow
+                        // stream, not a hung one): restart the stall clock.
+                        bufferingSinceMs = now
+                        lastBufferedPositionMs = bufferedMs
+                    } else if (now - bufferingSinceMs >= CLIP_REBUFFER_TIMEOUT_MS) {
+                        stopClipWatchdog()
+                        onTrip(
+                            "rebuffering with no new data >${CLIP_REBUFFER_TIMEOUT_MS}ms " +
+                                "at pos=${positionMs}ms buffered=${bufferedMs}ms",
+                        )
+                        return
+                    }
+                } else {
+                    bufferingSinceMs = 0L
+                    lastBufferedPositionMs = 0L
+                }
+                handler.postDelayed(this, CLIP_WATCHDOG_POLL_MS)
+            }
+        }
+        clipWatchdogHandler = handler
+        clipWatchdogRunnable = runnable
+        handler.postDelayed(runnable, CLIP_WATCHDOG_POLL_MS)
+    }
+
+    private fun stopClipWatchdog() {
+        clipWatchdogRunnable?.let { clipWatchdogHandler?.removeCallbacks(it) }
+        clipWatchdogRunnable = null
+        clipWatchdogHandler = null
+    }
+
     val isPlaying get() = player.isPlaying
     /** Buffering or paused: media is loaded but not currently outputting audio. */
     val isPaused get() = player.isPaused
@@ -85,10 +158,26 @@ class TtsPlayer
         // listener. init() then stops that player, and the listener's idle
         // fallback would fire the just-installed handler — hard-cutting the brand
         // new session to idle right at RUN_START.
+        stopClipWatchdog()
         player.cancelPlayback()
+        // The cancelled clip will not reach its completion; disarm the level here.
+        disablePlaybackEnergyTap()
         this.onCompletion = onCompletion
         _ttsPlayed = false
         player.init()
+    }
+
+    /**
+     * Wire session completion when [runStart] never ran (TTS_START / TTS_END with no
+     * RUN_START). Does not cancel playback or clear [ttsPlayed]: [runStart] does both,
+     * and calling it from a playback callback cuts the clip that just started.
+     *
+     * @return true when this call installed [handler]. An existing handler is left as-is.
+     */
+    fun ensureCompletionHandler(handler: () -> Unit): Boolean {
+        if (onCompletion != null) return false
+        onCompletion = handler
+        return true
     }
 
     fun runEnd() {
@@ -115,6 +204,7 @@ class TtsPlayer
     }
     
     fun playTts(ttsUrl: String?) {
+        stopClipWatchdog()
         val playUrl = resolveUrl(ttsUrl)
         if (playUrl != ttsUrl) {
             Log.d(TAG, "playTts called: url=$ttsUrl resolved=$playUrl")
@@ -163,7 +253,9 @@ class TtsPlayer
     }
 
     fun playSound(soundUrl: String?, onCompletion: () -> Unit) {
+        stopClipWatchdog()
         val resolved = resolveUrl(soundUrl)
+        Log.d(TAG, "playSound: url=$soundUrl" + if (resolved != soundUrl) " resolved=$resolved" else "")
         if (resolved.isNullOrBlank()) {
             Log.w(TAG, "Sound URL is null or blank")
             onCompletion()
@@ -182,18 +274,32 @@ class TtsPlayer
         player.onDurationChanged = null
         player.onPlaybackError = null
         onPlaybackEnded = null
+        var finished = false
+        val finish: () -> Unit = {
+            if (!finished) {
+                finished = true
+                stopClipWatchdog()
+                player.onPlaybackStarted = null
+                disablePlaybackEnergyTap()
+                onCompletion()
+            }
+        }
         player.onPlaybackStarted = {
             PlaybackEnergyMonitor.setEnabled(true)
             player.onPlaybackStarted = null
+            startClipWatchdog { reason ->
+                Log.w(TAG, "Sound clip watchdog: $reason, finishing url=$resolved")
+                // Detach first so stop() cannot run the listener's completion too.
+                player.cancelPlayback()
+                player.stop()
+                finish()
+            }
         }
-        player.play(resolved) {
-            player.onPlaybackStarted = null
-            disablePlaybackEnergyTap()
-            onCompletion()
-        }
+        player.play(resolved) { finish() }
     }
 
     fun playAnnouncement(mediaUrl: String?, preannounceUrl: String?, onCompletion: () -> Unit) {
+        stopClipWatchdog()
         val resolvedMedia = resolveUrl(mediaUrl)
         val resolvedPreannounce = resolveUrl(preannounceUrl)
         Log.d(
@@ -310,6 +416,7 @@ class TtsPlayer
      */
     fun cancelActivePlayback() {
         stopProgressTracking()
+        stopClipWatchdog()
         player.onDurationChanged = null
         player.onPlaybackStarted = null
         player.onPlaybackError = null
@@ -319,6 +426,7 @@ class TtsPlayer
     }
 
     fun stop() {
+        stopClipWatchdog()
         onCompletion = null
         _ttsPlayed = false
         disablePlaybackEnergyTap()
@@ -328,9 +436,19 @@ class TtsPlayer
         player.stop()
     }
 
-    private fun disablePlaybackEnergyTap() {
+    /**
+     * The one "playback audio ended" point: every finish / stop path ends here (the
+     * PCM drain too, via VoiceSatellite). Disarms the level and fires [onTtsAudioEnded]
+     * if it was armed.
+     */
+    fun disablePlaybackEnergyTap() {
+        val wasEnabled = PlaybackEnergyMonitor.isEnabled()
         PlaybackEnergyMonitor.setEnabled(false)
         PlaybackEnergyMonitor.reset()
+        if (wasEnabled) {
+            runCatching { onTtsAudioEnded?.invoke() }
+                .onFailure { Log.w(TAG, "onTtsAudioEnded failed", it) }
+        }
     }
 
     private fun fireAndRemoveCompletionHandler() {
@@ -340,10 +458,18 @@ class TtsPlayer
     }
 
     override fun close() {
+        stopClipWatchdog()
         player.close()
     }
 
     companion object {
         private const val TAG = "TtsPlayer"
+        private const val CLIP_WATCHDOG_POLL_MS = 250L
+        /** Rebuffering this long with no new buffered data = the clip's stream is done. */
+        private const val CLIP_REBUFFER_TIMEOUT_MS = 8_000L
+        /** Replay check arms only after this much playback... */
+        private const val CLIP_REPLAY_MIN_PROGRESS_MS = 1_500L
+        /** ...and trips when the position falls back by at least this much. */
+        private const val CLIP_REPLAY_BACKJUMP_MS = 1_000L
     }
 }

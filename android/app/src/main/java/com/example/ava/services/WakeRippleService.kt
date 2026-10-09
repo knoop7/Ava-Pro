@@ -37,6 +37,7 @@ class WakeRippleService : Service() {
         private const val EXTRA_GAIN = "level_gain"
         private const val EXTRA_WAKE_INDEX = "wake_word_index"
         private const val EXTRA_OPACITY = "opacity_mul"
+        private const val ACTION_END_SPEAKING_AUDIO = "ACTION_END_SPEAKING_AUDIO"
 
         @Volatile
         private var instance: WakeRippleService? = null
@@ -131,6 +132,22 @@ class WakeRippleService : Service() {
             }
             context.startService(intent)
         }
+
+        /**
+         * TTS audio ended but the turn may stay in SPEAKING (continue wait, chime):
+         * ease the edge-glow level to 0. Same intent queue as showSpeaking, so it
+         * lands after any speaking request already sent. No-op without a live overlay.
+         */
+        fun endSpeakingAudio(context: Context) {
+            if (instance == null || activeStateView == null) return
+            val intent = Intent(context, WakeRippleService::class.java).apply {
+                action = ACTION_END_SPEAKING_AUDIO
+            }
+            context.startService(intent)
+        }
+
+        /** Edge-glow state overlay is on screen (any phase). */
+        fun isStateOverlayShowing(): Boolean = activeStateView?.isShowing() == true
 
         fun showListening(context: Context, color: Int, wakeWordIndex: Int = 0) {
             if (!isEdgeGlowEnabled(context)) return
@@ -250,6 +267,9 @@ class WakeRippleService : Service() {
                 resolveWakeWordIndex(intent)
                 clearLevelPreviewDrive()
                 showSpeakingOverlay(color)
+            }
+            ACTION_END_SPEAKING_AUDIO -> {
+                stateOverlayView?.endSpeakingAudio()
             }
             "ACTION_SHOW_LISTENING" -> {
                 val color = resolveAccentColor(intent)

@@ -56,12 +56,25 @@ class ContainerExtractorsFactory : ExtractorsFactory {
 /**
  * A retry of `/api/esphome/ffmpeg_proxy/` is a new GET. That view kills the
  * running ffmpeg and starts the source again at byte 0, so the song loops.
+ *
+ * `/api/tts_proxy/` streams have no length and no duration, so ExoPlayer treats
+ * them as live and restarts a retried load at byte 0. When HA leaves the stream
+ * open after the last chunk, the read timeout retries and the whole reply plays
+ * again (every timeout, until the token 404s). Once bytes have arrived the clip
+ * is over: fail instead of retrying. A failure before any byte still retries.
  */
 @UnstableApi
 class FfmpegProxyLoadPolicy : DefaultLoadErrorHandlingPolicy() {
     override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
         val uri = loadErrorInfo.loadEventInfo.uri.toString()
         if (uri.contains("/api/esphome/ffmpeg_proxy/")) return C.TIME_UNSET
+        if (uri.contains(TTS_PROXY_PATH) && loadErrorInfo.loadEventInfo.bytesLoaded > 0L) {
+            return C.TIME_UNSET
+        }
         return super.getRetryDelayMsFor(loadErrorInfo)
+    }
+
+    private companion object {
+        const val TTS_PROXY_PATH = "/api/tts_proxy/"
     }
 }

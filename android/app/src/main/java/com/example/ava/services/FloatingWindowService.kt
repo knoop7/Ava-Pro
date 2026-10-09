@@ -45,7 +45,9 @@ import android.view.animation.PathInterpolator
 import android.widget.FrameLayout
 import android.widget.TextView
 import com.example.ava.ui.AvaSystemChrome
+import com.example.ava.ui.views.SpeechEdgeWaveView
 import com.example.ava.utils.BlurCompat
+import com.example.ava.utils.CaptionLineBalance
 import com.example.ava.utils.DeviceFeatureManager
 import com.example.ava.utils.EmotionKeywordDetector
 import com.example.ava.utils.EmotionKeywordDetector.Expression
@@ -101,8 +103,8 @@ class FloatingWindowService : Service() {
      * on pre-API-28 hardware canvases, and a one-off ~150 KB software render followed by a
      * plain bitmap draw is the cheapest per-frame option on low-end devices anyway.
      *
-     * The 3-line caption slot stays fixed; [coverHeightPx] hugs the used lines from the
-     * top so a 1–2 line sentence does not sit above an empty dark plateau.
+     * The page slot stays fixed; [coverHeightPx] hugs the used lines from the
+     * top so a short sentence does not sit above an empty dark plateau.
      */
     private class CaptionFogDrawable : Drawable() {
         private val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { isFilterBitmap = true }
@@ -213,7 +215,7 @@ class FloatingWindowService : Service() {
             val fillA = (Color.alpha(CHARCOAL_PLATE) * drawableA / 255f).toInt()
             charcoalFill.color = (CHARCOAL_PLATE and 0x00FFFFFF) or (fillA shl 24)
             canvas.drawRoundRect(plate, rad, rad, charcoalFill)
-            val strokeA = (0x33 * drawableA / 255f).toInt()
+            val strokeA = (0x18 * drawableA / 255f).toInt()
             charcoalStroke.color = 0x00FFFFFF or (strokeA shl 24)
             charcoalStroke.strokeWidth = 1.2f * (dest.width() / 360f).coerceIn(0.8f, 1.6f)
             canvas.drawRoundRect(plate, rad, rad, charcoalStroke)
@@ -233,13 +235,13 @@ class FloatingWindowService : Service() {
         companion object {
             /** ~29% black — faint mist, just enough to lift white text off bright art. */
             private const val PLATEAU_COLOR = 0x4A000000
-            /** Button-turn plate: charcoal glass ~75%. 60% read as too thin behind TTS. */
-            private const val CHARCOAL_PLATE = 0xC0181A1C.toInt()
+            /** Button-turn plate: near-solid charcoal. Glass alpha still read as mist. */
+            private const val CHARCOAL_PLATE = 0xF50C0D0F.toInt()
             /** Feather band as a fraction of each axis, per edge. */
             private const val FEATHER_V = 0.28f
             private const val FEATHER_H = 0.10f
-            private const val CHARCOAL_FEATHER_V = 0.10f
-            private const val CHARCOAL_FEATHER_H = 0.07f
+            private const val CHARCOAL_FEATHER_V = 0.03f
+            private const val CHARCOAL_FEATHER_H = 0.025f
         }
     }
     
@@ -1103,6 +1105,8 @@ class FloatingWindowService : Service() {
     private var textCardView: FrameLayout? = null
     /** Bottom veil behind TTS captions (and sphere turns). Fades; never snapped on-screen. */
     private var captionFalloffView: View? = null
+    /** Faint black bottom-edge wave while the person is talking (sphere LISTENING only). */
+    private var speechWaveView: SpeechEdgeWaveView? = null
     private var captionFalloffAnimator: Animator? = null
     /** Fired once when a caption-only veil fade-in reaches 1; cancelled fade-ins skip it. */
     private var captionFalloffOnSettled: (() -> Unit)? = null
@@ -1151,7 +1155,7 @@ class FloatingWindowService : Service() {
         val switchSlidePx: Float,
         /** Air between the solid sphere and the caption card (px). */
         val sphereGapPx: Int,
-        /** Fixed slot height for exactly 3 caption lines (keeps first-line alignment). */
+        /** Fixed slot height for a sphere page (2 lines; keeps first-line alignment). */
         val threeLineHeightPx: Int
     )
 
@@ -1216,11 +1220,11 @@ class FloatingWindowService : Service() {
             else -> 0.075f
         }
         val colFrac = when {
-            a64 -> 0.66f
-            isTablet -> 0.60f
-            isLandscape -> 0.58f
-            isSquareScreen -> 0.70f
-            else -> 0.74f
+            a64 -> 0.58f
+            isTablet -> 0.54f
+            isLandscape -> 0.52f
+            isSquareScreen -> 0.62f
+            else -> 0.64f
         }
 
         val sideClear = (vmin * sideFrac).roundToInt().coerceAtLeast(dp(24f))
@@ -1235,8 +1239,8 @@ class FloatingWindowService : Service() {
         val contentWidthPx = (columnWidth - padH * 2).coerceAtLeast(dp(120f))
         // Same rule as the FAB transcript / caption-only plate: size type by how many
         // CJK glyphs fit on a line (1 glyph ≈ 1 em). Fewer glyphs → larger type; the
-        // 3-line page then carries less text instead of packing a wall of small type.
-        // Landscape / tablet caps keep a 3-line slot from eating the short side.
+        // 2-line sphere page then carries less text instead of packing a wall of small type.
+        // Landscape / tablet caps keep a 2-line slot from eating the short side.
         val byChars = spForCjkPerLine(contentWidthPx, SPHERE_CJK_PER_LINE)
         val currSp = when {
             isTablet -> byChars.coerceIn(20f, 30f)
@@ -1244,7 +1248,7 @@ class FloatingWindowService : Service() {
             isSquareScreen -> byChars.coerceIn(17f, 22f)
             else -> byChars.coerceIn(17f, 24f)
         }
-        val threeLineHeight = measureCaptionThreeLineHeightPx(currSp, contentWidthPx)
+        val threeLineHeight = measureCaptionSlotHeightPx(currSp, contentWidthPx, SPHERE_CAPTION_LINES)
 
         return CaptionMetrics(
             sideClearPx = sideClear,
@@ -1259,22 +1263,23 @@ class FloatingWindowService : Service() {
         )
     }
 
-    /** Measure a stable 3-line slot so 1-line and 3-line sentences share the same first-line Y. */
-    private fun measureCaptionThreeLineHeightPx(sp: Float, contentWidthPx: Int): Int {
+    /** Measure a stable page slot so a short page and a full page share the same first-line Y. */
+    private fun measureCaptionSlotHeightPx(sp: Float, contentWidthPx: Int, lines: Int): Int {
+        val line = "国国国国国国"
         val probe = TextView(this).apply {
             setTextSize(TypedValue.COMPLEX_UNIT_SP, sp)
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             setLineSpacing(0f, 1.32f)
             includeFontPadding = false
-            maxLines = 3
-            // Three full lines of CJK so height matches real wrapped captions.
-            text = "国国国国国国\n国国国国国国\n国国国国国国"
+            maxLines = lines
+            text = (1..lines).joinToString("\n") { line }
         }
         val w = contentWidthPx.coerceAtLeast(dp(120f))
         val widthSpec = View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY)
         val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
         probe.measure(widthSpec, heightSpec)
-        return probe.measuredHeight.coerceAtLeast(dp(48f))
+        val floor = if (lines <= 2) dp(36f) else dp(48f)
+        return probe.measuredHeight.coerceAtLeast(floor)
     }
 
     private fun buildCaptionLineView(sp: Float, threeLineHeightPx: Int): TextView {
@@ -1292,10 +1297,14 @@ class FloatingWindowService : Service() {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
             textAlignment = View.TEXT_ALIGNMENT_CENTER
             isSingleLine = false
-            maxLines = 3
+            maxLines = SPHERE_CAPTION_LINES
             ellipsize = android.text.TextUtils.TruncateAt.END
             setLineSpacing(0f, 1.32f)
             includeFontPadding = false
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                breakStrategy = Layout.BREAK_STRATEGY_SIMPLE
+                hyphenationFrequency = Layout.HYPHENATION_FREQUENCY_NONE
+            }
             // Soft glyph emphasis only — no plate / block shadow behind the caption.
             setShadowLayer(dpF(2.2f), 0f, dpF(0.8f), Color.argb(110, 0, 0, 0))
             alpha = 1f
@@ -1315,15 +1324,19 @@ class FloatingWindowService : Service() {
         val glowClear = metrics.bottomClearPx
 
         val lp = (card.layoutParams as? FrameLayout.LayoutParams) ?: return
-        lp.width = metrics.columnWidthPx
-        val captionH = activeThreeLineHeightPx(metrics) + metrics.padVPx * 2
+        val padV = if (captionOnly) captionOnlyPadVPx(metrics) else metrics.padVPx
+        lp.width = if (captionOnly) captionOnlyColumnWidthPx(metrics) else metrics.columnWidthPx
+        val captionH = activeThreeLineHeightPx(metrics) + padV * 2
         lp.height = captionH
 
         if (captionOnly) {
-            // Button turn: no sphere to sit under and the bottom band collides with the FAB
-            // and its transcript bubble. The reply reads from the centre of the screen.
+            // Button turn: no sphere. The reply plate stays centred on screen;
+            // the STT bubble is the one that kisses the FAB.
             lp.gravity = Gravity.CENTER
+            lp.topMargin = 0
             lp.bottomMargin = 0
+            lp.marginStart = 0
+            lp.marginEnd = 0
             card.layoutParams = lp
             syncCaptionFogToText()
             return
@@ -1354,7 +1367,7 @@ class FloatingWindowService : Service() {
         syncCaptionFogToText()
     }
 
-    /** Ink height of a caption layer (used lines only — the TextView itself is a 3-line slot). */
+    /** Ink height of a caption layer (used lines only — the TextView itself is a page slot). */
     private fun captionInkHeight(tv: TextView?): Int {
         if (tv == null || tv.visibility != View.VISIBLE) return 0
         val text = tv.text?.toString().orEmpty()
@@ -1365,12 +1378,13 @@ class FloatingWindowService : Service() {
         }
         val metrics = captionMetrics ?: return 0
         val slot = activeThreeLineHeightPx(metrics)
-        val lines = (1 + text.count { it == '\n' }).coerceIn(1, 3)
-        return (slot * lines / 3f).roundToInt()
+        val pageLines = captionPageLines()
+        val lines = (1 + text.count { it == '\n' }).coerceIn(1, pageLines)
+        return (slot * lines / pageLines.toFloat()).roundToInt()
     }
 
     /**
-     * Hug the fog to the used lines. Sphere pages keep a top baseline so 1-line and 3-line
+     * Hug the fog to the used lines. Sphere pages keep a top baseline so 1-line and 2-line
      * share a first-line Y. Caption-only pages share one 3-line plate so a short page and a
      * long page dissolve inside the same card — hugging per page made the plate jump size.
      */
@@ -1386,7 +1400,7 @@ class FloatingWindowService : Service() {
                 fog.setCoverHeight(0, centered = true)
                 return
             }
-            val slotH = activeThreeLineHeightPx(metrics) + metrics.padVPx * 2
+            val slotH = activeThreeLineHeightPx(metrics) + captionOnlyPadVPx(metrics) * 2
             val maxH = card.height.takeIf { it > 0 } ?: slotH
             fog.setCoverHeight(slotH.coerceAtMost(maxH), centered = true)
             return
@@ -1413,8 +1427,9 @@ class FloatingWindowService : Service() {
         if (text.isBlank()) return 0
         val metrics = captionMetrics ?: return 0
         val slot = activeThreeLineHeightPx(metrics)
-        val lines = (1 + text.count { it == '\n' }).coerceIn(1, 3)
-        return (slot * lines / 3f).roundToInt()
+        val pageLines = captionPageLines()
+        val lines = (1 + text.count { it == '\n' }).coerceIn(1, pageLines)
+        return (slot * lines / pageLines.toFloat()).roundToInt()
     }
 
     private fun clearCaptionStack() {
@@ -1454,37 +1469,29 @@ class FloatingWindowService : Service() {
     }
 
     /**
-     * Paginate full caption by layout lines (max 3), not by sentence punctuation.
+     * Paginate full caption by layout lines (sphere 2, button 3), not by sentence punctuation.
      * Keeps the whole reply readable via time-based page progress.
      */
     private fun buildCaptionPages(fullText: String): List<String> {
         val normalized = fullText.trim().replace(Regex("[ \\t]+"), " ")
         if (normalized.isEmpty()) return emptyList()
 
-        val metrics = captionMetrics
-        val probe = capsuleTextView
-        val contentWidth = if (metrics != null) {
-            (metrics.columnWidthPx - metrics.padHPx * 2).coerceAtLeast(dp(120f))
-        } else {
-            dp(240f)
-        }
-        val paint = TextPaint(probe?.paint ?: TextPaint()).apply {
-            if (probe == null && metrics != null) {
-                textSize = TypedValue.applyDimension(
-                    TypedValue.COMPLEX_UNIT_SP,
-                    metrics.currSp,
-                    resources.displayMetrics
-                )
-                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            }
-        }
+        val contentWidth = captionDisplayContentWidthPx()
+        // 1px tighter than the live TextView so a full line never re-wraps
+        // the last 1–3 glyphs onto the next row.
+        val wrapWidth = (contentWidth - 1).coerceAtLeast(dp(80f))
+        val paint = captionWrapPaint()
 
-        val layout = StaticLayout.Builder
-            .obtain(normalized, 0, normalized.length, paint, contentWidth)
+        val builder = StaticLayout.Builder
+            .obtain(normalized, 0, normalized.length, paint, wrapWidth)
             .setAlignment(Layout.Alignment.ALIGN_CENTER)
             .setLineSpacing(0f, 1.32f)
             .setIncludePad(false)
-            .build()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            builder.setBreakStrategy(Layout.BREAK_STRATEGY_SIMPLE)
+            builder.setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE)
+        }
+        val layout = builder.build()
 
         if (layout.lineCount <= 0) return listOf(normalized)
 
@@ -1494,15 +1501,62 @@ class FloatingWindowService : Service() {
             val end = layout.getLineEnd(i)
             lines.add(normalized.substring(start, end).trimEnd('\n'))
         }
+        val balanced = CaptionLineBalance.balance(lines, { paint.measureText(it) }, wrapWidth.toFloat())
 
+        val pageLines = captionPageLines()
         val pages = ArrayList<String>()
         var i = 0
-        while (i < lines.size) {
-            val end = min(i + 3, lines.size)
-            pages.add(lines.subList(i, end).joinToString("\n"))
+        while (i < balanced.size) {
+            val end = min(i + pageLines, balanced.size)
+            pages.add(balanced.subList(i, end).joinToString("\n"))
             i = end
         }
         return pages.ifEmpty { listOf(normalized) }
+    }
+
+    /** Width the caption TextView actually paints at (caption-only plate is wider). */
+    private fun captionDisplayContentWidthPx(): Int {
+        val computed = captionComputedContentWidthPx()
+        val live = capsuleTextView?.width?.takeIf { it > 0 }
+        // A wider live width under-wraps: one page, then the TextView ellipsizes.
+        return if (live != null && live < computed) live else computed
+    }
+
+    private fun captionComputedContentWidthPx(): Int {
+        val metrics = captionMetrics ?: return dp(240f)
+        val cardW = if (captionOnlyTypographyApplied) {
+            captionOnlyColumnWidthPx(metrics)
+        } else {
+            metrics.columnWidthPx
+        }
+        val padH = if (captionOnlyTypographyApplied) {
+            captionOnlyPadHPx(metrics)
+        } else {
+            metrics.padHPx
+        }
+        return (cardW - padH * 2).coerceAtLeast(dp(120f))
+    }
+
+    private fun captionWrapPaint(): TextPaint {
+        val probe = capsuleTextView
+        if (probe != null && probe.paint.textSize > 0f) return TextPaint(probe.paint)
+        val metrics = captionMetrics
+        val paint = TextPaint()
+        if (metrics != null) {
+            val contentW = captionComputedContentWidthPx()
+            val sp = if (captionOnlyTypographyApplied) {
+                captionOnlySp(metrics, contentW)
+            } else {
+                metrics.currSp
+            }
+            paint.textSize = TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_SP,
+                sp,
+                resources.displayMetrics
+            )
+            paint.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        }
+        return paint
     }
 
     private fun prepareCaptionPages(fullText: String, resetIndex: Boolean = true) {
@@ -1870,6 +1924,25 @@ class FloatingWindowService : Service() {
         captionFalloffView = falloffView
         fullscreenContainer.addView(falloffView)
 
+        // Person-speech cue: polls the mic meter only while this turn is sphere LISTENING.
+        val waveView = SpeechEdgeWaveView(
+            this,
+            micLevel = { VoiceSatelliteService.getInstance()?.currentMicrophoneLevel() ?: 0f },
+            isListening = { currentState == State.LISTENING && !captionOnly },
+            // Chime guard: watch the mic only once the uplink is really open.
+            isUplinkOpen = { VoiceSatelliteService.getInstance()?.isMicUplinkOpen() ?: true },
+            // First wake turn: the person talks over the wake earcon (pre-roll to HA).
+            isPreRollCapturing = { VoiceSatelliteService.getInstance()?.isWakePreRollCapturing() ?: false },
+        ).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                dp(72f),
+                Gravity.BOTTOM,
+            )
+        }
+        speechWaveView = waveView
+        fullscreenContainer.addView(waveView)
+
         val sphereView = EsperSphereView(this, screenWidth, screenHeight).apply {
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -2093,6 +2166,7 @@ class FloatingWindowService : Service() {
             captionFalloffFadingIn = false
             cancelCaptionOnlyHidePark()
             captionFalloffView = null
+            speechWaveView = null
             captionMetrics = null
             captionOnlyTypographyApplied = false
             captionOnlyThreeLineHeightPx = 0
@@ -2158,6 +2232,7 @@ class FloatingWindowService : Service() {
                     esperSphereView?.setExpression(Expression.LISTENING)
                     // Mid-session rotate: skip wake-settle delay, hard-raise above screensaver.
                     showSphereOnly(waitForWakeSettle = false)
+                    speechWaveView?.armListening()
                     armStuckListeningWatchdog()
                 }
             }
@@ -2774,6 +2849,7 @@ class FloatingWindowService : Service() {
     private fun enterListeningMode() {
         Log.d(TAG, "state: $currentState -> LISTENING (captionOnly=$captionOnly)")
         currentState = State.LISTENING
+        speakingAudioEnded = false
         resetCaptionState()
         // STT phase only: stuck at the start with no Processing/Speaking advance.
         armStuckListeningWatchdog()
@@ -2786,11 +2862,13 @@ class FloatingWindowService : Service() {
         }
         esperSphereView?.setExpression(Expression.LISTENING)
         showSphereOnly(waitForWakeSettle = true)
+        speechWaveView?.armListening()
     }
 
     private fun enterProcessingMode() {
         Log.d(TAG, "state: $currentState -> PROCESSING (captionOnly=$captionOnly)")
         currentState = State.PROCESSING
+        speakingAudioEnded = false
         // Past STT — cancel listening stuck-lease (session advanced).
         cancelStuckListeningWatchdog()
         if (captionOnly) {
@@ -2808,6 +2886,7 @@ class FloatingWindowService : Service() {
     private fun enterSpeakingMode() {
         Log.d(TAG, "state: $currentState -> SPEAKING")
         currentState = State.SPEAKING
+        speakingAudioEnded = false
         currentText = ""
         clearCaptionStack()
         // Emotion is set by the caller (karaoke / assistant-text / streaming) right after this,
@@ -2837,9 +2916,13 @@ class FloatingWindowService : Service() {
         // before the veil, so boot windows are not covering the slot.
         // Later replies leave the slot alone.
         val covered = AppWindowService.hasWindowAttached() || AiBrowserService.isShowing()
-        if (wasHidden && (plateNeedsClimb || needsBringToFront || covered)) {
+        if (wasHidden) {
             plateNeedsClimb = false
-            bringToFrontNow(force = true)
+            bringToFrontNow(force = true, raiseMic = true)
+        } else if (covered || needsBringToFront) {
+            bringToFrontNow(force = covered, raiseMic = true)
+        } else {
+            OverlayZOrderCoordinator.scheduleVoiceRaise()
         }
         // Veil leads the plate. Keep leftover alpha and fade up — never snap it away.
         fadeInCaptionFalloff(CAPTION_ONLY_VEIL_LEAD_MS)
@@ -2884,6 +2967,7 @@ class FloatingWindowService : Service() {
 
     private fun hideAll(onEnd: (() -> Unit)? = null) {
         Log.d(TAG, "state: $currentState -> IDLE (hide)")
+        speakingAudioEnded = false
         OverlayZOrderCoordinator.cancelScheduledVoiceRaise()
         cancelStuckListeningWatchdog()
         stopCursorBlink()
@@ -3144,7 +3228,7 @@ class FloatingWindowService : Service() {
      * Caption-only turns read the reply from the middle of the screen. Type is sized by
      * [CAPTION_ONLY_CJK_PER_LINE] so a line holds slightly more glyphs than the sphere
      * caption — quieter, not larger. The 3-line slot is re-measured; paging follows the
-     * live TextView paint.
+     * live TextView paint. Sphere turns stay on a 2-line page.
      */
     private fun applyCaptionTypography(captionOnlyMode: Boolean) {
         if (captionOnlyTypographyApplied == captionOnlyMode) return
@@ -3153,13 +3237,15 @@ class FloatingWindowService : Service() {
         val padH = if (captionOnlyMode) captionOnlyPadHPx(metrics) else metrics.padHPx
         val contentWidthPx = (cardWidth - padH * 2).coerceAtLeast(dp(120f))
         val sp = if (captionOnlyMode) captionOnlySp(metrics, contentWidthPx) else metrics.currSp
+        val pageLines = if (captionOnlyMode) CAPTION_ONLY_LINES else SPHERE_CAPTION_LINES
         val threeLine = if (captionOnlyMode) {
-            measureCaptionThreeLineHeightPx(sp, contentWidthPx)
+            measureCaptionSlotHeightPx(sp, contentWidthPx, pageLines)
         } else {
             metrics.threeLineHeightPx
         }
         for (tv in listOfNotNull(capsuleTextView, captionOutgoingView)) {
             tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp)
+            tv.maxLines = pageLines
             // Centred block: a one- or two-line page sits in the middle of the slot, not on
             // the first-line baseline the sphere layout aligns to.
             tv.gravity = if (captionOnlyMode) Gravity.CENTER else Gravity.TOP or Gravity.CENTER_HORIZONTAL
@@ -3175,11 +3261,12 @@ class FloatingWindowService : Service() {
         }
         captionOnlyThreeLineHeightPx = threeLine
         captionOnlyTypographyApplied = captionOnlyMode
+        val padV = if (captionOnlyMode) captionOnlyPadVPx(metrics) else metrics.padVPx
         textCardView?.let { card ->
-            card.setPadding(padH, metrics.padVPx, padH, metrics.padVPx)
+            card.setPadding(padH, padV, padH, padV)
             (card.layoutParams as? FrameLayout.LayoutParams)?.let { lp ->
                 lp.width = cardWidth
-                lp.height = threeLine + metrics.padVPx * 2
+                lp.height = threeLine + padV * 2
                 card.layoutParams = lp
             }
         }
@@ -3209,9 +3296,13 @@ class FloatingWindowService : Service() {
         return wider.coerceIn(metrics.columnWidthPx, ceiling)
     }
 
-    /** A little more side room inside the button plate than the sphere caption. */
+    /** Side room inside the button plate — enough that glyphs don't kiss the glass. */
     private fun captionOnlyPadHPx(metrics: CaptionMetrics): Int =
-        metrics.padHPx + dp(4f)
+        metrics.padHPx + dp(12f)
+
+    /** Vertical room inside the button plate; the sphere caption stays tighter. */
+    private fun captionOnlyPadVPx(metrics: CaptionMetrics): Int =
+        metrics.padVPx + dp(8f)
 
     /**
      * Caption-only type uses more glyphs per line than the sphere caption, so the
@@ -3229,6 +3320,10 @@ class FloatingWindowService : Service() {
         } else {
             metrics.threeLineHeightPx
         }
+
+    /** Sphere: 2 lines then a new page. Button TTS: 3-line plate. */
+    private fun captionPageLines(): Int =
+        if (captionOnly) CAPTION_ONLY_LINES else SPHERE_CAPTION_LINES
 
     private fun handleIntent(intent: Intent) {
         when (intent.action) {
@@ -3302,12 +3397,18 @@ class FloatingWindowService : Service() {
      * turn's first show arrives; cleared on hide.
      */
     private var captionOnly = false
+    /**
+     * TTS audio really ended while the state is still SPEAKING (continue decision /
+     * chime gap). The emotion tint (HAPPY green, CURIOUS teal...) is a TTS-only cue:
+     * once set, the sphere rests on the neutral tint and late page turns don't re-tint.
+     */
+    private var speakingAudioEnded = false
     /** Typography currently applied to the caption views: true = caption-only (larger) sizing. */
     private var captionOnlyTypographyApplied = false
     /** 3-line slot height re-measured for the caption-only font size. */
     private var captionOnlyThreeLineHeightPx = 0
 
-    /** Full assistant text; shown via layout pages (≤3 lines), not sentence cuts. */
+    /** Full assistant text; shown via layout pages (sphere 2 / button 3), not sentence cuts. */
     private var captionFullText = ""
     private var captionPages = listOf<String>()
     private var captionPageIndex = 0
@@ -3338,6 +3439,7 @@ class FloatingWindowService : Service() {
             prepareCaptionPages(text)
             val detection = EmotionKeywordDetector.detect(text)
             utteranceExpression = detection.expression
+            speakingAudioEnded = false
             Log.d(
                 TAG,
                 "assistant text: len=${text.length} pages=${captionPages.size} " +
@@ -3497,7 +3599,7 @@ class FloatingWindowService : Service() {
             } else {
                 pageDetection.expression
             }
-            esperSphereView?.setEyeExpression(eyes)
+            if (!speakingAudioEnded) esperSphereView?.setEyeExpression(eyes)
             Log.d(
                 TAG,
                 "page turn: $fromPage -> $target/${captionPages.lastIndex} " +
@@ -3549,6 +3651,7 @@ class FloatingWindowService : Service() {
 
             val detection = EmotionKeywordDetector.detect(text)
             utteranceExpression = detection.expression
+            speakingAudioEnded = false
             Log.d(
                 TAG,
                 "karaoke start: len=${text.length} duration=${karaokeDurationMs}ms " +
@@ -3574,7 +3677,7 @@ class FloatingWindowService : Service() {
                 }
             }
 
-            // Rebuild pages after TextView paint/width are ready for accurate 3-line paging.
+            // Rebuild pages after TextView paint/width are ready for accurate paging.
             // Layout rebuild must not snap back to page 0 if TTS already advanced.
             if (capsuleTextView?.width ?: 0 > 0) {
                 showFullCaption(fromLayoutRebuild = false)
@@ -3668,10 +3771,22 @@ class FloatingWindowService : Service() {
             // Per-chunk change dedup lives in setExpression — no per-chunk log here.
             val detection = EmotionKeywordDetector.detect(fullText)
             utteranceExpression = detection.expression
+            speakingAudioEnded = false
             esperSphereView?.setExpression(detection.expression)
             
             if (capsuleView?.visibility != View.VISIBLE) showCapsuleWithCard()
         }
+    }
+
+    /** See [speakingAudioEnded]. Main thread. */
+    private fun onTtsAudioEnded() {
+        if (currentState != State.SPEAKING || speakingAudioEnded) return
+        speakingAudioEnded = true
+        Log.d(TAG, "tts audio ended (still SPEAKING, captionOnly=$captionOnly): emotion tint off")
+        // Caption-only turns keep the sphere invisible: nothing green to drop.
+        if (captionOnly) return
+        // Ease off the emotion tint; the sphere's own float/pulse breathe keeps running.
+        esperSphereView?.setExpression(Expression.NEUTRAL)
     }
 
     private fun hideOverlay() {
@@ -3751,6 +3866,16 @@ class FloatingWindowService : Service() {
         private const val CURSOR_CHAR = "\u2758"
 
         /**
+         * TTS audio really ended (same point as QuickWakeFabService.noteTtsAudioEnded).
+         * The session may stay SPEAKING for the continue decision + chime; the sphere's
+         * emotion tint is dropped right here instead of lingering through that gap.
+         */
+        fun noteTtsAudioEnded() {
+            val svc = instance ?: return
+            svc.handler.post { svc.onTtsAudioEnded() }
+        }
+
+        /**
          * STT bubble must wait until the caption-only plate and bottom veil have
          * left. 0 when nothing of ours is on screen.
          */
@@ -3811,10 +3936,14 @@ class FloatingWindowService : Service() {
          * and the quieter caption-only plate.
          */
         private const val SPHERE_CJK_PER_LINE = 12f
+        /** Sphere floating caption: two lines, then turn the page. */
+        private const val SPHERE_CAPTION_LINES = 2
+        /** Caption-only (Quick Wake) plate keeps three lines. */
+        private const val CAPTION_ONLY_LINES = 3
         /** Caption-only (Quick Wake) turns: slightly more glyphs, slightly smaller type. */
         private const val CAPTION_ONLY_CJK_PER_LINE = 13.5f
         /** Voice-button TTS plate vs the sphere caption. Clamped to a 20dp screen inset. */
-        private const val CAPTION_ONLY_WIDTH_SCALE = 1.12f
+        private const val CAPTION_ONLY_WIDTH_SCALE = 1.06f
         /** First page: plate + words rise in as one card. */
         private const val CAPTION_ONLY_ENTRANCE_MS = 640L
         private const val CAPTION_ONLY_ENTRANCE_SCALE = 0.97f

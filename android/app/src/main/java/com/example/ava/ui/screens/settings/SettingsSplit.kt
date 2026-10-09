@@ -8,6 +8,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.navigation.NavController
 import com.example.ava.R
 import com.example.ava.ui.Screen
+import com.example.ava.ui.isCompactSquarePixels
 import com.example.ava.ui.rememberCompactSquareScreen
 
 val LocalSettingsSplitActive = staticCompositionLocalOf { false }
@@ -42,11 +43,16 @@ private val SETTINGS_SPLIT_GROUP_ICONS = mapOf(
 
 @Composable
 fun rememberSettingsSplitActive(enabled: Boolean): Boolean {
+    if (!enabled) return false
+    // Square stays on the portrait page, so split stays off. Portrait orientation
+    // is the default and also keeps split off. A landscape panel whose left column
+    // is at its minimum width is still landscape — do not treat that column as square.
+    if (rememberCompactSquareScreen()) return false
     val configuration = LocalConfiguration.current
-    val landscape = !rememberCompactSquareScreen() &&
-        (configuration.orientation == Configuration.ORIENTATION_LANDSCAPE ||
-            configuration.screenWidthDp > configuration.screenHeightDp)
-    return enabled && landscape
+    val width = configuration.screenWidthDp
+    val height = configuration.screenHeightDp
+    if (isCompactSquarePixels(maxOf(width, height), minOf(width, height))) return false
+    return configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 }
 
 /** Handle-sheet chrome. Split panes are portrait-width, so stay on the portrait recipe. */

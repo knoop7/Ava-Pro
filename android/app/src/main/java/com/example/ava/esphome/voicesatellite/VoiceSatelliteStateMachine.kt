@@ -5,6 +5,7 @@ import com.example.ava.audio.SilenceDetector
 import com.example.ava.esphome.Connected
 import com.example.ava.esphome.EspHomeState
 import com.example.ava.localllm.remote.TtsMdFilter
+import com.example.ava.settings.ContinueMode
 import com.example.ava.utils.LightKeywordDetector
 import com.example.ava.voice.QuickWakePushToTalk
 import com.example.esphomeproto.api.VoiceAssistantEvent
@@ -65,6 +66,12 @@ class VoiceSatelliteStateMachine(
     private val onRenewListen: (suspend () -> Boolean)? = null,
     /** I1 RUN_END (or I2 RUN_START while dropping I1) — inject queue may advance. */
     private val onFabInjectOldSettled: (() -> Unit)? = null,
+    /**
+     * 超级智能: an HA-handled reply the keyword rule would keep going. Fired once per
+     * run with the user's text and the reply, so the cloud continue judge can run
+     * while the reply plays.
+     */
+    private val onSmartReplyContinues: ((user: String, reply: String) -> Unit)? = null,
 ) {
     private var currentTtsText: String = ""
     private var pendingTtsDuration: Long = 0L
@@ -95,6 +102,8 @@ class VoiceSatelliteStateMachine(
     private var streamEndWatchdogJob: Job? = null
     /** Classic (non-streaming) URL TTS: recover when ExoPlayer never reaches ENDED. */
     private var classicUrlWatchdogJob: Job? = null
+    /** URL-only TTS_STREAM_END: waits for local playout before completing the session. */
+    private var urlPlayoutWaitJob: Job? = null
     private var sessionId = 0
     private val silenceDetector = SilenceDetector()
     /**
@@ -196,6 +205,27 @@ class VoiceSatelliteStateMachine(
 
     fun smartContinueOn(): Boolean = smartContinueSnapshot
 
+    fun continuousConversationOn(): Boolean = continuousConversationSnapshot
+
+    /** The continue rule in force, same precedence as [applyAssistantSpeech]. */
+    fun continueModeNow(): ContinueMode = when {
+        smartContinueSnapshot -> ContinueMode.SMART
+        exitKeywordStopSnapshot -> ContinueMode.EXIT_KEYWORD
+        questionMarkContinueSnapshot -> ContinueMode.QUESTION_MARK
+        else -> ContinueMode.EXIT_KEYWORD
+    }
+
+    /** What the user said this run; 超级智能 checks it for a sign-off (好了, 谢谢, 再见). */
+    @Volatile private var turnUserText = ""
+
+    /**
+     * True once [onSmartReplyContinues] fired for this run's HA reply; cleared at
+     * RUN_START, reset and when the reply is claimed by the local fallback. The
+     * TTS-end continue path only consults the judge while this holds.
+     */
+    @Volatile var smartJudgeEligible = false
+        private set
+
     init {
         scope.launch {
             player.enableContinuousConversation.collect { continuousConversationSnapshot = it }
@@ -250,9 +280,10 @@ class VoiceSatelliteStateMachine(
         /**
          * URL-only reply after empty SPEAKER START: wait this long for upstream
          * [TTS_STREAM_END] before forcing session completion (safety net only).
-         * Keep near classic URL timeouts — 90s left music ducked far too long.
+         * Synthesis-on-fetch TTS can still be writing the file well after playback
+         * starts; 25s cut those replies mid-sentence (#244).
          */
-        private const val URL_UPSTREAM_STREAM_END_MISSING_MS = 25_000L
+        private const val URL_UPSTREAM_STREAM_END_MISSING_MS = 180_000L
         /**
          * Classic URL TTS (streaming mode off): if playback never becomes audible after
          * TTS_END, force session completion so Sendspin duck cannot stick forever.
@@ -288,6 +319,12 @@ class VoiceSatelliteStateMachine(
          * Treat position as advanced only if it moves by at least this many ms.
          */
         private const val CLASSIC_URL_POSITION_EPS_MS = 50L
+        /** URL playout wait after TTS_STREAM_END (see completeUrlTtsSessionAfterPlayout). */
+        private const val URL_PLAYOUT_POLL_MS = 50L
+        private const val URL_PLAYOUT_PAUSED_END_MS = 400L
+        private const val URL_PLAYOUT_PLAYING_STALL_MS = 1_500L
+        private const val URL_PLAYOUT_NO_START_MS = 3_000L
+        private const val URL_PLAYOUT_MAX_WAIT_MS = 30_000L
     }
 
     fun handleVoiceEvent(voiceEvent: VoiceAssistantEventResponse) {
@@ -343,6 +380,8 @@ class VoiceSatelliteStateMachine(
                 silenceDetector.reset()
                 haVadStarted = false
                 intentEnded = false
+                turnUserText = ""
+                smartJudgeEligible = false
                 val incomingUrl = voiceEvent.stringField("url")
                 earlyTtsUrl = if (dropOldReply) {
                     if (incomingUrl != null) Log.d(TAG, "RUN_START TTS url dropped, FAB splice")
@@ -377,6 +416,8 @@ class VoiceSatelliteStateMachine(
                 streamEndWatchdogJob = null
                 classicUrlWatchdogJob?.cancel()
                 classicUrlWatchdogJob = null
+                urlPlayoutWaitJob?.cancel()
+                urlPlayoutWaitJob = null
                 onDiscardPendingPcmTts?.invoke()
                 // Guards the Listening→Processing hand-off, where stop inference
                 // switches on and could still be holding wake-phrase audio. The
@@ -460,6 +501,7 @@ class VoiceSatelliteStateMachine(
             VoiceAssistantEvent.VOICE_ASSISTANT_STT_END -> {
                 val sttText = voiceEvent.stringField("text")
                 Log.d(TAG, "STT_END received, text: $sttText")
+                if (!sttText.isNullOrBlank()) turnUserText = sttText
                 if (expectTrailingSttEnd) {
                     expectTrailingSttEnd = false
                     if (!sttText.isNullOrBlank()) onSttText?.invoke(sttText)
@@ -571,6 +613,9 @@ class VoiceSatelliteStateMachine(
                 }
 
                 state.value = Responding
+                // RUN_START normally installs this hook. TTS_START / TTS_END can
+                // arrive without it, and every finish path only fires that hook.
+                armTtsFinished()
                 if (!ttsText.isNullOrBlank()) {
                     // Decide interception before any playback scheduling below.
                     applyAssistantSpeech(ttsText, fromIntentEnd = false)
@@ -594,6 +639,7 @@ class VoiceSatelliteStateMachine(
                 if (ignoreStaleRenew("TTS_END") || ignoreIfStopRequested("TTS_END")) {
                     return
                 }
+                armTtsFinished()
                 settleDeferredReply(showCaptionIfUnseen = false)
                 if (replySuppressed) {
                     // Local fallback owns the answer: finish this run silently, exactly like
@@ -733,6 +779,8 @@ class VoiceSatelliteStateMachine(
                     urlTtsPlaybackStarted = false
                     classicUrlWatchdogJob?.cancel()
                     classicUrlWatchdogJob = null
+                    urlPlayoutWaitJob?.cancel()
+                    urlPlayoutWaitJob = null
                     player.ttsPlayer.onPlaybackEnded = null
                 }
                 if (pcmStreamActive) {
@@ -782,9 +830,11 @@ class VoiceSatelliteStateMachine(
                         )
                         awaitingUpstreamStreamEnd = false
                         urlTtsGenerationEnded = true
-                        // Only complete the session. Do not cancel playback here:
-                        // STREAM_END can arrive slightly before/after local audio due to skew.
-                        completeUrlTtsSession("TTS_STREAM_END (URL-only; was previously ignored)")
+                        // STREAM_END can arrive before local audio finishes (skew, or the
+                        // whole sink buffer still to play): complete once playout is over,
+                        // so the speaking level/ring and the continue chime follow the
+                        // last audible sample instead of the upstream event.
+                        completeUrlTtsSessionAfterPlayout("TTS_STREAM_END (URL-only; was previously ignored)")
                     } else {
                         Log.d(
                             TAG,
@@ -979,6 +1029,9 @@ class VoiceSatelliteStateMachine(
         }
         setupTtsCallbacks()
         player.ttsPlayer.cancelActivePlayback()
+        // After cancel: a handler installed before cancelPlayback can be invoked by
+        // the idle fallback of the player that was just stopped.
+        armTtsFinished()
         player.ttsPlayer.markAsPlayed()
         onTtsStreamStart?.invoke()
         pcmStreamActive = true
@@ -1014,6 +1067,7 @@ class VoiceSatelliteStateMachine(
         silenceTimeoutJob?.cancel()
         silenceTimeoutJob = null
         setupTtsCallbacks()
+        armTtsFinished()
         player.ttsPlayer.markAsPlayed()
         player.ttsPlayer.playTts(url)
         return true
@@ -1440,6 +1494,69 @@ class VoiceSatelliteStateMachine(
         }
     }
 
+    /**
+     * URL-only reply after [TTS_STREAM_END]: generation is done, local playout may not
+     * be. Complete when ExoPlayer is idle/ended; when it sits paused/buffering with no
+     * position advance for [URL_PLAYOUT_PAUSED_END_MS] (progressive WAV often never
+     * reaches ENDED); or when "playing" makes no progress for [URL_PLAYOUT_PLAYING_STALL_MS].
+     * Those two stop the player first, which fires the audio-ended hook. Not started
+     * yet after [URL_PLAYOUT_NO_START_MS], or past [URL_PLAYOUT_MAX_WAIT_MS], completes
+     * without stopping (the old behaviour). The classic watchdog stays as the last resort.
+     */
+    private fun completeUrlTtsSessionAfterPlayout(reason: String) {
+        val tts = player.ttsPlayer
+        if (!tts.isPlaying && !tts.isPaused) {
+            completeUrlTtsSession(reason)
+            return
+        }
+        urlPlayoutWaitJob?.cancel()
+        val currentSession = sessionId
+        Log.d(TAG, "URL TTS playout still running at stream end; waiting ($reason)")
+        urlPlayoutWaitJob = scope.launch {
+            val startedAt = System.currentTimeMillis()
+            var lastPos = tts.currentPosition
+            var lastAdvanceAt = startedAt
+            while (true) {
+                delay(URL_PLAYOUT_POLL_MS)
+                if (sessionId != currentSession) return@launch
+                // Stopped / barged-in / reset elsewhere: those paths own the cleanup.
+                if (state.value !is Responding) return@launch
+                if (!urlTtsStreaming && !urlTtsGenerationEnded) return@launch
+                val now = System.currentTimeMillis()
+                val playing = tts.isPlaying
+                val paused = tts.isPaused
+                if (!playing && !paused) {
+                    completeUrlTtsSession("$reason; playout ended")
+                    return@launch
+                }
+                val pos = tts.currentPosition
+                if (pos >= lastPos + CLASSIC_URL_POSITION_EPS_MS) {
+                    lastPos = pos
+                    lastAdvanceAt = now
+                }
+                val waited = now - startedAt
+                val stalledFor = now - lastAdvanceAt
+                val started = urlTtsPlaybackStarted
+                val drained = when {
+                    started && paused -> stalledFor >= URL_PLAYOUT_PAUSED_END_MS
+                    started && playing -> stalledFor >= URL_PLAYOUT_PLAYING_STALL_MS
+                    else -> false
+                }
+                if (drained) {
+                    Log.d(TAG, "URL TTS playout drained (paused=$paused, stalled=${stalledFor}ms)")
+                    tts.cancelActivePlayback()
+                    completeUrlTtsSession("$reason; playout drained")
+                    return@launch
+                }
+                if ((!started && waited >= URL_PLAYOUT_NO_START_MS) || waited >= URL_PLAYOUT_MAX_WAIT_MS) {
+                    Log.w(TAG, "URL TTS playout wait gave up after ${waited}ms (started=$started)")
+                    completeUrlTtsSession("$reason; playout wait cap")
+                    return@launch
+                }
+            }
+        }
+    }
+
     private fun completeUrlTtsSession(reason: String) {
         if (state.value !is Responding) {
             awaitingUpstreamStreamEnd = false
@@ -1448,6 +1565,8 @@ class VoiceSatelliteStateMachine(
             urlTtsStreaming = false
             classicUrlWatchdogJob?.cancel()
             classicUrlWatchdogJob = null
+            urlPlayoutWaitJob?.cancel()
+            urlPlayoutWaitJob = null
             return
         }
         if (!urlTtsStreaming && !urlTtsGenerationEnded) return
@@ -1456,6 +1575,8 @@ class VoiceSatelliteStateMachine(
         streamEndWatchdogJob = null
         classicUrlWatchdogJob?.cancel()
         classicUrlWatchdogJob = null
+        urlPlayoutWaitJob?.cancel()
+        urlPlayoutWaitJob = null
         awaitingUpstreamStreamEnd = false
         urlTtsGenerationEnded = false
         urlTtsPlaybackStarted = false
@@ -1587,6 +1708,8 @@ class VoiceSatelliteStateMachine(
         expectStaleRunEnd = false
         isWakePhase = false
         continueConversation = true
+        turnUserText = ""
+        smartJudgeEligible = false
         stopWordProtectionEndTime = 0L
         haVadStarted = false
         stopRequested = false
@@ -1615,6 +1738,8 @@ class VoiceSatelliteStateMachine(
         streamEndWatchdogJob = null
         classicUrlWatchdogJob?.cancel()
         classicUrlWatchdogJob = null
+        urlPlayoutWaitJob?.cancel()
+        urlPlayoutWaitJob = null
         onDiscardPendingPcmTts?.invoke()
         currentTtsText = ""
         audioInput.clearTtsWakeEchoRisk()
@@ -1760,6 +1885,7 @@ class VoiceSatelliteStateMachine(
         deferredReply = null
         // The swallowed reply must not re-open the mic for a follow-up turn.
         continueConversation = false
+        smartJudgeEligible = false
     }
 
     /**
@@ -1829,6 +1955,24 @@ class VoiceSatelliteStateMachine(
         LightKeywordDetector.detectDeviceAction(speech)?.let { action ->
             onDeviceAction?.invoke(action)
         }
+        if (smartContinueSnapshot) {
+            // 超级智能: an HA-handled reply keeps the mic open like the cloud path,
+            // whatever HA's continue_conversation said. Only a sign-off ends it:
+            // the user saying they are done, or the reply itself saying goodbye.
+            // A claimed reply never gets here (replySuppressed); a deferred one
+            // that is claimed at TTS_END is reset to false by claimReply.
+            // Only the reply's last sentence counts: "已退出音乐。还要调什么？" goes on.
+            val done = LightKeywordDetector.isUserDone(turnUserText) ||
+                LightKeywordDetector.replyEndsWithGoodbye(speech)
+            continueConversation = !done
+            if (done) {
+                smartJudgeEligible = false
+                Log.d(TAG, "smart continue: sign-off heard, ending after this reply")
+            } else if (!smartJudgeEligible) {
+                smartJudgeEligible = true
+                onSmartReplyContinues?.invoke(turnUserText, spoken.ifEmpty { speech })
+            }
+        }
         if (!fromIntentEnd && !smartContinueSnapshot) {
             if (exitKeywordStopSnapshot) {
                 if (LightKeywordDetector.isExitKeyword(speech)) {
@@ -1861,7 +2005,23 @@ class VoiceSatelliteStateMachine(
             (lowerText.contains("index") && lowerText.contains("range") && lowerText.contains("error"))
     }
 
+    /**
+     * Install [onTtsFinished] if this turn never saw RUN_START. Safe to call again:
+     * the RUN_START handler is kept, so a normal pipeline still completes once.
+     */
+    private fun armTtsFinished() {
+        if (player.ttsPlayer.ensureCompletionHandler {
+                scope.launch { onTtsFinished() }
+            }
+        ) {
+            Log.d(TAG, "TTS completion armed without RUN_START")
+        }
+    }
+
     private fun setupTtsCallbacks() {
+        // Same call that submits playback, not the later ExoPlayer listener.
+        // The listener still re-arms when samples actually start.
+        audioInput.noteStopOnsetGuard()
         val textForPlayback = currentTtsText
         player.ttsPlayer.onTtsDurationReady = durationReady@{ durationMs ->
             if (durationMs <= 0L || durationMs == pendingTtsDuration) return@durationReady

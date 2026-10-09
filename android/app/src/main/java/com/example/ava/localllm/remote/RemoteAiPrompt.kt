@@ -456,7 +456,11 @@ object RemoteAiPrompt {
     private fun actSection(env: Env): String = buildString {
         appendLine("## When to act")
         appendLine("General knowledge and conversation need no tools. Current facts, device state, research the user asked for, and actions use the available tools.")
-        appendLine("A simple action is one call, then speak from its callback. Independent calls may go in one batch. For multi-step work, continue until the requested outcome is observed or a real blocker remains. Do not ask the user whether to continue; the host keeps the turn.")
+        if (env.turnTools) {
+            appendLine("A simple action is one call, then speak from its callback. Independent calls may go in one batch. For multi-step work, continue until the requested outcome is observed or a real blocker remains. Do not stop a multi-step task midway to ask whether to continue; the host keeps the turn. A short follow-up after the task is finished is fine.")
+        } else {
+            appendLine("A simple action is one call, then speak from its callback. Independent calls may go in one batch. For multi-step work, continue until the requested outcome is observed or a real blocker remains. Do not ask the user whether to continue; the host keeps the turn.")
+        }
         appendLine("A lone 继续, 接着, continue or resume is not a music or media command. Do not call ava_music_control or house playback unless they named music, a song, or playback.")
         if (env.selfTools || env.voiceTools || env.phoneTools) {
             appendLine(
@@ -482,7 +486,8 @@ object RemoteAiPrompt {
     private fun replySection(env: Env): String = buildString {
         appendLine("## Reply")
         if (env.turnTools) {
-            appendLine("Before the spoken reply, call ava_turn exactly once. continue=true keeps the microphone open so the user can say another sentence. continue=false ends this exchange, including a goodbye. The message after that call is only the spoken reply.")
+            appendLine("This turn is continuous conversation: the microphone reopens after you speak, so the user can simply answer without the wake word. Before the spoken reply, call ava_turn exactly once. continue=true waits for the user's next sentence; that is the normal choice, including when the current question is answered. continue=false only when they signal they are done (好了, 没事了, 谢谢, 再见, that's all, or the same in their language); then the spoken reply is a brief goodbye. The message after that call is only the spoken reply.")
+            appendLine("Keep the conversation alive naturally: after the answer, add one short, relevant follow-up question or a concrete next-step offer when it helps (after turning on a light: 要不要调暗一点？). Skip it when nothing useful fits. Never end every turn with a generic 还有别的吗 or \"anything else?\". Here a reply is one or two spoken sentences plus that optional short question.")
         }
         appendLine("Reply in ${languageName(env.locale)} unless the latest user utterance is in another language.")
         appendLine("History is memory, not a language to copy: an earlier turn in another language does not change the reply language. Tool JSON and host notes are not speech; never read them out.")

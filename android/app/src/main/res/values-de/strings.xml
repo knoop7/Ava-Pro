@@ -94,7 +94,7 @@
     <string name="remote_ai_thinking">Denken</string>
     <string name="remote_ai_streaming_desc">Empfängt die Antwort per SSE, die Sprachsynthese startet nach vollständigem Eingang der Antwort</string>
     <string name="remote_ai_fallback">Automatischer Modellwechsel</string>
-    <string name="remote_ai_fallback_desc">Nach Aktivierung dient Steckplatz 1 als Hauptmodell für den Alltag. Schlägt das Hauptmodell zweimal hintereinander fehl, wechselt das System automatisch der Reihe nach zu den Ersatzmodellen, um den Sprachdienst aufrechtzuerhalten.</string>
+    <string name="remote_ai_fallback_desc">Nach Aktivierung dient Steckplatz 1 als Hauptmodell für den Alltag. Schlägt das Hauptmodell dreimal hintereinander fehl, wechselt das System automatisch der Reihe nach zu den Ersatzmodellen, um den Sprachdienst aufrechtzuerhalten.</string>
     <string name="remote_ai_vision_refused">Dieses Modell kann keine Bilder erkennen. Der Server hat das Kamerabild abgelehnt. Bitte ein Modell mit Bilderkennung wählen.</string>
     <string-array name="remote_ai_fail_lines">
         <item>Das Remote-Modell ist gerade nicht erreichbar.</item>
@@ -136,7 +136,7 @@
         <item>Bevor Haushaltsgeräte gesteuert werden, müssen Server-URL und Token von Home Assistant auf der Startseite hinterlegt sein.</item>
         <item>Der Skill-Prompt definiert die Gerätefunktionen. Verfügbare Werkzeuge: Home Assistant, Musik, Web, Gerät und Sprachanrufe.</item>
         <item>Dieser Kanal setzt Befehle über geräteseitige Werkzeuge auf Home-Assistant-Entitäten um. Ein Wechsel des Home-Assistant-Konversationsagenten ist nicht erforderlich.</item>
-        <item>Optional: mit + weitere Steckplätze anlegen. Oben auf dieser Seite erscheint dann der Schalter Automatischer Modellwechsel. Nach Aktivierung dient Steckplatz 1 als Hauptmodell und die folgenden Steckplätze als Ersatz. Schlägt das Hauptmodell zweimal fehl, wechselt das System automatisch zu den Ersatzmodellen. Ungespeicherte Entwürfe werden nicht verwendet.</item>
+        <item>Optional: mit + weitere Steckplätze anlegen. Oben auf dieser Seite erscheint dann der Schalter Automatischer Modellwechsel. Nach Aktivierung dient Steckplatz 1 als Hauptmodell und die folgenden Steckplätze als Ersatz. Schlägt das Hauptmodell dreimal fehl, wechselt das System automatisch zu den Ersatzmodellen. Ungespeicherte Entwürfe werden nicht verwendet.</item>
     </string-array>
     <string name="local_llm_models_caption">Modellliste</string>
     <string name="local_llm_in_use">Aktiv</string>

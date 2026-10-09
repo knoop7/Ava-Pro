@@ -115,7 +115,7 @@
         <item>Antes de controlar dispositivos del hogar, configura la URL del servidor Home Assistant y el token en la página de inicio para anclar comandos a entidades</item>
         <item>Skill prompt define capacidades en el dispositivo y el estilo de habla Las herramientas disponibles incluyen Home Assistant, música, web, dispositivo y llamadas de voz Las funciones desactivadas no se envían al modelo</item>
         <item>Este canal ancla comandos a entidades de Home Assistant con herramientas en el dispositivo No hace falta reemplazar el conversation agent en la UI web de Home Assistant Los comandos compuestos los ejecutan las herramientas en el dispositivo</item>
-        <item>Opcional: toca + para añadir slots Luego aparece el interruptor Auto model switch arriba de esta página Con él activo, el slot 1 es el modelo principal y los siguientes son respaldo Si el principal falla dos veces seguidas, el sistema cambia a los respaldos en orden para mantener la voz Los borradores sin guardar no se usan al cambiar</item>
+        <item>Opcional: toca + para añadir slots Luego aparece el interruptor Auto model switch arriba de esta página Con él activo, el slot 1 es el modelo principal y los siguientes son respaldo Si el principal falla tres veces seguidas, el sistema cambia a los respaldos en orden para mantener la voz Los borradores sin guardar no se usan al cambiar</item>
     </string-array>
     <string name="remote_ai_caption">Modelo en la nube</string>
     <string name="remote_ai_kind">Interfaz</string>
@@ -127,7 +127,7 @@
     <string name="remote_ai_thinking">Pensar</string>
     <string name="remote_ai_streaming_desc">Recibe la respuesta por SSE, la voz se sintetiza cuando llega la respuesta completa</string>
     <string name="remote_ai_fallback">Cambio de modelo</string>
-    <string name="remote_ai_fallback_desc">Si está activo, el slot 1 es el modelo principal para el día a día. Si falla dos veces seguidas, el sistema cambia a modelos de respaldo en orden para mantener el servicio de voz</string>
+    <string name="remote_ai_fallback_desc">Si está activo, el primer slot completo (normalmente el 1) es el modelo principal para el día a día. Si falla tres veces seguidas, rechazos incluidos (clave no válida, modelo inexistente), el sistema cambia al siguiente slot completo en orden para mantener el servicio de voz</string>
     <string name="remote_ai_extra_prompt">Prompt habilidad</string>
     <string name="remote_ai_instruction_set">Prompt habilidad</string>
     <string name="remote_ai_instruction_name">Nombre</string>
@@ -162,6 +162,19 @@
     <string name="remote_ai_base_url">API URL</string>
     <string name="remote_ai_model">Modelo</string>
     <string name="remote_ai_token">Token</string>
+    <string name="remote_ai_token_show">Mostrar token</string>
+    <string name="remote_ai_token_hide">Ocultar token</string>
+    <string name="remote_ai_use_slot">Usar</string>
+    <string name="remote_ai_current">Actual</string>
+    <string name="remote_ai_now_in_use">El slot %1$d es ahora el modelo en uso</string>
+    <string name="remote_ai_saved_live">Slot %1$d guardado. Es el modelo en uso</string>
+    <string name="remote_ai_saved_backup">Slot %1$d guardado como respaldo del cambio automático de modelo</string>
+    <string name="remote_ai_saved_idle">Slot %1$d guardado. Toca “Usar” para hablar con él</string>
+    <string name="remote_ai_save_missing">No guardado. Completa: %1$s</string>
+    <string name="remote_ai_list_separator">", "</string>
+    <string name="remote_ai_fetch_ok">Conectado. %1$d modelos encontrados</string>
+    <string name="remote_ai_fetch_empty">Conectado, pero el servidor no listó modelos. Escribe el nombre del modelo</string>
+    <string name="remote_ai_fetch_error">Error de conexión: %1$s</string>
     <string name="remote_ai_enabled">Usar interfaz</string>
     <string name="remote_ai_vision_refused">Este modelo no ve imágenes. El servidor rechazó el fotograma. Cambia a un modelo con visión e inténtalo de nuevo</string>
     <string-array name="remote_ai_fail_lines">
@@ -513,6 +526,8 @@
     <string name="entity_voice_print_status">Estado de voiceprint</string>
     <string name="pipeline_error_no_speech">Habla detectada, sin texto</string>
     <string name="pipeline_stt_too_short">No escuché bien, repite por favor</string>
+    <!-- 超级智能: spoken when the transcript was too short; the mic then stays open -->
+    <string name="stt_short_reprompt">Perdona, repítelo otra vez</string>
     <string name="pipeline_error_config">Procesamiento de voz pausado, revisa la config</string>
     <string name="pipeline_error_cloud_auth">Fallo de auth, re-login</string>
     <string name="pipeline_error_wake">Anomalía de señal wake, reintenta</string>

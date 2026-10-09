@@ -745,7 +745,9 @@ class QuickEntityOverlayService : Service() {
     private fun bringToFront() {
         if (!isEnabled || !isVisible) return
         OverlayLayerSplit.sync()
-        if (OverlayLayerSplit.isPaneView(overlayHost)) {
+        if (OverlayLayerSplit.isPaneView(overlayHost) ||
+            OverlayLayerSplit.deferRestack(OverlayLayerSplit.Layer.QUICK_ENTITY)
+        ) {
             OverlayZOrderCoordinator.raiseVinylFabAbovePassiveDashboard()
             return
         }
@@ -862,6 +864,17 @@ class QuickEntityOverlayService : Service() {
             context.startService(Intent(context, QuickEntityOverlayService::class.java).apply {
                 action = ACTION_HIDE
             })
+        }
+
+        /** Same click as browser home/settings. Hide now, before the browser window leaves. */
+        fun dismissForSplitNavigation() {
+            val svc = instance ?: return
+            if (!svc.isEnabled && !svc.isVisible && svc.overlayHost?.visibility != View.VISIBLE) return
+            svc.isEnabled = false
+            svc.isVisible = false
+            OverlayLayerSplit.sync()
+            svc.animateHostOut()
+            svc.unbindDashboardChrome()
         }
 
         fun toggle(context: Context) {

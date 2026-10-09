@@ -115,7 +115,7 @@
         <item>Before controlling home devices, configure the Home Assistant server URL and token on the home page so commands can be grounded to entities.</item>
         <item>Skill prompt defines on-device capabilities and speaking style. Available tools include Home Assistant, music, web, device, and voice calls. Disabled functions are not sent to the model.</item>
         <item>This channel grounds commands to Home Assistant entities through on-device tools. Replacing the conversation agent on the Home Assistant web UI is not required. Compound commands are executed by on-device tools.</item>
-        <item>Optional: tap + to add slots. An Auto model switch toggle then appears at the top of this page. When enabled, slot 1 serves as the primary model, and later slots serve as backups. If the primary fails twice in a row, the system automatically switches to backups in order to keep voice services running. Unsaved drafts are not used for switching.</item>
+        <item>Optional: tap + to add slots. An Auto model switch toggle then appears at the top of this page. When enabled, slot 1 serves as the primary model, and later slots serve as backups. If the primary fails three times in a row, the system automatically switches to backups in order to keep voice services running. Unsaved drafts are not used for switching.</item>
     </string-array>
     <string name="remote_ai_caption">Global cloud large model</string>
     <string name="remote_ai_kind">Interface</string>
@@ -127,7 +127,7 @@
     <string name="remote_ai_thinking">Think</string>
     <string name="remote_ai_streaming_desc">Receive the reply over SSE, speech is synthesized once the full reply has arrived</string>
     <string name="remote_ai_fallback">Auto model switch</string>
-    <string name="remote_ai_fallback_desc">When enabled, slot 1 serves as the primary model for daily conversations. If the primary model fails twice in a row, the system automatically switches to backup models in order to keep voice services running.</string>
+    <string name="remote_ai_fallback_desc">When enabled, the first filled slot (normally slot 1) serves as the primary model for daily conversations. If it fails three times in a row, refusals included (bad key, unknown model), the system automatically switches to the next filled slot in order to keep voice services running</string>
     <string name="remote_ai_extra_prompt">Skill prompt</string>
     <string name="remote_ai_instruction_set">Skill prompt</string>
     <string name="remote_ai_instruction_name">Name</string>
@@ -162,6 +162,19 @@
     <string name="remote_ai_base_url">API URL</string>
     <string name="remote_ai_model">Model</string>
     <string name="remote_ai_token">Token</string>
+    <string name="remote_ai_token_show">Show token</string>
+    <string name="remote_ai_token_hide">Hide token</string>
+    <string name="remote_ai_use_slot">Use</string>
+    <string name="remote_ai_current">Current</string>
+    <string name="remote_ai_now_in_use">Slot %1$d is now the model in use</string>
+    <string name="remote_ai_saved_live">Slot %1$d saved. It is the model in use</string>
+    <string name="remote_ai_saved_backup">Slot %1$d saved as a backup for auto model switch</string>
+    <string name="remote_ai_saved_idle">Slot %1$d saved. Tap “Use” to talk with it</string>
+    <string name="remote_ai_save_missing">Not saved. Fill in: %1$s</string>
+    <string name="remote_ai_list_separator">", "</string>
+    <string name="remote_ai_fetch_ok">Connected. %1$d models found</string>
+    <string name="remote_ai_fetch_empty">Connected, but the server listed no models. Type the model name</string>
+    <string name="remote_ai_fetch_error">Connection failed: %1$s</string>
     <string name="remote_ai_enabled">Use this interface</string>
     <string name="remote_ai_vision_refused">This model cannot see pictures. The server refused the camera frame. Switch to a vision-capable model and try again.</string>
     <string-array name="remote_ai_fail_lines">
@@ -513,6 +526,8 @@
     <string name="entity_voice_print_status">Voiceprint Status</string>
     <string name="pipeline_error_no_speech">Speech detected, no text</string>
     <string name="pipeline_stt_too_short">Didn\'t hear clearly, please say that again</string>
+    <!-- 超级智能: spoken when the transcript was too short; the mic then stays open -->
+    <string name="stt_short_reprompt">Sorry, say that again</string>
     <string name="pipeline_error_config">Voice processing paused, config may need a look</string>
     <string name="pipeline_error_cloud_auth">Cloud auth issue, re-login</string>
     <string name="pipeline_error_wake">Wake signal anomaly, retry</string>

@@ -57,6 +57,12 @@ class LocalIntentFallback(
      * Must not be the HA channel's Processing — that state is reset on RUN_END.
      */
     private val onBusy: (Boolean) -> Unit,
+    /**
+     * True while this run is a continuous-conversation follow-up (the mic
+     * reopened by itself). A too-short transcript there means the user stopped
+     * talking: the session ends quietly, no toast, no spoken reprompt.
+     */
+    private val isContinueTurn: () -> Boolean = { false },
 ) {
     private sealed class Lookup {
         data object Running : Lookup()
@@ -215,9 +221,19 @@ class LocalIntentFallback(
         cancel()
     }
 
+    /**
+     * Too-short STT (Latin filler). The HA reply is swallowed and the run ends
+     * without reopening the mic. Never asks the user to repeat out loud: in a
+     * continuous follow-up, silence or filler means the user is done, so it
+     * ends quietly. Only a real wake gets one quiet toast.
+     */
     private fun refuseShort(): Boolean {
         if (shortRefused) return true
         shortRefused = true
+        if (isContinueTurn()) {
+            Log.i(TAG, "short stt on continue turn; ending quietly")
+            return true
+        }
         Log.i(TAG, "short stt; ask to repeat")
         AvaToast.show(
             context,
@@ -283,11 +299,14 @@ class LocalIntentFallback(
         }
         if (reply.isNullOrBlank()) {
             Log.i(TAG, "handled=$handled, no spoken reply")
+            // Nothing to say still ends the reply: smart continue reopens the mic.
+            withContext(Dispatchers.Main) { speak("", null) }
             return
         }
         val spoken = TtsMdFilter.apply(reply)
         if (spoken.isBlank()) {
             Log.i(TAG, "handled=$handled, empty after tts filter")
+            withContext(Dispatchers.Main) { speak("", null) }
             return
         }
         val url = runCatching { HaManager.get()?.synthesizeWithPipelineTts(spoken) }.getOrNull()

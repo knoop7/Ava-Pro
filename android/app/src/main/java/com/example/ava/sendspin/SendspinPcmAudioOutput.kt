@@ -128,6 +128,8 @@ class SendspinPcmAudioOutput(
         /** After retrograde/stall, fall back to playbackHeadPosition for this long. */
         private const val DAC_GLITCH_COOLDOWN_NS = 1_500_000_000L
         private const val SOFT_START_RAMP_MS = 35L
+        /** flush() increments the underrun counter, so back-to-back revives never settle. */
+        private const val UNDERRUN_REVIVE_COOLDOWN_MS = 1_500L
         private const val MAX_PIPELINE_LATENCY_US = 2_000_000L
         /** Last DAC-confirmed pipeline latency per format, used to warm-start scheduling after restarts. */
         private val stableLatencyCacheUs = java.util.concurrent.ConcurrentHashMap<String, Long>()
@@ -137,15 +139,23 @@ class SendspinPcmAudioOutput(
 
     fun isStarted(): Boolean = started.get()
 
+    /** [AudioTrack.getUnderrunCount] is API 24. Snapshot so a revive runs once per underrun. */
+    private var lastUnderrunCount = 0
+    private var lastUnderrunReviveElapsed = 0L
+
     /**
      * After a HAL underrun the track may leave PLAYING while still initialized.
-     * Calling [AudioTrack.play] again keeps the pipeline alive without flush/stop.
+     * Android 8+ : [AudioTrack.play] again is enough; do not flush.
+     * Android 7 and below: AudioFlinger disables the track and leaves
+     * playState at PLAYING (`releaseBuffer() track disabled due to previous
+     * underrun`). [AudioTrack.play] does not clear that. pause + flush + play does.
      */
     fun ensurePlaying(): Boolean {
         if (!started.get()) return false
         synchronized(lock) {
             val t = track ?: return false
             if (t.state != AudioTrack.STATE_INITIALIZED) return false
+            if (revivePreOreoUnderrunLocked(t)) return true
             if (t.playState == AudioTrack.PLAYSTATE_PLAYING) return true
             return try {
                 t.play()
@@ -155,6 +165,39 @@ class SendspinPcmAudioOutput(
                 false
             }
         }
+    }
+
+    private fun revivePreOreoUnderrunLocked(t: AudioTrack): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) return false
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
+        if (writingCount.get() != 0) return false
+        val now = SystemClock.elapsedRealtime()
+        // pause+flush itself bumps the underrun counter, so a revive every
+        // tick restarts the track a few times a second and the UI stalls with it.
+        if (now - lastUnderrunReviveElapsed < UNDERRUN_REVIVE_COOLDOWN_MS) {
+            noteUnderrunBaselineLocked(t)
+            return false
+        }
+        val underruns = t.underrunCount
+        if (underruns <= lastUnderrunCount) return false
+        lastUnderrunCount = underruns
+        lastUnderrunReviveElapsed = now
+        Log.w(tag, "pre-O underrun $underruns; reviving AudioTrack")
+        return try {
+            t.pause()
+            t.flush()
+            t.play()
+            noteUnderrunBaselineLocked(t)
+            true
+        } catch (e: Exception) {
+            Log.w(tag, "pre-O underrun revive failed", e)
+            false
+        }
+    }
+
+    private fun noteUnderrunBaselineLocked(t: AudioTrack) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
+        lastUnderrunCount = t.underrunCount
     }
 
     fun setSourceBitDepth(bitDepth: Int) {
@@ -188,12 +231,15 @@ class SendspinPcmAudioOutput(
                     // Always flush before restarting to clear old data
                     existingTrack.pause()
                     existingTrack.flush()
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    // PlaybackParams mid-stream is an Android 8+ HAL. Below that it
+                    // disables the track the same way an underrun does.
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                         try {
                             existingTrack.playbackParams = PlaybackParams().setSpeed(1.0f)
                         } catch (_: Exception) {}
                     }
                     existingTrack.play()
+                    noteUnderrunBaselineLocked(existingTrack)
                     resetLatencyEstimatorLocked()
                     beginSoftStartLocked(existingTrack)
                     started.set(true)
@@ -266,6 +312,7 @@ class SendspinPcmAudioOutput(
 
                 audioTrack.play()
                 track = audioTrack
+                noteUnderrunBaselineLocked(audioTrack)
                 resetLatencyEstimatorLocked()
                 beginSoftStartLocked(audioTrack)
                 started.set(true)
@@ -467,8 +514,9 @@ class SendspinPcmAudioOutput(
 
     fun setPlaybackSpeed(speed: Float) {
         if (!started.get()) return
-        // PlaybackParams is API 23+; Android 5.x keeps 1.0x instead of crashing.
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        // Variable rate is Android 8+. API 23–25 accept PlaybackParams and then
+        // disable the track on this class of HAL. Those builds stay at 1.0x.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         
         // Clamp speed to valid range (0.5x to 2.0x typical for AudioTrack)
         val clampedSpeed = speed.coerceIn(0.5f, 2.0f)
@@ -753,8 +801,18 @@ class SendspinPcmAudioOutput(
      *
      * Must be called while holding [lock].
      */
+    /**
+     * [AudioTrack.getTimestamp] exists earlier, but the DAC presentation clock
+     * this sync math compares against [System.nanoTime] is reliable from
+     * Android 8. On API 25 the same call comes back "valid", the scheduler
+     * drops chunks as late, and AudioFlinger then disables the track
+     * (`releaseBuffer() track disabled due to previous underrun`).
+     */
+    private fun dacTimestampSupported(): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+
     private fun dacPlayedFramesLocked(trackRef: AudioTrack): Long? {
-        if (lowMemoryMode) return null
+        if (lowMemoryMode || !dacTimestampSupported()) return null
 
         val nowNs = System.nanoTime()
         if (nowNs < dacGlitchCooldownUntilNs) return null
@@ -821,6 +879,7 @@ class SendspinPcmAudioOutput(
      * @return Pair of (framePosition, nanoTime) or null if not available
      */
     fun getDacTimestamp(): Pair<Long, Long>? {
+        if (!dacTimestampSupported()) return null
         val t = track ?: return null
         if (!started.get()) return null
         

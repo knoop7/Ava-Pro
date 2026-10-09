@@ -408,12 +408,10 @@ object HomeSidebarActions {
      * Does not open the browser again.
      */
     suspend fun openHome(context: Context, browserSettingsStore: BrowserSettingsStore) {
+        OverlayLayerSplit.closeForBrowserNavigation(context)
         if (EngineCapabilities.GECKO_BUNDLED) {
             HostSidebarCommandBridge.send(HostSidebarSettingsContract.CMD_OPEN_LAUNCHER)
             return
-        }
-        if (WebViewService.isBrowserOverlayVisible()) {
-            OverlayLayerSplit.closeForBrowserNavigation(context)
         }
         setBrowserVisible(browserSettingsStore, false)
         WebViewService.hide(context)

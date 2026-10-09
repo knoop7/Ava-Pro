@@ -281,7 +281,10 @@ class ScreensaverService : Service() {
         OverlayLayerSplit.sync()
         // AOD cover is a child of this window. remove+add recreates the surface
         // and punches a full-bright hole; keep the plate and only raise the FAB.
-        if (!smartAodCovering && !OverlayLayerSplit.isPaneView(revealHost)) {
+        if (!smartAodCovering &&
+            !OverlayLayerSplit.isPaneView(revealHost) &&
+            !OverlayLayerSplit.deferRestack(OverlayLayerSplit.Layer.SIMPLE_CLOCK)
+        ) {
             OverlayZOrderCoordinator.bringToFront(windowManager, revealHost, windowParams, TAG)
         }
         OverlayZOrderCoordinator.raiseVinylFabAbovePassiveDashboard()
@@ -537,12 +540,13 @@ class ScreensaverService : Service() {
         }
     }
 
-    private fun hideScreensaver() {
+    private fun hideScreensaver(resumeBrowser: Boolean = true) {
         OverlayZOrderCoordinator.cancelScheduledVoiceRaise()
         // Only un-pause what showScreensaver actually paused. A redundant hide
         // (ACTION_HIDE while no cover is up) must not poke or cold-start the
-        // browser service with a spurious ACTION_RESUME.
-        if (isVisible) {
+        // browser service with a spurious ACTION_RESUME. Split home/settings
+        // is already leaving the browser, so that resume would open it again.
+        if (resumeBrowser && isVisible) {
             WebViewService.resume(this)
         }
         screensaverView?.stopUpdates()
@@ -1000,6 +1004,11 @@ class ScreensaverService : Service() {
                 putExtra(EXTRA_VISIBLE, visible)
             }
             context.startService(intent)
+        }
+
+        /** Same click as browser home/settings. Hide now, and do not resume the browser. */
+        fun dismissForSplitNavigation() {
+            instance?.hideScreensaver(resumeBrowser = false)
         }
 
         fun stop(context: Context) {
@@ -1790,9 +1799,10 @@ class ScreensaverView(context: Context, private var screenWidth: Int, private va
         // Switch on → always reserve space; empty entity / no push → sunny + "-".
         val showWeather = weatherEnabled
         val weather = if (showWeather) weatherData else null
-        // Left/right split: the pane is still wider than tall, but it cannot
-        // hold the landscape clock. Use the portrait stack in that pane only.
-        val sideBySidePane = isLandscapeSideBySidePane(layoutWidth, layoutHeight)
+        // Left/right split always uses the portrait clock, even when that half
+        // is still wider than tall. Fullscreen landscape is unchanged.
+        val sideBySidePane = OverlayLayerSplit.isSideBySidePane(this) ||
+            isLandscapeSideBySidePane(layoutWidth, layoutHeight)
         val squarePanel = com.example.ava.ui.isCompactSquarePixels(
             maxOf(layoutWidth, layoutHeight),
             minOf(layoutWidth, layoutHeight),

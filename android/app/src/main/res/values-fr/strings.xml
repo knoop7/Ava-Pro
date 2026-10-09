@@ -107,7 +107,7 @@
         <item>Avant de commander les appareils du foyer, configurez l\'URL et le jeton Home Assistant sur la page d\'accueil.</item>
         <item>L\'invite de compétence définit les capacités de l\'appareil. Outils disponibles : Home Assistant, musique, web, appareil et appels vocaux.</item>
         <item>Ce canal applique les commandes aux entités Home Assistant via les outils de l\'appareil. Il n\'est pas nécessaire de remplacer l\'agent de conversation Home Assistant.</item>
-        <item>Facultatif : appuyez sur + pour ajouter des emplacements. Un interrupteur Changement auto de modèle apparaît alors en haut de cette page. Une fois activé, l\'emplacement 1 sert de modèle principal et les suivants de modèles de secours. Si le principal échoue deux fois, le système bascule automatiquement vers les modèles de secours. Les brouillons non enregistrés ne sont pas utilisés.</item>
+        <item>Facultatif : appuyez sur + pour ajouter des emplacements. Un interrupteur Changement auto de modèle apparaît alors en haut de cette page. Une fois activé, l\'emplacement 1 sert de modèle principal et les suivants de modèles de secours. Si le principal échoue trois fois, le système bascule automatiquement vers les modèles de secours. Les brouillons non enregistrés ne sont pas utilisés.</item>
     </string-array>
     <string name="local_llm_models_caption">Liste de modèles</string>
     <string name="local_llm_in_use">En service</string>
@@ -119,7 +119,7 @@
     <string name="remote_ai_thinking">Pensée</string>
     <string name="remote_ai_streaming_desc">Reçoit la réponse en SSE, la synthèse vocale démarre une fois la réponse complète</string>
     <string name="remote_ai_fallback">Changement auto de modèle</string>
-    <string name="remote_ai_fallback_desc">Une fois activé, l\'emplacement 1 sert de modèle principal pour les conversations quotidiennes. Si le modèle principal échoue deux fois de suite, le système bascule automatiquement vers les modèles de secours pour maintenir le service vocal.</string>
+    <string name="remote_ai_fallback_desc">Une fois activé, l\'emplacement 1 sert de modèle principal pour les conversations quotidiennes. Si le modèle principal échoue trois fois de suite, le système bascule automatiquement vers les modèles de secours pour maintenir le service vocal.</string>
     <string name="remote_ai_vision_refused">Ce modèle ne peut pas voir les images. Le serveur a refusé la vue caméra. Passez à un modèle capable de vision.</string>
     <string-array name="remote_ai_fail_lines">
         <item>Le modèle distant est injoignable pour l\'instant.</item>

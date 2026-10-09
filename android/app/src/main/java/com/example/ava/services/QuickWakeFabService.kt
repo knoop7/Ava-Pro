@@ -85,9 +85,14 @@ import kotlin.math.sqrt
  * Default rest pose is a D-handle sucked to the nearest screen edge (style 1). Left and
  * right handles stand tall; top and bottom handles lie flat. The control stays a
  * [FAB_SIZE_DP] circle until it is in a tight band against that edge, then it becomes a D.
- * A corner stays a circle so the handle does not hang off the screen; releasing there
- * snaps out to a seat on the nearer edge. Sliding along the edge while docked stays a
- * handle. Processing, arm-fill, ripple, and the level meter follow the D silhouette when
+ * Slide into a corner and the D lerps toward a mid-size semicircle with the
+ * same `(1 − (d − rest) / span)` form as circle→D. The rest inset on each
+ * axis eases toward the corner seat as the other wall approaches, so rounding
+ * a corner lifts the centre instead of magnet-yanking it. Orientation turns
+ * from a standing D to a lying D by those insets. Inner radii stay the D's.
+ * The mic stays on the shape, nudged in from both walls in a corner.
+ * Sliding along the edge while docked stays a handle.
+ * Processing, arm-fill, ripple, and the level meter follow the D silhouette when
  * docked — they do not orbit the mic as a circle.
  *
  * Gesture model ([MicrophoneSettingsStore.quickWakeTrigger]):
@@ -161,6 +166,8 @@ class QuickWakeFabService : Service() {
     private var physicsEdge = FabEdge.RIGHT
     /** Dock-in or morph-reject: softer along the dock axis so the magnet does not yank. */
     private var physicsSoftX = false
+    /** Docked release: along-axis is viscous glide, not a spring into the corner. */
+    private var physicsSoftAlong = false
     private var lastPhysicsNanos = 0L
     private val physicsCallback = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos: Long) {
@@ -239,10 +246,8 @@ class QuickWakeFabService : Service() {
     }
     /** Bubble is fading out — do not remove+add it or the fade freezes mid-alpha. */
     private var captionDismissing = false
-    /** Parked in WM (INVISIBLE). Next STT reuses the same window — no addView flash. */
+    /** Parked in WM (INVISIBLE). Raises move it with the mic, but it stays undrawn. */
     private var captionParked = false
-    /** Cold-start park may sit under the boot stack. The first reveal climbs once. */
-    private var captionNeedsClimb = false
     /** Reply plate has settled and the bubble's exit is on the clock; later pages must not re-arm. */
     private var captionLingerArmed = false
 
@@ -296,6 +301,11 @@ class QuickWakeFabService : Service() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         loadPosition()
         createFab()
+        // Same moment as the disc. Waiting for the settings flow left the capsule
+        // out of the cold-start raise queue, so the first transcript climbed it
+        // into a stack that was still moving.
+        captionsEnabled = playerStore.getCached().enableFloatingWindow
+        if (captionsEnabled) ensureCaptionParked()
         observeSettings()
         observeSessionState()
         observePushToTalk()
@@ -357,8 +367,8 @@ class QuickWakeFabService : Service() {
         params.y = (centerY - winH / 2f).roundToInt()
         drawX = params.x
         drawY = params.y
-        view.setShapeMetrics(discSizePx(), handleWpx(), handleHpx())
-        view.setDock(dockAmount(), activeEdge())
+        view.setShapeMetrics(discSizePx(), handleWpx(), handleHpx(), cornerSizePx())
+        pushFabDock(view)
         root.addView(view, FrameLayout.LayoutParams(winW, winH, Gravity.CENTER))
 
         try {
@@ -1000,9 +1010,6 @@ class QuickWakeFabService : Service() {
                 .collect { enabled ->
                     captionsEnabled = enabled
                     if (enabled) {
-                        // Cold start: TTS plate, then the STT bubble. The mic climb
-                        // already queued by the plate's addView lands last.
-                        // Neither window is created on the press.
                         FloatingWindowService.prewarm(this@QuickWakeFabService)
                         ensureCaptionParked()
                     } else {
@@ -1086,14 +1093,8 @@ class QuickWakeFabService : Service() {
         val attached = view.isAttachedToWindow
         positionCaption(view, params)
         view.animate().cancel()
-        if (attached && captionNeedsClimb) {
-            // Still invisible. One queue climb, then the fade — the first
-            // painted frame is already in the voice slot. Later turns only fade.
-            captionNeedsClimb = false
-            view.alpha = 0f
-            view.visibility = View.INVISIBLE
-            restackCaption()
-        }
+        // Already in the raise queue from cold start. Fade only — a remove+add
+        // here is what the following mic climbs then flash again.
         captionParked = false
         view.visibility = View.VISIBLE
         try {
@@ -1192,8 +1193,9 @@ class QuickWakeFabService : Service() {
         try {
             wm.addView(view, params)
             captionParked = true
-            captionNeedsClimb = true
             captionDismissing = false
+            // Disc climbs last and pulls this hidden bubble with it.
+            OverlayZOrderCoordinator.noteWindowAdded()
         } catch (e: Exception) {
             Log.w(TAG, "caption prewarm failed", e)
             captionView = null
@@ -1209,7 +1211,6 @@ class QuickWakeFabService : Service() {
         captionDismissing = false
         captionLingerArmed = false
         captionParked = false
-        captionNeedsClimb = false
         captionTurnActive = false
         val view = captionView ?: return
         view.animate().cancel()
@@ -1294,10 +1295,10 @@ class QuickWakeFabService : Service() {
         val current = tv.background as? GradientDrawable
         val bg = current ?: GradientDrawable()
         bg.cornerRadii = radii
-        bg.setColor(0x99181A1C.toInt())
+        bg.setColor(0xF50C0D0F.toInt())
         bg.setStroke(
             dp(1f).coerceAtLeast(1),
-            android.content.res.ColorStateList.valueOf(0x33FFFFFF.toInt()),
+            android.content.res.ColorStateList.valueOf(0x18FFFFFF.toInt()),
         )
         if (current == null) tv.background = bg
         // Lines grow out of the tail so a short last line still sits on the kiss.
@@ -1455,9 +1456,13 @@ class QuickWakeFabService : Service() {
     private fun windowSizePx(): Int = dp(WINDOW_SIZE_DP * screenScaleFactor())
     private fun handleWpx(): Int = dp(HANDLE_W_DP * screenScaleFactor())
     private fun handleHpx(): Int = dp(HANDLE_H_DP * screenScaleFactor())
+    private fun cornerSizePx(): Int = dp(HANDLE_CORNER_DP * screenScaleFactor())
     private fun hangPx(): Float = dp(HANDLE_HANG_DP * screenScaleFactor()).toFloat()
     private fun morphPx(): Float = dp(MORPH_RANGE_DP * screenScaleFactor()).toFloat()
     private fun restInset(): Float = handleWpx() / 2f - hangPx()
+
+    /** Hang math for the corner semicircle. */
+    private fun cornerRestInset(): Float = cornerSizePx() / 2f - hangPx()
 
     private fun realScreenSize(): Pair<Int, Int> {
         // Vinyl / weather / wake-ripple: physical display, including the nav-bar strip.
@@ -1482,9 +1487,156 @@ class QuickWakeFabService : Service() {
     private fun isVerticalEdge(edge: FabEdge): Boolean =
         edge == FabEdge.TOP || edge == FabEdge.BOTTOM
 
-    /** Long-handle clearance. Inside this on two axes, a D would hang off the screen. */
-    private fun alongLimit(): Float =
-        handleHpx() / 2f + dp(8f * screenScaleFactor()).toFloat()
+    private fun insetH(x: Float): Float {
+        val (sw, _) = realScreenSize()
+        return min(x, sw - x)
+    }
+
+    private fun insetV(y: Float): Float {
+        val (_, sh) = realScreenSize()
+        return min(y, sh - y)
+    }
+
+    private fun nearestHEdge(x: Float): FabEdge {
+        val (sw, _) = realScreenSize()
+        return if (x < sw / 2f) FabEdge.LEFT else FabEdge.RIGHT
+    }
+
+    private fun nearestVEdge(y: Float): FabEdge {
+        val (_, sh) = realScreenSize()
+        return if (y < sh / 2f) FabEdge.TOP else FabEdge.BOTTOM
+    }
+
+    /**
+     * How far along the wall the full D still fits. Hang is only on a flush bezel —
+     * subtracting it here let the round cap leak off the adjacent edge.
+     */
+    private fun alongFitPx(): Float = handleHpx() / 2f
+
+    private fun smootherstep(t: Float): Float {
+        val x = t.coerceIn(0f, 1f)
+        return x * x * x * (x * (x * 6f - 15f) + 10f)
+    }
+
+    /**
+     * Keep the committed wall until the other one is clearly closer.
+     * Live nearest-edge at a corner bisector was the hard suck onto the other bezel.
+     */
+    private fun clingEdge(x: Float, y: Float, held: FabEdge): FabEdge {
+        if (rawDock(x, y) < 0.02f) return edgeOf(x, y)
+        val next = edgeOf(x, y)
+        if (next == held) return held
+        val margin = dp(18f * screenScaleFactor()).toFloat()
+        return if (distTo(next, x, y) + margin < distTo(held, x, y)) next else held
+    }
+
+    /**
+     * Linear how-far-into-the-corner. Visual morph uses [cornerSqueeze] (eased).
+     */
+    private fun cornerSqueezeRaw(
+        x: Float = centerX,
+        y: Float = centerY,
+    ): Float {
+        if (rawDock(x, y) < 0.02f) return 0f
+        val along = max(insetH(x), insetV(y))
+        val start = alongFitPx()
+        val end = cornerRestInset()
+        val span = (start - end).coerceAtLeast(1f)
+        if (along >= start) return 0f
+        return ((start - along) / span).coerceIn(0f, 1f)
+    }
+
+    /**
+     * Minimum inset on one axis so a corner D is not clipped by the adjacent wall.
+     * Eases from the thin-handle rest to the corner rest — no step, no magnet.
+     */
+    private fun wallFloor(adjacentDist: Float, overshootPx: Float = 0f): Float {
+        val rest = restInset()
+        val corner = cornerRestInset()
+        val start = alongFitPx()
+        val span = (start - corner).coerceAtLeast(1f)
+        val raw = if (adjacentDist >= start) {
+            0f
+        } else {
+            ((start - adjacentDist) / span).coerceIn(0f, 1f)
+        }
+        return rest + (corner - rest) * raw - overshootPx
+    }
+
+    /**
+     * How flush [edge] is: D-dock against that wall, or the round cap meeting it.
+     * Pin and flatten use this so the bottom edge sits like the side edges.
+     */
+    private fun flushOf(edge: FabEdge, x: Float = centerX, y: Float = centerY): Float {
+        val dist = distTo(edge, x, y)
+        val rest = if (isVerticalEdge(edge)) wallFloor(insetH(x)) else wallFloor(insetV(y))
+        val dockF = (1f - (dist - rest) / morphPx()).coerceIn(0f, 1f)
+        val start = alongFitPx()
+        val end = cornerRestInset()
+        val capF = if (dist >= start) {
+            0f
+        } else {
+            ((start - dist) / (start - end).coerceAtLeast(1f)).coerceIn(0f, 1f)
+        }
+        return max(dockF, capF)
+    }
+
+    /**
+     * 0 = full D. 1 = [HANDLE_CORNER_DP] semicircle.
+     * Linear with the along gap so the end cap stays inside the screen.
+     */
+    private fun cornerSqueeze(
+        x: Float = centerX,
+        y: Float = centerY,
+    ): Float = cornerSqueezeRaw(x, y)
+
+    /** Along-axis minimum: full-D half-height down to the corner rest as it shortens. */
+    private fun alongFloor(
+        x: Float = centerX,
+        y: Float = centerY,
+        overshootPx: Float = 0f,
+    ): Float {
+        val start = alongFitPx()
+        val end = cornerRestInset()
+        return start + (end - start) * cornerSqueezeRaw(x, y) - overshootPx
+    }
+
+    /**
+     * 0 = standing D on a left/right wall. 1 = lying D on a top/bottom wall.
+     * Quintic so the D turns through the corner instead of snapping.
+     */
+    private fun cornerTurn(
+        x: Float = centerX,
+        y: Float = centerY,
+    ): Float {
+        val dH = insetH(x)
+        val dV = insetV(y)
+        val sum = dH + dV
+        if (sum < 1f) return 0.5f
+        return smootherstep((dH / sum).coerceIn(0f, 1f))
+    }
+
+    private fun pushFabDock(view: QuickWakeFabView? = fabView) {
+        val target = view ?: return
+        val (sw, sh) = realScreenSize()
+        target.setDock(
+            dockAmount(),
+            activeEdge(),
+            cornerSqueeze(),
+            cornerTurn(),
+            nearestHEdge(centerX),
+            nearestVEdge(centerY),
+            hangPx(),
+            centerX,
+            centerY,
+            sw - centerX,
+            sh - centerY,
+            flushOf(FabEdge.LEFT),
+            flushOf(FabEdge.TOP),
+            flushOf(FabEdge.RIGHT),
+            flushOf(FabEdge.BOTTOM),
+        )
+    }
 
     private fun edgeOf(x: Float, y: Float): FabEdge {
         val (sw, sh) = realScreenSize()
@@ -1516,15 +1668,12 @@ class QuickWakeFabService : Service() {
     /**
      * Edge the shape is melting toward. A settle in flight keeps the edge it
      * was released on, so a corner slide does not flip the D mid-spring.
+     * Near a corner, keep [dragEdge] until the other wall is clearly closer.
      */
-    private fun activeEdge(x: Float = centerX, y: Float = centerY): FabEdge =
-        if (physicsRunning && physicsSoftX) physicsEdge else edgeOf(x, y)
-
-    /** Both axes inside the long-handle clearance — stay a circle. */
-    private fun inCornerPocket(x: Float, y: Float): Boolean {
-        val (sw, sh) = realScreenSize()
-        val pocket = alongLimit()
-        return min(x, sw - x) < pocket && min(y, sh - y) < pocket
+    private fun activeEdge(x: Float = centerX, y: Float = centerY): FabEdge {
+        if (physicsRunning && physicsSoftX) return physicsEdge
+        if (cornerSqueezeRaw(x, y) > 0.02f) return clingEdge(x, y, dragEdge)
+        return edgeOf(x, y)
     }
 
     /** Distance from the shape centre to the nearest screen edge. */
@@ -1542,24 +1691,36 @@ class QuickWakeFabService : Service() {
     /**
      * Morph only in a tight band against the nearest edge.
      * Farther than that the control stays a circle — a wide interpolating D
-     * sitting "near" the edge was neither a handle nor a disc. A corner pocket
-     * stays a circle too; the handle would hang off the adjacent edge.
+     * sitting "near" the edge was neither a handle nor a disc. A corner keeps
+     * the D and turns it into a mid-size semicircle with the same lerp.
      */
     private fun dockAmount(x: Float = centerX, y: Float = centerY): Float {
-        if (!(physicsRunning && physicsToEdge) && inCornerPocket(x, y)) return 0f
-        val dist = distTo(activeEdge(x, y), x, y)
-        return (1f - (dist - restInset()) / morphPx()).coerceIn(0f, 1f)
+        val edge = activeEdge(x, y)
+        val dist = distTo(edge, x, y)
+        val rest = if (isVerticalEdge(edge)) wallFloor(insetH(x)) else wallFloor(insetV(y))
+        return (1f - (dist - rest) / morphPx()).coerceIn(0f, 1f)
     }
 
-    private fun shapeSizeFor(t: Float, vertical: Boolean): Pair<Float, Float> {
+    private fun shapeSizeFor(
+        t: Float,
+        vertical: Boolean,
+        squeeze: Float = 0f,
+    ): Pair<Float, Float> {
         val disc = discSizePx().toFloat()
-        val thin = disc + (handleWpx() - disc) * t
-        val long = disc + (handleHpx() - disc) * t
+        val corner = disc + (cornerSizePx() - disc) * t
+        val thin0 = disc + (handleWpx() - disc) * t
+        val long0 = disc + (handleHpx() - disc) * t
+        val s = squeeze.coerceIn(0f, 1f)
+        val thin = thin0 + (corner - thin0) * s
+        val long = long0 + (corner - long0) * s
         return if (vertical) long to thin else thin to long
     }
 
-    private fun shapeSize(t: Float = dockAmount()): Pair<Float, Float> =
-        shapeSizeFor(t, t > 0f && isVerticalEdge(activeEdge()))
+    private fun shapeSize(t: Float = dockAmount()): Pair<Float, Float> {
+        val (thin, long) = shapeSizeFor(t, false, cornerSqueeze())
+        val k = cornerTurn()
+        return thin + (long - thin) * k to long + (thin - long) * k
+    }
 
     private fun ringPadPx(t: Float = dockAmount()): Float {
         val full = (windowSizePx() - discSizePx()) / 2f
@@ -1584,58 +1745,60 @@ class QuickWakeFabService : Service() {
         return max(w0, max(wSide, wFlat)) to max(h0, max(hSide, hFlat))
     }
 
-    /** Seat on [edge] at [inset] from that edge, kept clear of the other two. */
+    /**
+     * Seat on [edge] at [inset] from that edge. Along-axis stays where it is —
+     * a corner is not a magnet target. [alongFloor] keeps the round cap on-screen.
+     */
     private fun seatOnEdge(edge: FabEdge, x: Float, y: Float, inset: Float): Pair<Float, Float> {
         val (sw, sh) = realScreenSize()
-        val half = alongLimit()
-        val minX = half
-        val maxX = max(half, sw - half)
-        val minY = half
-        val maxY = max(half, sh - half)
+        val alongMin = alongFloor(x, y)
+        val dockMin = if (isVerticalEdge(edge)) {
+            wallFloor(insetH(x))
+        } else {
+            wallFloor(insetV(y))
+        }
+        val alongX = x.coerceIn(alongMin, max(alongMin, sw - alongMin))
+        val alongY = y.coerceIn(alongMin, max(alongMin, sh - alongMin))
+        val dock = inset.coerceAtLeast(dockMin)
         return when (edge) {
-            FabEdge.LEFT -> inset to y.coerceIn(minY, maxY)
-            FabEdge.RIGHT -> (sw - inset) to y.coerceIn(minY, maxY)
-            FabEdge.TOP -> x.coerceIn(minX, maxX) to inset
-            FabEdge.BOTTOM -> x.coerceIn(minX, maxX) to (sh - inset)
+            FabEdge.LEFT -> dock to alongY
+            FabEdge.RIGHT -> (sw - dock) to alongY
+            FabEdge.TOP -> alongX to dock
+            FabEdge.BOTTOM -> alongX to (sh - dock)
         }
     }
 
+    /**
+     * Dock axis may lift inward near a corner. Along axis never goes closer than
+     * the current D's round cap — that was the bottom curve leaking off-screen.
+     */
     private fun clampCenter(overshootPx: Float = 0f) {
         val (sw, sh) = realScreenSize()
-        val depth = restInset()
-        // A settle eases out of a corner. Clamping the long axis here would pop.
-        val sliding = physicsRunning && physicsToEdge
-        val docked = !sliding && dockAmount() > 0.02f
-        val vertical = docked && isVerticalEdge(activeEdge())
-        val half = alongLimit()
-        val minX: Float
-        val maxX: Float
-        val minY: Float
-        val maxY: Float
-        if (vertical) {
-            minX = half
-            maxX = sw - half
-            minY = depth - overshootPx
-            maxY = sh - depth + overshootPx
-        } else if (docked) {
-            minX = depth - overshootPx
-            maxX = sw - depth + overshootPx
-            minY = half
-            maxY = sh - half
-        } else {
-            minX = depth - overshootPx
-            maxX = sw - depth + overshootPx
-            minY = depth - overshootPx
-            maxY = sh - depth + overshootPx
+        if (rawDock(centerX, centerY) < 0.02f) {
+            val depth = restInset() - overshootPx
+            centerX = centerX.coerceIn(depth, max(depth, sw - depth))
+            centerY = centerY.coerceIn(depth, max(depth, sh - depth))
+            return
         }
-        centerX = centerX.coerceIn(minX, max(minX, maxX))
-        centerY = centerY.coerceIn(minY, max(minY, maxY))
+        val edge = activeEdge()
+        val alongMin = alongFloor(overshootPx = overshootPx).coerceAtLeast(0f)
+        val dockMin = if (isVerticalEdge(edge)) {
+            wallFloor(insetH(centerX), overshootPx)
+        } else {
+            wallFloor(insetV(centerY), overshootPx)
+        }
+        if (isVerticalEdge(edge)) {
+            centerX = centerX.coerceIn(alongMin, max(alongMin, sw - alongMin))
+            centerY = centerY.coerceIn(dockMin, max(dockMin, sh - dockMin))
+        } else {
+            centerX = centerX.coerceIn(dockMin, max(dockMin, sw - dockMin))
+            centerY = centerY.coerceIn(alongMin, max(alongMin, sh - alongMin))
+        }
     }
 
     private fun applyWindow(moveOnly: Boolean = false) {
         fabRoot ?: return
         val params = windowParams ?: return
-        val t = dockAmount()
         val (winW, winH) = if (moveOnly) {
             params.width to params.height
         } else {
@@ -1644,7 +1807,7 @@ class QuickWakeFabService : Service() {
         val x = (centerX - winW / 2f).roundToInt()
         val y = (centerY - winH / 2f).roundToInt()
         if (moveOnly && x == params.x && y == params.y) {
-            fabView?.setDock(t, activeEdge())
+            pushFabDock()
             return
         }
         drawX = x
@@ -1657,8 +1820,8 @@ class QuickWakeFabService : Service() {
         params.x = x
         params.y = y
         fabView?.let { view ->
-            if (!moveOnly) view.setShapeMetrics(discSizePx(), handleWpx(), handleHpx())
-            view.setDock(t, activeEdge())
+            if (!moveOnly) view.setShapeMetrics(discSizePx(), handleWpx(), handleHpx(), cornerSizePx())
+            pushFabDock(view)
             if (sizeChanged) {
                 view.layoutParams = FrameLayout.LayoutParams(winW, winH, Gravity.CENTER)
             }
@@ -1688,24 +1851,29 @@ class QuickWakeFabService : Service() {
         pushWindowLayout()
     }
 
-    private fun magnetToward(pos: Float, wall: Float, range: Float): Float {
+    private fun magnetToward(pos: Float, wall: Float, range: Float, pull: Float): Float {
         val d = abs(pos - wall)
-        if (d >= range) return pos
+        if (d >= range || pull <= 0.001f) return pos
         val t = 1f - d / range
-        return pos + (wall - pos) * t * t * t * MAGNET_PULL
+        return pos + (wall - pos) * t * t * t * pull
     }
 
-    /** Soft pull toward the nearest wall. A corner has no winner, so the finger stays free. */
-    private fun magnetPoint(x: Float, y: Float): Pair<Float, Float> {
-        if (inCornerPocket(x, y)) return x to y
+    /**
+     * Soft pull toward the committed wall only. Fades out in a corner so the
+     * other bezel cannot steal the magnet axis.
+     */
+    private fun magnetPoint(x: Float, y: Float, edge: FabEdge): Pair<Float, Float> {
+        val pull = MAGNET_PULL * (1f - smootherstep(cornerSqueezeRaw(x, y)))
+        if (pull <= 0.001f) return x to y
         val (sw, sh) = realScreenSize()
-        val rest = restInset()
         val range = dp(MAGNET_RANGE_DP * screenScaleFactor()).toFloat()
-        return when (edgeOf(x, y)) {
-            FabEdge.LEFT -> magnetToward(x, rest, range) to y
-            FabEdge.RIGHT -> magnetToward(x, sw - rest, range) to y
-            FabEdge.TOP -> x to magnetToward(y, rest, range)
-            FabEdge.BOTTOM -> x to magnetToward(y, sh - rest, range)
+        val floorX = wallFloor(insetV(y))
+        val floorY = wallFloor(insetH(x))
+        return when (edge) {
+            FabEdge.LEFT -> magnetToward(x, floorX, range, pull) to y
+            FabEdge.RIGHT -> magnetToward(x, sw - floorX, range, pull) to y
+            FabEdge.TOP -> x to magnetToward(y, floorY, range, pull)
+            FabEdge.BOTTOM -> x to magnetToward(y, sh - floorY, range, pull)
         }
     }
 
@@ -1739,12 +1907,13 @@ class QuickWakeFabService : Service() {
         } else {
             false
         }
+        dragEdge = clingEdge(fingerX, fingerY, dragEdge)
         // Peel follows the finger with no wall magnet, so the D melts instead of popping.
         if (leaving) {
             centerX = fingerX
             centerY = fingerY
         } else {
-            val (mx, my) = magnetPoint(fingerX, fingerY)
+            val (mx, my) = magnetPoint(fingerX, fingerY, dragEdge)
             centerX = mx
             centerY = my
         }
@@ -1762,13 +1931,15 @@ class QuickWakeFabService : Service() {
         // Snap only to the edge the finger is already on, and only when it is
         // clearly parked. Farther than that, ease back to a circle — a half-D
         // frozen in the morph band was the old "too sticky" magnet.
-        // rawDock includes a corner: releasing there still seats on the nearer edge.
-        val edge = edgeOf(fromX, fromY)
+        // A corner keeps that committed edge; along-axis stays put (viscous stop).
+        val edge = clingEdge(fromX, fromY, dragEdge)
+        dragEdge = edge
         val dock = rawDock(fromX, fromY)
         val toEdge = dock > SNAP_DOCK
         physicsEdge = edge
         physicsToEdge = toEdge
         physicsSoftX = toEdge || dock > 0.02f
+        physicsSoftAlong = toEdge
         val alongVx = dragVx.coerceIn(-1600f, 1600f)
         val alongVy = dragVy.coerceIn(-1600f, 1600f)
         if (toEdge) {
@@ -1825,10 +1996,28 @@ class QuickWakeFabService : Service() {
     private fun stepPhysics(dt: Float): Boolean {
         val vertical = physicsSoftX && isVerticalEdge(physicsEdge)
         val softX = physicsSoftX && !vertical
-        val stiffX = if (softX) SPRING_STIFF * 0.52f else SPRING_STIFF
-        val dampX = if (softX) SPRING_DAMP * 1.7f else SPRING_DAMP
-        val stiffY = if (vertical) SPRING_STIFF * 0.52f else SPRING_STIFF
-        val dampY = if (vertical) SPRING_DAMP * 1.7f else SPRING_DAMP
+        val alongSoftX = physicsSoftAlong && vertical
+        val alongSoftY = physicsSoftAlong && !vertical
+        val stiffX = when {
+            alongSoftX -> SPRING_STIFF * 0.16f
+            softX -> SPRING_STIFF * 0.52f
+            else -> SPRING_STIFF
+        }
+        val dampX = when {
+            alongSoftX -> SPRING_DAMP * 2.55f
+            softX -> SPRING_DAMP * 1.7f
+            else -> SPRING_DAMP
+        }
+        val stiffY = when {
+            alongSoftY -> SPRING_STIFF * 0.16f
+            vertical -> SPRING_STIFF * 0.52f
+            else -> SPRING_STIFF
+        }
+        val dampY = when {
+            alongSoftY -> SPRING_DAMP * 2.55f
+            vertical -> SPRING_DAMP * 1.7f
+            else -> SPRING_DAMP
+        }
         val ax = -stiffX * (centerX - physicsTx) - dampX * physicsVx
         val ay = -stiffY * (centerY - physicsTy) - dampY * physicsVy
         physicsVx += ax * dt
@@ -1899,7 +2088,8 @@ class QuickWakeFabService : Service() {
     private fun snapToNearestHome() {
         val dock = rawDock(centerX, centerY)
         if (dock <= 0.02f) return
-        val edge = edgeOf(centerX, centerY)
+        val edge = clingEdge(centerX, centerY, dragEdge)
+        dragEdge = edge
         val rest = restInset()
         val inset = if (dock >= SNAP_DOCK || nearestEdgeDist() <= rest + morphPx() * 0.45f) {
             rest
@@ -1939,7 +2129,7 @@ class QuickWakeFabService : Service() {
         }
         lastScreenW = sw
         lastScreenH = sh
-        fabView?.setShapeMetrics(discSizePx(), handleWpx(), handleHpx())
+        fabView?.setShapeMetrics(discSizePx(), handleWpx(), handleHpx(), cornerSizePx())
         refreshDrawPosition()
         applyWindow()
         persistPosition()
@@ -2047,12 +2237,32 @@ class QuickWakeFabService : Service() {
     }
 
     private fun restackCaptionMasked() {
-        // Parked STT stays in the slot it was given. Climbing it on every mic
-        // raise is a remove+add of a window the user cannot see.
-        if (captionParked) return
         val view = captionView ?: return
         val params = captionParams ?: return
         if (!view.isAttachedToWindow) return
+        if (captionParked) {
+            // Stay in the raise queue, but never paint. Visibility is set before
+            // addView so the restored frame is not a default-visible capsule.
+            view.animate().cancel()
+            view.alpha = 0f
+            view.visibility = View.INVISIBLE
+            restackCaption()
+            view.alpha = 0f
+            view.visibility = View.INVISIBLE
+            return
+        }
+        // Entrance fade. remove+add cancels it — resume the fade after the climb
+        // so the bubble is not left under the TTS plate.
+        val fadingIn = view.visibility == View.VISIBLE && view.alpha < 1f && !captionDismissing
+        if (fadingIn) {
+            val a = view.alpha
+            if (restackCaption()) {
+                view.animate().cancel()
+                view.alpha = a
+                view.animate().alpha(1f).setDuration(CAPTION_FADE_MS).start()
+            }
+            return
+        }
         OverlayRaiseCover.run(windowManager, view, params, restack = { restackCaption() })
     }
 
@@ -2212,8 +2422,26 @@ class QuickWakeFabService : Service() {
         private var discPx = discSizePx
         private var handleWpx = discSizePx
         private var handleHpx = discSizePx
+        private var handleCornerPx = discSizePx
         private var dock = 0f
         private var dockEdge = FabEdge.RIGHT
+        /** 1 = mid-size semicircle, same inner radii as the D. */
+        private var cornerSqueeze = 0f
+        /** 0 = standing D (left/right). 1 = lying D (top/bottom). */
+        private var cornerTurn = 0f
+        private var hEdge = FabEdge.RIGHT
+        private var vEdge = FabEdge.TOP
+        /** Second bezel of the corner seat. Null along a mid-edge. */
+        private var adjacentWall: FabEdge? = null
+        private var hangPx = 0f
+        private var distL = 0f
+        private var distT = 0f
+        private var distR = 0f
+        private var distB = 0f
+        private var flushL = 0f
+        private var flushT = 0f
+        private var flushR = 0f
+        private var flushB = 0f
         private var jellyX = 1f
         private var jellyY = 1f
         private var pull = 0f
@@ -2457,19 +2685,79 @@ class QuickWakeFabService : Service() {
             block(ringPaint)
         }
 
-        fun setShapeMetrics(disc: Int, handleW: Int, handleH: Int) {
-            if (discPx == disc && handleWpx == handleW && handleHpx == handleH) return
+        fun setShapeMetrics(disc: Int, handleW: Int, handleH: Int, handleCorner: Int) {
+            if (discPx == disc && handleWpx == handleW && handleHpx == handleH && handleCornerPx == handleCorner) {
+                return
+            }
             discPx = disc
             handleWpx = handleW
             handleHpx = handleH
+            handleCornerPx = handleCorner
             invalidate()
         }
 
-        fun setDock(amount: Float, edge: FabEdge) {
+        fun setDock(
+            amount: Float,
+            edge: FabEdge,
+            squeeze: Float,
+            turn: Float,
+            horizontal: FabEdge,
+            vertical: FabEdge,
+            hang: Float,
+            insetL: Float,
+            insetT: Float,
+            insetR: Float,
+            insetB: Float,
+            fL: Float,
+            fT: Float,
+            fR: Float,
+            fB: Float,
+        ) {
             val t = amount.coerceIn(0f, 1f)
-            if (abs(dock - t) < 0.002f && dockEdge == edge) return
+            val s = squeeze.coerceIn(0f, 1f)
+            val k = turn.coerceIn(0f, 1f)
+            val adj = when {
+                fB > 0.02f && edge != FabEdge.BOTTOM -> FabEdge.BOTTOM
+                fT > 0.02f && edge != FabEdge.TOP -> FabEdge.TOP
+                fR > 0.02f && edge != FabEdge.RIGHT -> FabEdge.RIGHT
+                fL > 0.02f && edge != FabEdge.LEFT -> FabEdge.LEFT
+                else -> null
+            }
+            if (abs(dock - t) < 0.002f &&
+                dockEdge == edge &&
+                abs(cornerSqueeze - s) < 0.002f &&
+                abs(cornerTurn - k) < 0.002f &&
+                hEdge == horizontal &&
+                vEdge == vertical &&
+                adjacentWall == adj &&
+                abs(hangPx - hang) < 0.05f &&
+                abs(distL - insetL) < 0.05f &&
+                abs(distT - insetT) < 0.05f &&
+                abs(distR - insetR) < 0.05f &&
+                abs(distB - insetB) < 0.05f &&
+                abs(flushL - fL) < 0.002f &&
+                abs(flushT - fT) < 0.002f &&
+                abs(flushR - fR) < 0.002f &&
+                abs(flushB - fB) < 0.002f
+            ) {
+                return
+            }
             dock = t
             dockEdge = edge
+            cornerSqueeze = s
+            cornerTurn = k
+            hEdge = horizontal
+            vEdge = vertical
+            adjacentWall = adj
+            hangPx = hang
+            distL = insetL
+            distT = insetT
+            distR = insetR
+            distB = insetB
+            flushL = fL.coerceIn(0f, 1f)
+            flushT = fT.coerceIn(0f, 1f)
+            flushR = fR.coerceIn(0f, 1f)
+            flushB = fB.coerceIn(0f, 1f)
             invalidate()
         }
 
@@ -2512,33 +2800,67 @@ class QuickWakeFabService : Service() {
 
         private fun currentShape(): Pair<Float, Float> {
             val extra = pull * 16f * density
-            val vertical = isVerticalEdge(dockEdge)
-            val thin = discPx + (handleWpx - discPx) * dock
-            val long = discPx + (handleHpx - discPx) * dock
-            val bw = if (vertical) long else thin
-            val bh = if (vertical) thin else long
+            val thin0 = discPx + (handleWpx - discPx) * dock
+            val long0 = discPx + (handleHpx - discPx) * dock
+            val corner = discPx + (handleCornerPx - discPx) * dock
+            val s = cornerSqueeze
+            val thin = thin0 + (corner - thin0) * s
+            val long = long0 + (corner - long0) * s
+            val k = cornerTurn
+            val bw = thin + (long - thin) * k
+            val bh = long + (thin - long) * k
             return bw * jellyX + extra to bh * jellyY
         }
 
         /** Flat bezel corners vs the rounded inner face. Order is TL, TR, BR, BL. */
         private fun writeRadii(out: FloatArray, rIn: Float, rOut: Float) {
-            val tl: Float
-            val tr: Float
-            val br: Float
-            val bl: Float
-            when (dockEdge) {
-                FabEdge.RIGHT -> {
-                    tl = rIn; tr = rOut; br = rOut; bl = rIn
+            fun corner(edge: FabEdge, which: Int): Float {
+                val tl: Float
+                val tr: Float
+                val br: Float
+                val bl: Float
+                when (edge) {
+                    FabEdge.RIGHT -> {
+                        tl = rIn; tr = rOut; br = rOut; bl = rIn
+                    }
+                    FabEdge.LEFT -> {
+                        tl = rOut; tr = rIn; br = rIn; bl = rOut
+                    }
+                    FabEdge.TOP -> {
+                        tl = rOut; tr = rOut; br = rIn; bl = rIn
+                    }
+                    FabEdge.BOTTOM -> {
+                        tl = rIn; tr = rIn; br = rOut; bl = rOut
+                    }
                 }
-                FabEdge.LEFT -> {
-                    tl = rOut; tr = rIn; br = rIn; bl = rOut
+                return when (which) {
+                    0 -> tl
+                    1 -> tr
+                    2 -> br
+                    else -> bl
                 }
-                FabEdge.TOP -> {
-                    tl = rOut; tr = rOut; br = rIn; bl = rIn
-                }
-                FabEdge.BOTTOM -> {
-                    tl = rIn; tr = rIn; br = rOut; bl = rOut
-                }
+            }
+            val k = cornerTurn
+            var tl = corner(hEdge, 0) + (corner(vEdge, 0) - corner(hEdge, 0)) * k
+            var tr = corner(hEdge, 1) + (corner(vEdge, 1) - corner(hEdge, 1)) * k
+            var br = corner(hEdge, 2) + (corner(vEdge, 2) - corner(hEdge, 2)) * k
+            var bl = corner(hEdge, 3) + (corner(vEdge, 3) - corner(hEdge, 3)) * k
+            fun mix(a: Float, flush: Float) = a + (rOut - a) * flush
+            if (flushT > 0.001f) {
+                tl = mix(tl, flushT)
+                tr = mix(tr, flushT)
+            }
+            if (flushB > 0.001f) {
+                bl = mix(bl, flushB)
+                br = mix(br, flushB)
+            }
+            if (flushL > 0.001f) {
+                tl = mix(tl, flushL)
+                bl = mix(bl, flushL)
+            }
+            if (flushR > 0.001f) {
+                tr = mix(tr, flushR)
+                br = mix(br, flushR)
             }
             out[0] = tl; out[1] = tl
             out[2] = tr; out[3] = tr
@@ -2547,37 +2869,26 @@ class QuickWakeFabService : Service() {
         }
 
         private fun buildShapePath(cx: Float, cy: Float, w: Float, h: Float) {
-            val vertical = isVerticalEdge(dockEdge)
-            val thin = discPx + (handleWpx - discPx) * dock
-            val long = discPx + (handleHpx - discPx) * dock
-            val baseW = if (vertical) long else thin
-            val baseH = if (vertical) thin else long
             shapeRect.set(cx - w / 2f, cy - h / 2f, cx + w / 2f, cy + h / 2f)
-            // Docked or peeling off: pin the outer edge so squash/stretch reads as hitting the wall,
-            // not shrinking about the centre.
-            if (dock > 0.45f || pull > 0.01f) {
-                when (dockEdge) {
-                    FabEdge.RIGHT -> {
-                        val right = cx + baseW / 2f
-                        shapeRect.right = right
-                        shapeRect.left = right - w
-                    }
-                    FabEdge.LEFT -> {
-                        val left = cx - baseW / 2f
-                        shapeRect.left = left
-                        shapeRect.right = left + w
-                    }
-                    FabEdge.BOTTOM -> {
-                        val bottom = cy + baseH / 2f
-                        shapeRect.bottom = bottom
-                        shapeRect.top = bottom - h
-                    }
-                    FabEdge.TOP -> {
-                        val top = cy - baseH / 2f
-                        shapeRect.top = top
-                        shapeRect.bottom = top + h
-                    }
-                }
+            // Each bezel pins on its own axis from the real screen inset, so a
+            // corner lift cannot leave the bottom edge floating (thin0 pin).
+            if (flushR > 0.02f) {
+                val right = cx + distR + hangPx * flushR
+                shapeRect.right = right
+                shapeRect.left = right - w
+            } else if (flushL > 0.02f) {
+                val left = cx - distL - hangPx * flushL
+                shapeRect.left = left
+                shapeRect.right = left + w
+            }
+            if (flushB > 0.02f) {
+                val bottom = cy + distB + hangPx * flushB
+                shapeRect.bottom = bottom
+                shapeRect.top = bottom - h
+            } else if (flushT > 0.02f) {
+                val top = cy - distT - hangPx * flushT
+                shapeRect.top = top
+                shapeRect.bottom = top + h
             }
             val rIn = min(w, h) / 2f
             val rOut = rIn * (1f - dock)
@@ -2603,6 +2914,15 @@ class QuickWakeFabService : Service() {
                     FabEdge.LEFT -> orbitRect.left = shapeRect.left - hair
                     FabEdge.TOP -> orbitRect.top = shapeRect.top - hair
                     FabEdge.BOTTOM -> orbitRect.bottom = shapeRect.bottom + hair
+                }
+                val adj = adjacentWall
+                if (adj != null && cornerSqueeze > 0.02f) {
+                    when (adj) {
+                        FabEdge.RIGHT -> orbitRect.right = shapeRect.right + hair
+                        FabEdge.LEFT -> orbitRect.left = shapeRect.left - hair
+                        FabEdge.TOP -> orbitRect.top = shapeRect.top - hair
+                        FabEdge.BOTTOM -> orbitRect.bottom = shapeRect.bottom + hair
+                    }
                 }
             }
             val ow = orbitRect.width()
@@ -3386,15 +3706,21 @@ class QuickWakeFabService : Service() {
 
             canvas.save()
             val nudge = 5.5f * density * dock
-            val (nx, ny) = when (dockEdge) {
+            val k = cornerTurn
+            fun inward(edge: FabEdge): Pair<Float, Float> = when (edge) {
                 FabEdge.RIGHT -> -nudge to 0f
                 FabEdge.LEFT -> nudge to 0f
                 FabEdge.TOP -> 0f to nudge
                 FabEdge.BOTTOM -> 0f to -nudge
             }
+            val (hx, hy) = inward(hEdge)
+            val (vx, vy) = inward(vEdge)
+            val nx = hx + (vx - hx) * k
+            val ny = hy + (vy - hy) * k
             canvas.translate(nx, ny)
             // Glyph group sits on the *shape's* centre. Docked and yielded, the D shrinks
             // toward its flush edge, so the shape centre is no longer the window centre.
+            // In a corner the nudge turns with the D, off both walls.
             val gx = shapeRect.centerX()
             val gy = shapeRect.centerY()
             drawIcon(canvas, gx, gy, radius * (1f + 0.06f * dock))
@@ -3454,7 +3780,7 @@ class QuickWakeFabService : Service() {
                 if (!orbitMeasure.getPosTan(i * len / n, orbitPos, orbitTan)) continue
                 val px = orbitPos[0]
                 val py = orbitPos[1]
-                val onFlush = when (dockEdge) {
+                val onDockFlush = when (dockEdge) {
                     FabEdge.RIGHT ->
                         abs(px - shapeRect.right) < flushTol ||
                             (abs(px - shapeRect.right) < cornerDepth &&
@@ -3472,6 +3798,14 @@ class QuickWakeFabService : Service() {
                             (abs(py - shapeRect.bottom) < cornerDepth &&
                                 (abs(px - shapeRect.left) < cornerAlong || abs(px - shapeRect.right) < cornerAlong))
                 }
+                val adjFlush = adjacentWall
+                val onAdjFlush = adjFlush != null && cornerSqueeze > 0.02f && when (adjFlush) {
+                    FabEdge.RIGHT -> abs(px - shapeRect.right) < flushTol
+                    FabEdge.LEFT -> abs(px - shapeRect.left) < flushTol
+                    FabEdge.TOP -> abs(py - shapeRect.top) < flushTol
+                    FabEdge.BOTTOM -> abs(py - shapeRect.bottom) < flushTol
+                }
+                val onFlush = onDockFlush || onAdjFlush
                 if (onFlush) continue
                 // Outward — inward ticks were punching through the D and stacking on the corners.
                 val hyp = hypot(orbitTan[0], orbitTan[1])
@@ -3645,15 +3979,17 @@ class QuickWakeFabService : Service() {
         /** D-handle when sucked to an edge (style 1). */
         private const val HANDLE_W_DP = 48f
         private const val HANDLE_H_DP = 104f
+        /** Corner semicircle: between the thin handle and the free disc. */
+        private const val HANDLE_CORNER_DP = 64f
         /** How far the handle hangs into the bezel when docked. */
         private const val HANDLE_HANG_DP = 7.5f
         /** Band against the nearest screen edge where a circle melts into a D. */
         private const val MORPH_RANGE_DP = 36f
-        /** Live magnet only in a short band against the wall — not a far suck. */
+        /** Live magnet only in a short band against the committed wall — not a far suck. */
         private const val MAGNET_RANGE_DP = 30f
         /** Release closer than this dock amount eases into a handle. */
         private const val SNAP_DOCK = 0.55f
-        /** Hint toward the nearest edge while docking — off while peeling away. */
+        /** Hint toward the committed wall while docking; fades to zero in a corner. */
         private const val MAGNET_PULL = 0.07f
         /** Near-critical droplet: zeta ≈ 0.92, wet slide. Docking over-damps X so it does not bounce. */
         private const val SPRING_STIFF = 88f
@@ -3764,6 +4100,24 @@ class QuickWakeFabService : Service() {
                 if (svc.ttsAudible && svc.visualState == VisualState.SPEAKING) return@post
                 svc.ttsAudible = true
                 svc.setVisualState(VisualState.SPEAKING)
+            }
+        }
+
+        /**
+         * TTS audio really ended (satellite audio-ended hook). The turn may still sit in
+         * Responding for the continue decision / chime: drop the playback bars to the
+         * quiet ATTENDING chrome instead of holding SPEAKING on a dead level. Idempotent.
+         */
+        fun noteTtsAudioEnded() {
+            val svc = instance ?: return
+            svc.handler.post {
+                if (!svc.ttsAudible) return@post
+                svc.ttsAudible = false
+                if (QuickWakePushToTalk.isHolding) return@post
+                val sat = svc.lastSatState
+                if (svc.visualState == VisualState.SPEAKING && (sat == Responding || sat == Processing)) {
+                    svc.setVisualState(VisualState.ATTENDING)
+                }
             }
         }
 

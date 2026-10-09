@@ -340,7 +340,8 @@ fun MainNavHost(startDestination: String = Screen.HOME) {
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
     val proportionalMaster = (screenWidthDp * 0.40f).toInt()
     val masterFloor = minOf(320, (screenWidthDp * 0.38f).toInt().coerceAtLeast(1))
-    val masterWidthDp = proportionalMaster.coerceIn(masterFloor, 520)
+    // Right edge of the left index only: 10dp further toward the detail pane.
+    val masterWidthDp = proportionalMaster.coerceIn(masterFloor, 520) + 10
 
     LaunchedEffect(homeLockSettings) {
         val settings = homeLockSettings ?: return@LaunchedEffect

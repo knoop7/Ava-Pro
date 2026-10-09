@@ -74,6 +74,10 @@ class WeatherOverlayService : Service() {
     private fun bringToFront() {
         if (!isWeatherEnabled || !isWeatherVisible) return
         OverlayLayerSplit.sync()
+        if (OverlayLayerSplit.deferRestack(OverlayLayerSplit.Layer.WEATHER)) {
+            OverlayZOrderCoordinator.raiseVinylFabAbovePassiveDashboard()
+            return
+        }
         if (!OverlayLayerSplit.isPaneView(weatherHost)) {
             OverlayZOrderCoordinator.bringToFront(windowManager, weatherHost, windowParams, TAG)
         }
@@ -378,6 +382,17 @@ class WeatherOverlayService : Service() {
                 putExtra(EXTRA_VISIBLE, visible)
             }
             context.startService(intent)
+        }
+
+        /** Same click as browser home/settings. Hide now, before the browser window leaves. */
+        fun dismissForSplitNavigation() {
+            val svc = instance ?: return
+            if (!svc.isWeatherVisible && svc.weatherHost?.visibility != View.VISIBLE) return
+            svc.isWeatherVisible = false
+            OverlayLayerSplit.sync()
+            svc.weatherView?.stopAnimation()
+            svc.weatherHost?.let { svc.fadeOutWeather(it) }
+            DashboardOverlayChrome.unbind(DashboardOverlayChrome.Kind.WEATHER)
         }
     }
 }

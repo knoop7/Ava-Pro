@@ -82,6 +82,8 @@ import com.example.ava.R
 import com.example.ava.localllm.LocalLlmManager
 import com.example.ava.settings.LocalLlmPath
 import com.example.ava.settings.resolvedPath
+import com.example.ava.settings.ContinueMode
+import com.example.ava.settings.continueMode
 import com.example.ava.audio.AmbientAutoGain
 import com.example.ava.ui.haptic.TickSlider
 import com.example.ava.audio.DeviceAudioProfile
@@ -2363,15 +2365,15 @@ private fun ContinuousConversationSettingsCard(
     )
     val remoteLlm = llmSettings.resolvedPath() == LocalLlmPath.REMOTE
     val continuousEnabled = playerState?.enableContinuousConversation ?: false
-    val smartSelected = remoteLlm && playerState?.enableSmartContinue == true
-    val questionMarkSelected = !smartSelected && playerState?.enableQuestionMarkContinue == true
-    val exitKeywordSelected = !smartSelected && !questionMarkSelected
-    LaunchedEffect(continuousEnabled, remoteLlm, playerState) {
+    // Same resolution as the runtime (ContinueMode): a stored 超级智能 shows as
+    // 热词 while the path is not cloud and comes back with the cloud path.
+    // It is never rewritten here; only an explicit 热词 / 问号 pick clears it.
+    val continueMode = playerState?.continueMode(llmSettings) ?: ContinueMode.EXIT_KEYWORD
+    val smartSelected = continueMode == ContinueMode.SMART
+    val questionMarkSelected = continueMode == ContinueMode.QUESTION_MARK
+    val exitKeywordSelected = continueMode == ContinueMode.EXIT_KEYWORD
+    LaunchedEffect(continuousEnabled, playerState) {
         val state = playerState ?: return@LaunchedEffect
-        if (continuousEnabled && !remoteLlm && state.enableSmartContinue) {
-            viewModel.saveExitKeywordStop(true)
-            return@LaunchedEffect
-        }
         if (continuousEnabled &&
             !state.enableQuestionMarkContinue &&
             !state.enableExitKeywordStop &&

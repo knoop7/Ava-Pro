@@ -9131,6 +9131,10 @@ class WebViewService : LifecycleService(), ViewModelStoreOwner, SavedStateRegist
                 }
                 browserPaneFit = notify
                 live.postDelayed(notify, 80)
+                // The first pass often still sees the old full-screen viewport and
+                // the sidebar's scroll width. Run again once the pane size sticks
+                // so a shrink left in the corner can clear and the page reflows.
+                live.postDelayed(notify, 360)
             }
             browserPaneLayoutListener = listener
             observer.addOnGlobalLayoutListener(listener)
@@ -9165,9 +9169,11 @@ class WebViewService : LifecycleService(), ViewModelStoreOwner, SavedStateRegist
     }
 
     /**
-     * Lay the document out in this pane. If the engine is still using the old
-     * full-screen viewport, or the page is wider than the pane, zoom it down
-     * so the whole page sits inside the window instead of being cropped.
+     * Lay the document out in this pane. The sidebar and off-screen drawers
+     * make scrollWidth wider than the window; zooming to that width shrinks
+     * the page into the corner and leaves the rest of the pane black.
+     * Once the viewport matches the pane, clear that zoom so the page reflows.
+     * Zoom only while the engine is still stuck on the previous full-screen viewport.
      */
     private fun browserFitJs(panePxW: Int, panePxH: Int): String = """
         (function(){
@@ -9176,20 +9182,23 @@ class WebViewService : LifecycleService(), ViewModelStoreOwner, SavedStateRegist
           var paneH = $panePxH / dpr;
           var de = document.documentElement;
           if (!de) return;
-          var body = document.body;
           var cur = parseFloat(de.style.zoom);
           if (!cur || cur <= 0) cur = 1;
-          var vw = window.innerWidth || paneW;
-          var vh = window.innerHeight || paneH;
-          var sw = Math.max(de.scrollWidth || 0, body ? body.scrollWidth : 0, vw) / cur;
-          var sh = Math.max(de.scrollHeight || 0, body ? body.scrollHeight : 0, vh) / cur;
-          var z = Math.min(paneW / Math.max(sw, 1), paneH / Math.max(sh, 1), paneW / Math.max(vw, 1), paneH / Math.max(vh, 1), 1);
+          var vw = (window.innerWidth || paneW) / cur;
+          var vh = (window.innerHeight || paneH) / cur;
+          if (vw <= paneW * 1.08 && vh <= paneH * 1.08) {
+            if (de.style.zoom) {
+              de.style.zoom = '';
+              window.dispatchEvent(new Event('resize'));
+            }
+            return;
+          }
+          var z = Math.min(paneW / Math.max(vw, 1), paneH / Math.max(vh, 1), 1);
           if (z > 0.98) {
             if (de.style.zoom) de.style.zoom = '';
           } else {
             de.style.zoom = String(Math.max(z, 0.2));
           }
-          if ((window.innerWidth || paneW) > paneW * 1.05) window.scrollTo(0, window.scrollY || 0);
           window.dispatchEvent(new Event('resize'));
         })();
     """.trimIndent()

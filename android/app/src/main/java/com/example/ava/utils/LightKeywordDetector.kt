@@ -144,6 +144,59 @@ object LightKeywordDetector {
         return EXIT_PATTERNS.any { it.containsMatchIn(text) }
     }
 
+    /**
+     * Farewells that end the session wherever they appear in what the user said.
+     * Narrower than [EXIT_PATTERNS]: those also match reply phrasing such as
+     * "随时找我", and 退出 is a command word ("退出音乐"), not a sign-off.
+     */
+    private val USER_FAREWELL_PATTERNS = listOf(
+        Regex("再见"),
+        Regex("拜拜"),
+        Regex("下次见"),
+        Regex("回头见"),
+        Regex("退下"),
+        Regex("goodbye", RegexOption.IGNORE_CASE),
+        Regex("bye\\s*bye", RegexOption.IGNORE_CASE),
+        Regex("\\bsee\\s*you\\b", RegexOption.IGNORE_CASE),
+    )
+
+    /**
+     * Whole-utterance sign-offs, matched after dropping spaces and punctuation.
+     * 好了 / 谢谢 / 没事了 alone end the session; 谢谢，再把灯调暗 does not. A bare
+     * 好 / 好的 / 行 is a yes to a follow-up offer, so it only counts as a prefix.
+     */
+    private val USER_DONE_WHOLE = Regex(
+        "^(嗯|哦|噢|那|好的|好|ok|okay)*" +
+            "(好了|行了|可以了|够了|没事了|没事|没有了|没了|不用了|不用|就这样|没别的了|没有别的了|" +
+            "谢谢你|谢谢|谢了|多谢|辛苦了|再见|拜拜|晚安|" +
+            "thanks|thankyou|thatsall|thatisall|thatsit|nothanks|nothingelse|imdone|iamdone|goodnight|goodbye|byebye|bye)+" +
+            "(啦|了|吧|呀|啊|哈|哦)*$",
+    )
+
+    /** True when the user's own utterance signs off: "that's all", 好了, 谢谢, 再见. */
+    fun isUserDone(userText: String?): Boolean {
+        if (userText.isNullOrBlank()) return false
+        val text = userText.trim()
+        if (USER_FAREWELL_PATTERNS.any { it.containsMatchIn(text) }) return true
+        val compact = text.lowercase().replace(Regex("[\\s\\p{P}\\p{S}]"), "")
+        return compact.isNotEmpty() && USER_DONE_WHOLE.matches(compact)
+    }
+
+    /** Sentence ends: CJK / Latin terminators and line breaks; a "." only before a space or the end, so 3.5 stays whole. */
+    private val SENTENCE_END = Regex("[。！？!?；;\\n]+|\\.(?=\\s|$)")
+
+    /** The last non-blank sentence of [text], trimmed; "" when there is none. */
+    fun lastSentence(text: String?): String {
+        if (text.isNullOrBlank()) return ""
+        return text.split(SENTENCE_END).lastOrNull { it.isNotBlank() }?.trim().orEmpty()
+    }
+
+    /**
+     * True when the reply signs off at its end: [isExitKeyword] on the last sentence
+     * only. "已退出音乐。还要调什么？" keeps going; "灯关好了。再见！" ends.
+     */
+    fun replyEndsWithGoodbye(replyText: String?): Boolean = isExitKeyword(lastSentence(replyText))
+
     fun endsWithQuestionMark(text: String?): Boolean {
         if (text.isNullOrBlank()) return false
         val trimmed = text.trim()

@@ -215,6 +215,51 @@ object OverlayLayerSplit {
     /** A window currently occupying one half. Z-order must not restack it over its sibling. */
     fun isPaneView(view: View?): Boolean = view != null && view in paneViews
 
+    /**
+     * This view's window is a left/right pane. Portrait top/bottom is not.
+     * The simple clock uses this so a wide half never picks the landscape face.
+     */
+    fun isSideBySidePane(view: View?): Boolean = paneOrientation(view) == true
+
+    /**
+     * This view's window is a top/bottom pane. A short slice is still portrait
+     * even when it is wider than it is tall.
+     */
+    fun isStackedPane(view: View?): Boolean = paneOrientation(view) == false
+
+    /** True when the split is left/right, false when it is top/bottom. */
+    private fun paneOrientation(view: View?): Boolean? {
+        var current = view
+        while (current != null) {
+            if (current in paneViews) {
+                val box = lastBox ?: return null
+                return box.width >= box.height
+            }
+            current = current.parent as? View
+        }
+        return null
+    }
+
+    /**
+     * This window is still the created full-screen size, and a partner is already
+     * open, but the pair is not on screen yet. remove+add here paints that size
+     * on top. Closing it drops the covered mark, which is why the next open inserts.
+     */
+    fun deferRestack(layer: Layer): Boolean {
+        if (!pairPending(layer)) return false
+        val view = slots[layer]?.host?.invoke()
+        return view == null || view !in paneViews
+    }
+
+    /** Split is on, someone else is already open, and two panes are not up yet. */
+    private fun pairPending(layer: Layer): Boolean {
+        val enabled = SettingsStyleSession.overlaySplitEnabled.value ||
+            (holdingReveal && coldStartExpectsPair) ||
+            (coldSecond != null && !coldInserted)
+        if (!enabled || paneViews.size >= 2) return false
+        return appearance.any { it != layer && slots[it]?.showing() == true }
+    }
+
     fun holdsPanes(): Boolean = paneViews.isNotEmpty()
 
     /** True while cold start is still waiting to snap the pair before the fade. */
@@ -280,13 +325,18 @@ object OverlayLayerSplit {
             return
         }
         paneWaiters.getOrPut(layer) { ArrayList() }.add(block)
+        // The first sync often runs before this window is attached. One more
+        // pass is what the second open was doing by hand.
+        if (!pendingSplitMeasure) {
+            pendingSplitMeasure = true
+            mainHandler.post {
+                pendingSplitMeasure = false
+                sync()
+            }
+        }
     }
 
-    private fun mustWaitForPane(layer: Layer): Boolean {
-        if (layer != coldSecond || coldInserted) return false
-        val view = slots[layer]?.host?.invoke()
-        return view == null || view !in paneViews
-    }
+    private fun mustWaitForPane(layer: Layer): Boolean = deferRestack(layer)
 
     private fun flushPaneWaiters() {
         if (paneWaiters.isEmpty()) return
@@ -335,17 +385,18 @@ object OverlayLayerSplit {
     }
 
     /**
-     * Browser sidebar home / settings. Hide the other half so it does not expand
-     * over the screen being opened. The overlay-split switch stays as the user left it.
+     * Browser sidebar home / settings. Close every overlay that was opened
+     * with the browser, on this same click, before the browser window leaves.
+     * Otherwise the other pane expands to full screen over home or settings.
+     * The overlay-split switch stays as the user left it.
      */
     fun closeForBrowserNavigation(context: Context) {
         if (!SettingsStyleSession.overlaySplitEnabled.value && !holdsPanes()) return
-        val app = context.applicationContext
-        if (ScreensaverService.isOverlayShowing()) ScreensaverService.setVisible(app, false)
-        if (DreamClockService.isOverlayShowing()) DreamClockService.setVisible(app, false)
-        if (WeatherOverlayService.isOverlayShowing()) WeatherOverlayService.setVisible(app, false)
-        if (QuickEntityOverlayService.isOverlayShowing()) QuickEntityOverlayService.hide(app)
-        if (VoiceMessageOverlayService.isOverlayShowing()) VoiceMessageOverlayService.setVisible(app, false)
+        ScreensaverService.dismissForSplitNavigation()
+        DreamClockService.dismissForSplitNavigation()
+        WeatherOverlayService.dismissForSplitNavigation()
+        QuickEntityOverlayService.dismissForSplitNavigation()
+        VoiceMessageOverlayService.dismissForSplitNavigation()
         VinylCoverService.collapseExpandedForSplitNavigation()
         sync()
     }
@@ -483,8 +534,11 @@ object OverlayLayerSplit {
         if (!waitingForSeat) {
             pairMembers = active.toSet()
             val attachedShowing = openShowing.filter { hostAttached(it) }
-            covered = covered.filter { slots[it]?.showing() == true }.toSet() +
-                attachedShowing.filter { it !in active }
+            covered = covered.filter {
+                it != coldSecond && it !in active && slots[it]?.showing() == true
+            }.toSet() + attachedShowing.filter {
+                it !in active && it != coldSecond && paneViews.size >= 2
+            }
         }
         previouslyShown = if (waitingForSeat) previouslyShown else active.toSet()
         flushPaneWaiters()
@@ -498,11 +552,11 @@ object OverlayLayerSplit {
     private fun seatPair(openShowing: List<Layer>): List<Layer> {
         val first = coldFirst
         val second = coldSecond
-        if (first != null && second != null && !coldInserted) {
-            // Recorded pair only. Wait until both windows exist, then insert.
-            // Do not hand the second seat to whichever host attached first.
-            if (hostAttached(first) && hostAttached(second)) return listOf(first, second)
-            return emptyList()
+        if (first != null && second != null && !coldInserted &&
+            slots[first]?.showing() == true && slots[second]?.showing() == true &&
+            hostAttached(first) && hostAttached(second)
+        ) {
+            return listOf(first, second)
         }
         if (pairMembers.isEmpty() && covered.isEmpty()) {
             val picked = ArrayList<Layer>(2)
@@ -515,7 +569,7 @@ object OverlayLayerSplit {
         }
         val still = pairMembers.filter { it in openShowing && hostAttached(it) }
         val arrived = openShowing.filter {
-            it !in pairMembers && it !in covered && hostAttached(it)
+            it !in pairMembers && hostAttached(it) && (it !in covered || it == coldSecond)
         }
         val members = when {
             still.size >= 2 -> still.take(2)

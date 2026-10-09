@@ -6,7 +6,9 @@ import com.example.ava.localllm.DeviceIndex
 import com.example.ava.localllm.HaToolSet
 import com.example.ava.localllm.LocalLlmManager
 import com.example.ava.settings.LocalLlmPath
+import com.example.ava.settings.ContinueMode
 import com.example.ava.settings.PlayerSettingsStore
+import com.example.ava.settings.continueMode
 import com.example.ava.settings.playerSettingsStore
 import com.example.ava.settings.RemoteAiSettingsStore
 import com.example.ava.settings.snapRemoteHistoryTurns
@@ -83,6 +85,44 @@ class RemoteAiManager private constructor(context: Context) {
 
     /** True when the user turned sentence streaming on; the caller then supplies a [RemoteAiSpeechStream]. */
     fun streamingEnabled(): Boolean = settingsStore.getCached().streaming
+
+    /**
+     * 超级智能 continue judge for a turn Home Assistant answered ([RemoteAiContinueJudge]).
+     * One small call on the voice profile: no tools, no thinking, no failover, a
+     * tiny output cap. Read-only: no history, session memory or ledger is read or
+     * written. Null when the cloud is not ready, the call failed, or the answer
+     * could not be read; the caller then keeps the keyword rule.
+     */
+    suspend fun judgeContinue(user: String, reply: String): Boolean? {
+        if (!isReady()) {
+            Log.i(TAG, "continue judge: cloud not ready")
+            return null
+        }
+        val profile = settingsStore.getCached().voiceProfile() ?: return null
+        val started = System.nanoTime()
+        return try {
+            val turn = RemoteAiClient.chat(
+                profile,
+                RemoteAiPrompt.Text(stable = "", live = RemoteAiContinueJudge.SYSTEM_PROMPT),
+                RemoteAiContinueJudge.messages(user, reply),
+                HaToolSet.empty(),
+                think = false,
+                maxOutputTokens = RemoteAiContinueJudge.MAX_OUTPUT_TOKENS,
+            )
+            val verdict = RemoteAiContinueJudge.parse(turn.text)
+            Log.i(
+                TAG,
+                "continue judge: verdict=${verdict ?: "unreadable"} " +
+                    "${(System.nanoTime() - started) / 1_000_000L}ms answer='${turn.text.trim().take(40)}'",
+            )
+            verdict
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            Log.w(TAG, "continue judge failed after ${(System.nanoTime() - started) / 1_000_000L}ms: ${e.javaClass.simpleName}")
+            null
+        }
+    }
 
     /**
      * One user utterance, start to finish. With [speech] the model streams over
@@ -212,7 +252,9 @@ class RemoteAiManager private constructor(context: Context) {
         val self = cached.toolsSelf && AvaSelfTools.ready()
         val voice = cached.toolsVoice && AvaVoiceTools.ready(app)
         val phone = cached.toolsPhone
-        val turnTool = PlayerSettingsStore(app.playerSettingsStore).getCached().enableSmartContinue
+        // Effective mode (ContinueMode), the same value the state machine gates on.
+        val turnTool = PlayerSettingsStore(app.playerSettingsStore).getCached()
+            .continueMode(LocalLlmManager.get()?.settingsStore?.getCached()) == ContinueMode.SMART
         if (turnTool) AvaTurnTools.begin()
         val tools = HaToolSet(
             RemoteAiHaTools.surface(house = cached.toolsHa).tools +
@@ -298,16 +340,21 @@ class RemoteAiManager private constructor(context: Context) {
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: Throwable) {
-                                if (!RemoteAiClient.isRetryableTransport(e)) throw e
+                                // Refusal or garbage (401 / 403 / 404 / 400, bad reply) counts toward the
+                                // same FAULTS as a dropped request instead of switching at once.
+                                val deadModel = RemoteAiClient.isDeadModel(e)
+                                if (!deadModel && !RemoteAiClient.isRetryableTransport(e)) throw e
                                 when (failover.noteFault()) {
                                     RemoteAiFailover.After.RetrySame ->
                                         delay(RemoteAiClient.retryDelayMs(e, failover.faultsOnCurrent))
                                     RemoteAiFailover.After.Advance ->
                                         Log.w(
                                             TAG,
-                                            "continuation stream ${active.wireLabel()} → ${failover.current()?.wireLabel()} after ${RemoteAiFailover.FAULTS} faults",
+                                            "continuation stream ${active.wireLabel()} → ${failover.current()?.wireLabel()} after ${RemoteAiFailover.FAULTS} faults" +
+                                                if (deadModel) " (last: ${RemoteAiClient.httpStatus(e) ?: "bad reply"})" else "",
                                         )
-                                    RemoteAiFailover.After.GiveUp -> throw RemoteAiFailoverExhausted(e)
+                                    RemoteAiFailover.After.GiveUp ->
+                                        if (deadModel && chain.size <= 1) throw e else throw RemoteAiFailoverExhausted(e)
                                 }
                             }
                         }

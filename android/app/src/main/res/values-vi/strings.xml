@@ -107,7 +107,7 @@
         <item>Trước khi điều khiển thiết bị trong nhà, hãy cấu hình địa chỉ và Token Home Assistant ở trang chủ.</item>
         <item>Lời nhắc kỹ năng dùng để định nghĩa khả năng trên máy. Công cụ gồm Home Assistant, nhạc, web, thiết bị và cuộc gọi thoại.</item>
         <item>Kênh này đưa lệnh xuống thực thể Home Assistant qua công cụ trên máy. Không cần đổi Conversation agent của Home Assistant.</item>
-        <item>Tùy chọn: bấm + để thêm khe. Công tắc Tự động chuyển mô hình sẽ xuất hiện trên cùng trang này. Khi bật, khe 1 là mô hình chính, các khe sau là dự phòng. Nếu mô hình chính thất bại hai lần, hệ thống tự động chuyển sang các mô hình dự phòng. Bản nháp chưa lưu không được sử dụng.</item>
+        <item>Tùy chọn: bấm + để thêm khe. Công tắc Tự động chuyển mô hình sẽ xuất hiện trên cùng trang này. Khi bật, khe 1 là mô hình chính, các khe sau là dự phòng. Nếu mô hình chính thất bại ba lần, hệ thống tự động chuyển sang các mô hình dự phòng. Bản nháp chưa lưu không được sử dụng.</item>
     </string-array>
     <string name="local_llm_models_caption">Danh sách mô hình</string>
     <string name="local_llm_in_use">Đang dùng</string>
@@ -119,7 +119,7 @@
     <string name="remote_ai_thinking">Nghĩ</string>
     <string name="remote_ai_streaming_desc">Nhận phản hồi qua SSE, tổng hợp giọng nói sau khi phản hồi đã đến đầy đủ</string>
     <string name="remote_ai_fallback">Tự động chuyển mô hình</string>
-    <string name="remote_ai_fallback_desc">Khi bật, khe 1 là mô hình chính cho hội thoại hàng ngày. Nếu mô hình chính thất bại hai lần liên tiếp, hệ thống tự động chuyển sang các mô hình dự phòng theo thứ tự để duy trì dịch vụ giọng nói.</string>
+    <string name="remote_ai_fallback_desc">Khi bật, khe 1 là mô hình chính cho hội thoại hàng ngày. Nếu mô hình chính thất bại ba lần liên tiếp, hệ thống tự động chuyển sang các mô hình dự phòng theo thứ tự để duy trì dịch vụ giọng nói.</string>
     <string name="remote_ai_vision_refused">Mô hình hiện tại không nhận dạng được hình ảnh. Máy chủ đã từ chối khung hình camera. Hãy đổi sang mô hình có khả năng thị giác.</string>
     <string-array name="remote_ai_fail_lines">
         <item>Mô hình từ xa lúc này không kết nối được.</item>

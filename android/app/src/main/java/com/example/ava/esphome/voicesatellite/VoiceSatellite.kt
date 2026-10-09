@@ -135,6 +135,8 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.withTimeoutOrNull
 import com.example.ava.mods.ModDeviceSupport
 import com.example.ava.bluetooth.BluetoothPresenceManager
 import java.text.SimpleDateFormat
@@ -219,6 +221,8 @@ class VoiceSatellite(
         ModConversationEngine.attachHost { reason ->
             finishConversationEngineSeat(reason)
         }
+        // One "TTS audio really ended" signal for UI (URL end / PCM drain / any stop).
+        player.ttsPlayer.onTtsAudioEnded = { onTtsAudioEnded?.invoke() }
     }
 
     private var timerFinished = false
@@ -373,6 +377,28 @@ class VoiceSatellite(
 
     private var isAskQuestionMode = false
     private var askQuestionTimeoutJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * Continuous-conversation follow-up: the mic reopened by itself after a reply.
+     * Same idea as [askQuestionTimeoutJob], but it only fires while nobody has
+     * started speaking, so a long answer or a slow cloud turn is never cut off.
+     */
+    private var continueNoSpeechJob: kotlinx.coroutines.Job? = null
+    /** Automatic reopens since the last real wake. 超级智能 stops at [SMART_CONTINUE_MAX_TURNS]. */
+    private var continuousTurnCount = 0
+
+    /**
+     * 超级智能 per-turn judge for the HA-handled reply now playing
+     * ([com.example.ava.localllm.remote.RemoteAiContinueJudge]). Started when the
+     * reply text arrives, read at TTS end; dropped by a new wake, stop, speech
+     * insert, disconnect or a local reply.
+     */
+    @Volatile private var continueJudge: kotlinx.coroutines.Deferred<Boolean?>? = null
+    @Volatile private var continueJudgeStartedNs = 0L
+
+    /** Last thing the user said and the cloud reply now playing; non-smart modes decide on them at reply end. */
+    @Volatile private var localReplyUserText = ""
+    @Volatile private var localReplyText = ""
     
     private val sttEntity = TextSensorEntity(
         key = "voice_command".hashCode(),
@@ -468,6 +494,7 @@ class VoiceSatellite(
             speak = { text, url -> playLocalReply(text, url) },
             speakStream = { source -> playLocalReplyStream(source) },
             onBusy = { hold -> setRemoteAiHold(hold) },
+            isContinueTurn = { continuousTurnCount > 0 },
         )
     }
 
@@ -493,6 +520,7 @@ class VoiceSatellite(
             shouldRenewListen = { shouldRenewFabListen() },
             onRenewListen = { renewFabListen() },
             onFabInjectOldSettled = { noteFabInjectOldSettled() },
+            onSmartReplyContinues = { user, reply -> startContinueJudge(user, reply) },
             onTtsFinished = { onTtsFinished() },
             onConversationText = { role, text ->
                 if (!searchListenOnly) {
@@ -517,6 +545,7 @@ class VoiceSatellite(
                 val spoken = noteFabListenStt(text)
                 if (spoken.isNotBlank()) HaPipelineConfigErrorTracker.onPipelineRecovered()
                 sttEntity.updateState(com.example.ava.localllm.SttTranscript.forDisplay(spoken))
+                localReplyUserText = spoken
                 localIntentFallback.onSttText(spoken)
                 // Button turns: QuickWakeFabService collects this and shows the transcript in
                 // its bubble; the reply goes to the bottom caption (caption-only mode).
@@ -541,6 +570,10 @@ class VoiceSatellite(
                 val handedOff = !searchListenOnly && localIntentFallback.onPipelineError(code)
                 if (handedOff) {
                     Log.i(TAG, "pipeline error handed to local intent fallback code=$code")
+                } else if (code.startsWith("stt-no-text") && continuousTurnCount > 0) {
+                    // Continuous follow-up heard nothing usable: the user stopped
+                    // talking. The session ends; no "speech detected, no text" toast.
+                    Log.i(TAG, "stt-no-text on continue turn; ending quietly")
                 } else {
                     val hint = when {
                         code.startsWith("stt-no-text") -> context.getString(R.string.pipeline_error_no_speech)
@@ -558,9 +591,12 @@ class VoiceSatellite(
                 if (!searchListenOnly) onTtsDurationReady?.invoke(durationMs, text)
             },
             onTtsPlaybackStarted = { text ->
-                // Arm the builtin-stop onset guard at the moment audio actually
-                // starts: the far-end edge in the capture loop can be bridged by
-                // the wake chime's write-hold and miss this exact onset.
+                // Arm the onset guard at the moment audio actually starts.
+                // The far-end edge in the capture loop can be bridged by the
+                // wake chime's write-hold and miss this onset. Stop dispatch
+                // and speech-insert both read this deadline: the opening
+                // residual clears a raw-energy or double-talk test, and that
+                // is the TTS self-trigger.
                 audioInput.noteStopOnsetGuard()
                 if (!searchListenOnly) {
                     onTtsPlaybackStarted?.invoke(text)
@@ -591,6 +627,33 @@ class VoiceSatellite(
         _remoteAiHold.value = hold
         Log.d(TAG, "remoteAiHold=$hold channel=${_state.value}")
         scope.launch { syncStopWordDetection() }
+        if (hold) {
+            heldVolumeReleaseJob?.cancel()
+            heldVolumeReleaseJob = null
+        } else {
+            scheduleHeldVolumeRelease()
+        }
+    }
+
+    @Volatile private var heldVolumeReleaseJob: Job? = null
+
+    /**
+     * The voice-reply volume stays lowered while the cloud seat works (see
+     * [onTtsFinished] / [stopSatellite]). A seat that ends without speaking
+     * (dropped, blank reply outside smart mode) never reaches a reply end, so
+     * release it here once the channel is really idle.
+     */
+    private fun scheduleHeldVolumeRelease() {
+        heldVolumeReleaseJob?.cancel()
+        heldVolumeReleaseJob = scope.launch {
+            delay(HELD_VOLUME_RELEASE_GRACE_MS)
+            heldVolumeReleaseJob = null
+            if (_remoteAiHold.value || speechInsertHandoff) return@launch
+            if (_state.value != Connected) return@launch
+            if (!player.isWhisperPlaybackActive) return@launch
+            Log.i(TAG, "cloud seat ended with no reply playing; releasing held voice volume")
+            endWhisperSession()
+        }
     }
 
     /**
@@ -598,9 +661,16 @@ class VoiceSatellite(
      * announcement after the HA run has unwound; never tells HA anything about it.
      */
     private suspend fun playLocalReply(text: String, url: String?) {
-        ttsEntity.updateState(text)
-        onConversationText?.invoke("assistant", text)
-        if (url.isNullOrBlank()) return
+        if (text.isNotBlank()) {
+            ttsEntity.updateState(text)
+            onConversationText?.invoke("assistant", text)
+        }
+        if (url.isNullOrBlank()) {
+            // Caption only (no tts_proxy URL) or nothing to say at all. There is no
+            // playback to end, but smart continue still has to reopen the mic.
+            finishSilentLocalReply(if (text.isBlank()) "blank reply" else "no TTS url")
+            return
+        }
         val current = _state.value
         if (current != Connected && current != Responding) {
             Log.w(TAG, "local reply skipped, satellite busy state=$current")
@@ -625,7 +695,10 @@ class VoiceSatellite(
      * ends the session once the source runs dry — or at once if the turn is cancelled.
      */
     private suspend fun playLocalReplyStream(source: com.example.ava.localllm.LocalReplySource) {
-        var segment = source.next() ?: return
+        var segment = source.next() ?: run {
+            finishSilentLocalReply("empty stream")
+            return
+        }
         val current = _state.value
         if (current != Connected && current != Responding) {
             Log.w(TAG, "streamed local reply skipped, satellite busy state=$current")
@@ -636,6 +709,7 @@ class VoiceSatellite(
         try {
             while (true) {
                 val spoken = source.spoken
+                localReplyText = spoken
                 ttsEntity.updateState(spoken)
                 // Caption follows the phrase being spoken, not the accumulated transcript.
                 onConversationText?.invoke("assistant", segment.text)
@@ -672,12 +746,155 @@ class VoiceSatellite(
         }
     }
 
+    /**
+     * Smart continue is already continuous conversation. The mic reopens after
+     * the reply unless ava_turn set continue=false. Read at playback end, not
+     * only when the first sentence starts.
+     */
+    private fun smartContinueWaits(): Boolean =
+        stateMachine.smartContinueOn() && !AvaTurnTools.explicitlyEnded()
+
+    /**
+     * 超级智能 safety net: after [SMART_CONTINUE_MAX_TURNS] automatic reopens in a
+     * row the session ends like a normal reply. A fresh wake starts the count over.
+     * Other continuous modes are not capped.
+     */
+    private fun smartContinueCapReached(): Boolean {
+        if (!stateMachine.smartContinueOn() || continuousTurnCount < SMART_CONTINUE_MAX_TURNS) return false
+        Log.i(TAG, "smart continue: $continuousTurnCount turns in a row, ending session")
+        return true
+    }
+
+    /**
+     * Whether a cloud (local) reply keeps the mic open, per continue mode.
+     * 超级智能: ava_turn as before. 问号: the reply ends with a question mark.
+     * 热词: always, unless the user signed off or the reply ends with a goodbye.
+     */
+    private fun localReplyContinues(): Boolean = when (stateMachine.continueModeNow()) {
+        com.example.ava.settings.ContinueMode.SMART -> smartContinueWaits()
+        com.example.ava.settings.ContinueMode.QUESTION_MARK ->
+            com.example.ava.utils.LightKeywordDetector.endsWithQuestionMark(localReplyText)
+        com.example.ava.settings.ContinueMode.EXIT_KEYWORD ->
+            !com.example.ava.utils.LightKeywordDetector.isUserDone(localReplyUserText) &&
+                !com.example.ava.utils.LightKeywordDetector.replyEndsWithGoodbye(localReplyText)
+    }
+
+    /**
+     * 超级智能: the HA reply would keep the mic open; ask the voice model in
+     * parallel whether it really should. Never waits on anything here, so the
+     * reply audio is not delayed. Skipped when the session cannot reopen anyway.
+     */
+    private fun startContinueJudge(user: String, reply: String) {
+        cancelContinueJudge()
+        if (searchListenOnly || !continuousForVoiceWake() || !stateMachine.continuousConversationOn()) return
+        if (continuousTurnCount >= SMART_CONTINUE_MAX_TURNS) return
+        val remote = com.example.ava.localllm.remote.RemoteAiManager.get() ?: return
+        continueJudgeStartedNs = System.nanoTime()
+        continueJudge = scope.async(Dispatchers.IO) {
+            try {
+                remote.judgeContinue(user, reply)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                Log.w(TAG, "continue judge: ${e.javaClass.simpleName}")
+                null
+            }
+        }
+    }
+
+    private fun cancelContinueJudge() {
+        val judge = continueJudge ?: return
+        continueJudge = null
+        judge.cancel()
+    }
+
+    /**
+     * TTS end of an HA reply the keyword rule keeps open. Waits up to
+     * [com.example.ava.localllm.remote.RemoteAiContinueJudge.JUDGE_GRACE_MS] for the
+     * judge, then merges. True / false is the decision; null means a wake, stop or
+     * insert dropped the judge while waiting and that owner now has the session.
+     */
+    private suspend fun consultContinueJudge(): Boolean? {
+        val judge = continueJudge ?: return true
+        if (!stateMachine.smartContinueOn() || !stateMachine.smartJudgeEligible) {
+            cancelContinueJudge()
+            return true
+        }
+        val waitStart = System.nanoTime()
+        val verdict: Boolean? = try {
+            withTimeoutOrNull(com.example.ava.localllm.remote.RemoteAiContinueJudge.JUDGE_GRACE_MS) { judge.await() }
+        } catch (e: CancellationException) {
+            kotlinx.coroutines.currentCoroutineContext()[Job]?.let { if (it.isCancelled) throw e }
+            null
+        }
+        if (continueJudge !== judge) {
+            Log.i(TAG, "continue judge: dropped while waiting, session has a new owner")
+            return null
+        }
+        val answered = judge.isCompleted && !judge.isCancelled
+        continueJudge = null
+        judge.cancel()
+        val result = com.example.ava.localllm.remote.RemoteAiContinueJudge.merge(verdict, keywordContinue = true)
+        val now = System.nanoTime()
+        Log.i(
+            TAG,
+            "continue judge: verdict=${verdict ?: if (answered) "none" else "timeout"} continue=$result " +
+                "latency=${(now - continueJudgeStartedNs) / 1_000_000L}ms waited=${(now - waitStart) / 1_000_000L}ms",
+        )
+        return result
+    }
+
+    /**
+     * Cloud reply with nothing to play (blank text, or HA gave no TTS URL). Smart
+     * continue still runs the end-of-reply path so the mic reopens (or the session
+     * ends cleanly if ava_turn said continue=false). Other modes keep the old
+     * behaviour of doing nothing. If the satellite is already doing something
+     * else (a new wake, an announcement), that owner keeps the session; skip.
+     */
+    private fun finishSilentLocalReply(reason: String) {
+        if (!stateMachine.smartContinueOn()) return
+        val current = _state.value
+        if (current != Connected && current != Responding) {
+            Log.w(TAG, "silent local reply ($reason): satellite busy state=$current, no continue")
+            return
+        }
+        Log.i(TAG, "silent local reply ($reason): running end-of-reply")
+        endLocalReplySession()
+    }
+
+    private fun cancelContinueNoSpeechTimeout() {
+        continueNoSpeechJob?.cancel()
+        continueNoSpeechJob = null
+    }
+
+    /**
+     * Continuous follow-up: if nobody starts speaking within
+     * [CONTINUE_NO_SPEECH_TIMEOUT_MS] of the mic reopening, end quietly
+     * ("10秒后无声退下"). HA's STT_VAD_START cancels it; any new wake replaces it.
+     */
+    private fun armContinueNoSpeechTimeout() {
+        cancelContinueNoSpeechTimeout()
+        if (_state.value != Listening) return
+        continueNoSpeechJob = scope.launch {
+            delay(CONTINUE_NO_SPEECH_TIMEOUT_MS)
+            continueNoSpeechJob = null
+            if (_state.value != Listening || stateMachine.heardHaVad || isAskQuestionMode) return@launch
+            if (_remoteAiHold.value || speechInsertHandoff) return@launch
+            Log.d(TAG, "continue: no speech in ${CONTINUE_NO_SPEECH_TIMEOUT_MS}ms, ending session")
+            stopSatellite()
+        }
+    }
+
     private fun beginLocalReplySession(firstText: String) {
         _state.value = Responding
-        // Smart continue follows ava_turn. Claimed HA replies force this false;
-        // the model's call is what reopens the mic after this playback.
-        stateMachine.continueConversation =
-            stateMachine.smartContinueOn() && AvaTurnTools.keepListening()
+        cancelContinueJudge()
+        localReplyText = firstText
+        // Claimed HA replies force continue false so the swallowed pipeline
+        // does not reopen the mic. The continue mode puts it back (smart: the
+        // mic stays open unless this turn already set ava_turn continue=false;
+        // 问号 / 热词: by the reply text). The end of playback reads it again,
+        // because the reply can start first.
+        stateMachine.continueConversation = localReplyContinues()
         stateMachine.prepareLocalReplyPlayback(firstText)
         audioInput.noteTtsTextForWakeEchoRisk(firstText)
         player.duck()
@@ -692,10 +909,13 @@ class VoiceSatellite(
             if (speechInsertHandoff || _state.value == Listening) return@launch
             val keepListening = continuousForVoiceWake() &&
                 player.enableContinuousConversation.get() &&
-                stateMachine.smartContinueOn() &&
-                stateMachine.continueConversation
-            endWhisperSession()
+                localReplyContinues() &&
+                !smartContinueCapReached()
+            // Continuing: keep the lowered voice volume through the next turn
+            // instead of lifting it here and dropping it again at the next reply.
+            endWhisperSession(keepVolume = keepListening)
             if (keepListening) {
+                continuousTurnCount++
                 stateMachine.continueConversation = true
                 if (!suppressWakeChrome()) {
                     val listening = onListeningStarted
@@ -707,7 +927,10 @@ class VoiceSatellite(
                     }
                 }
                 player.playContinuousPromptSound {
-                    scope.launch { wakeSatellite(isContinueConversation = true) }
+                    scope.launch {
+                        wakeSatellite(isContinueConversation = true)
+                        armContinueNoSpeechTimeout()
+                    }
                 }
                 return@launch
             }
@@ -1155,6 +1378,11 @@ class VoiceSatellite(
     
     var onTtsDurationReady: ((durationMs: Long, text: String) -> Unit)? = null
     var onTtsPlaybackStarted: ((text: String) -> Unit)? = null
+    /**
+     * TTS audio stopped being heard (ended, drained, cancelled). May fire more than
+     * once per reply and on any thread; handlers must be idempotent.
+     */
+    var onTtsAudioEnded: (() -> Unit)? = null
     var onTtsProgressUpdate: ((currentMs: Long, totalMs: Long, text: String) -> Unit)? = null
 
     /** When Sendspin is actively playing; used to skip resume side-effects that steal focus. */
@@ -1818,10 +2046,12 @@ class VoiceSatellite(
 
     override suspend fun onDisconnected() {
         localIntentFallback.cancel()
+        cancelContinueJudge()
         val wasActive = _state.value == Listening || _state.value == Processing || _state.value == Responding
         isAskQuestionMode = false
         askQuestionTimeoutJob?.cancel()
         askQuestionTimeoutJob = null
+        cancelContinueNoSpeechTimeout()
         // Do not leave a hanging probe callId on this instance.
         cancelHaServiceCallsProbe()
         super.onDisconnected()
@@ -3762,6 +3992,7 @@ class VoiceSatellite(
                 synchronized(wakePreRollLock) { wakeSessionSpeechEvidence.note() }
                 wakeLearner.onSpeechEvidence()
                 dispatchVoicePipeline(ModVoicePipeline.Events.STT_VAD_START)
+                cancelContinueNoSpeechTimeout()
                 // User started speaking — cancel ask_question timeout
                 if (isAskQuestionMode) {
                     Log.d(TAG, "ask_question: user started speaking, cancelling timeout")
@@ -4053,6 +4284,7 @@ class VoiceSatellite(
             // Responding; hold chorus END announcements until the new run owns the
             // state (wakeSatellite sets Listening + isWaking before returning).
             if (_remoteAiHold.value) localIntentFallback.cancel()
+            cancelContinueJudge()
             chorusRewakeHandoff = true
             try {
                 player.ttsPlayer.stop()
@@ -4128,6 +4360,7 @@ class VoiceSatellite(
             }
             // New HA wake while the remote seat is still thinking: drop that seat.
             if (_remoteAiHold.value) localIntentFallback.cancel()
+            cancelContinueJudge()
             searchListenOnly = searchListen
             startWonWake(
                 wakeWordPhrase = wakeWordPhrase,
@@ -4343,13 +4576,15 @@ class VoiceSatellite(
                 synchronized(wakePreRollLock) { wakePreRollBuffer.append(leadIn) }
             }
             localIntentFallback.cancel()
+            cancelContinueJudge()
             player.ttsPlayer.stop()
             if (pcmTtsPlayerLazy.isInitialized()) {
                 clearPendingPcmTtsChunks()
                 pcmTtsPlayer.stop()
             }
             audioInput.isStreaming = false
-            endWhisperSession()
+            // Same conversation goes on: do not lift the lowered volume mid-turn.
+            endWhisperSession(keepVolume = true)
             stateMachine.markInterruptedPipeline()
             sendVoiceAssistantStopRequest()
             if (!suppressWakeChrome()) {
@@ -4492,9 +4727,16 @@ class VoiceSatellite(
         pcmTtsPlayer.volume = player.ttsOutputVolume()
     }
 
-    private fun endWhisperSession() {
-        player.clearWhisperPlayback()
-        applyPcmTtsOutputVolume()
+    /**
+     * [keepVolume]: end the mic-side bookkeeping only and leave the lowered
+     * voice-reply volume (STREAM_MUSIC overlay + Sendspin duck) in place,
+     * because the session goes on (cloud seat working, continue turn).
+     */
+    private fun endWhisperSession(keepVolume: Boolean = false) {
+        if (!keepVolume) {
+            player.clearWhisperPlayback()
+            applyPcmTtsOutputVolume()
+        }
         audioInput.endSessionMicPeakTracking()
         audioInput.holdAmbientSampling(false)
     }
@@ -4542,6 +4784,12 @@ class VoiceSatellite(
     ) {
         if (!voiceChannelEnabled) {
             return
+        }
+        // A wake of any kind replaces the follow-up timeout; continuation re-arms it.
+        cancelContinueNoSpeechTimeout()
+        cancelContinueJudge()
+        if (!isContinueConversation) {
+            continuousTurnCount = 0
         }
 
         val priorState = _state.value
@@ -5061,14 +5309,16 @@ class VoiceSatellite(
     fun pcmTtsBytesSubmitted(): Long =
         if (pcmTtsPlayerLazy.isInitialized()) pcmTtsPlayer.bytesSubmitted() else 0L
 
+    /** PCM drain / abandon: same audio-ended point as URL TTS (fires [onTtsAudioEnded]). */
     private fun disablePcmPlaybackEnergy() {
-        PlaybackEnergyMonitor.setEnabled(false)
-        PlaybackEnergyMonitor.reset()
+        player.ttsPlayer.disablePlaybackEnergyTap()
     }
 
     private fun startPcmTtsStream() {
         if (pcmTtsPlayer.isActive()) {
             Log.d(TAG, "PCM TTS stream already active, flushing pending chunks")
+            // Next sentence does not get a new playback-started callback.
+            audioInput.noteStopOnsetGuard()
             flushPendingPcmTtsChunks()
             return
         }
@@ -5079,6 +5329,8 @@ class VoiceSatellite(
             PlaybackEnergyMonitor.setEnabled(true)
             player.ttsPlayer.onTtsPlaybackStarted?.invoke()
         }
+        // Arm before AudioTrack.play(); that callback runs before the first write.
+        audioInput.noteStopOnsetGuard()
         if (!pcmTtsPlayer.start()) {
             Log.e(TAG, "PCM TTS stream failed to start")
             clearPendingPcmTtsChunks()
@@ -5190,6 +5442,8 @@ class VoiceSatellite(
         isAskQuestionMode = false
         askQuestionTimeoutJob?.cancel()
         askQuestionTimeoutJob = null
+        cancelContinueNoSpeechTimeout()
+        cancelContinueJudge()
         val listeningDurationMs = System.currentTimeMillis() - listeningStartedAt
         val wasListeningWithoutEvent = !searchListenOnly &&
             (_state.value == Listening) && !haReceivedPipelineEvent && listeningDurationMs > 1500
@@ -5209,7 +5463,10 @@ class VoiceSatellite(
         stopWakePreRoll()
         if (!yieldCaptureOnly) {
             clearPendingPcmTtsChunks()
+            val pcmWasActive = pcmTtsPlayer.isActive()
             pcmTtsPlayer.stop()
+            // Stop without drain never reaches onPlaybackComplete; disarm the level here.
+            if (pcmWasActive) disablePcmPlaybackEnergy()
         }
         audioInput.isStreaming = false
         if (!keepSeat) {
@@ -5217,7 +5474,9 @@ class VoiceSatellite(
             localReplyWatchdogJob = null
             player.ttsPlayer.stop()
         }
-        endWhisperSession()
+        // Cloud seat still working: lifting the volume now and lowering it again
+        // when its reply plays is the jarring loud/quiet flap. Seat end releases it.
+        endWhisperSession(keepVolume = remoteSeat)
         if (!keepSeat) {
             player.unDuck()
             restoreHaMediaPlayerVolume()
@@ -5299,19 +5558,39 @@ class VoiceSatellite(
     }
 
     private suspend fun onTtsFinished() {
+        // First: the reply audio is over. Clear the speaking level/ring now, before the
+        // continue decision (intent wait, judge, chime) keeps the turn in Responding.
+        runCatching { onTtsAudioEnded?.invoke() }
+            .onFailure { Log.w(TAG, "onTtsAudioEnded failed", it) }
         dispatchVoicePipeline(ModVoicePipeline.Events.TTS_FINISHED)
-        endWhisperSession()
+        // Mic side ends now; the lowered volume stays through the continue decision
+        // (intent wait, judge) and the cloud seat, and is lifted only when the
+        // session actually ends below. A new owner (wake / stop) releases it itself.
+        endWhisperSession(keepVolume = true)
         sendMessage(voiceAssistantAnnounceFinished { })
         
-        val shouldContinue = continuousForVoiceWake() &&
+        val keywordContinue = continuousForVoiceWake() &&
             player.enableContinuousConversation.get() &&
-            stateMachine.continueConversation
+            stateMachine.continueConversation &&
+            !smartContinueCapReached()
+        // 超级智能: the per-turn judge started while the reply played may still end
+        // it. It never overrides a sign-off or the turn cap (keywordContinue false).
+        val shouldContinue = if (keywordContinue) {
+            consultContinueJudge() ?: run {
+                stateMachine.continueConversation = true
+                return
+            }
+        } else {
+            cancelContinueJudge()
+            false
+        }
         stateMachine.continueConversation = true
         
         if (!_remoteAiHold.value) {
             announceChorusSessionEnd()
         }
         if (shouldContinue) {
+            continuousTurnCount++
             var waitCount = 0
             while (!stateMachine.intentEnded && waitCount < 50) {
                 delay(100)
@@ -5329,11 +5608,15 @@ class VoiceSatellite(
                 }
             }
             player.playContinuousPromptSound {
-                scope.launch { wakeSatellite(isContinueConversation = true) }
+                scope.launch {
+                    wakeSatellite(isContinueConversation = true)
+                    armContinueNoSpeechTimeout()
+                }
             }
         } else {
             val remoteSeat = _remoteAiHold.value
             if (!remoteSeat) {
+                endWhisperSession()
                 player.unDuck()
                 restoreHaMediaPlayerVolume()
             }
@@ -5695,6 +5978,7 @@ class VoiceSatellite(
         }
         if (!isAssistTurnActive()) return
         localIntentFallback.cancel()
+        cancelContinueJudge()
         player.ttsPlayer.stop()
         if (pcmTtsPlayerLazy.isInitialized()) {
             clearPendingPcmTtsChunks()
@@ -5803,7 +6087,13 @@ class VoiceSatellite(
     }
 
     companion object {
+        /** Settle time after the cloud seat drops before releasing its held volume. */
+        private const val HELD_VOLUME_RELEASE_GRACE_MS = 400L
         private const val TAG = "VoiceSatellite"
+        /** 超级智能: most automatic mic reopens in a row before the session ends; a fresh wake resets. */
+        private const val SMART_CONTINUE_MAX_TURNS = 15
+        /** Continuous follow-up ends quietly if no speech starts this long after the mic reopens. */
+        private const val CONTINUE_NO_SPEECH_TIMEOUT_MS = 10_000L
         /** Push-to-talk: how long a release waits for HA RUN_START before giving up on the marker. */
         private const val PTT_RUN_START_WAIT_MS = 2_000L
         private const val PTT_RUN_START_POLL_MS = 40L

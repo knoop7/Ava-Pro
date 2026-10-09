@@ -43,6 +43,9 @@ class VoiceAssistantPcmPlayer {
     private val streamEnded = AtomicBoolean(false)
     private val frameQueue = LinkedBlockingQueue<ByteArray>()
     private val bytesSubmitted = AtomicLong(0)
+    /** [PlaybackEnergyMonitor] generation this stream feeds; a stopped stream's late writes are dropped. */
+    @Volatile
+    private var energyGen = -1
 
     /** Far-end reference writer for software AEC; null until a PCM stream starts. */
     private var aecRefWriter: PlaybackReferenceBus.Writer? = null
@@ -125,6 +128,8 @@ class VoiceAssistantPcmPlayer {
         }
         runCatching { track.setVolume(volume) }
         onPlaybackStarted?.invoke()
+        // onPlaybackStarted enables the monitor (new generation); this stream owns that one.
+        energyGen = PlaybackEnergyMonitor.generation()
         writerJob = scope.launch { writeLoop() }
         return true
     }
@@ -184,16 +189,20 @@ class VoiceAssistantPcmPlayer {
                 while (offset < chunk.size) {
                     // Re-check identity under the lock: stopInternal nulls the field and
                     // releases while holding it, so a surviving local ref is stale there.
+                    var headBytes = -1L
                     val written = synchronized(trackLock) {
                         if (!active.get() || audioTrack !== track) {
                             -1
                         } else {
-                            track.write(chunk, offset, chunk.size - offset)
+                            track.write(chunk, offset, chunk.size - offset).also {
+                                // Head after the write: how much of the queue is still unheard.
+                                if (it > 0) headBytes = playbackHeadBytes(track)
+                            }
                         }
                     }
                     if (written <= 0) break
                     val farEnd = scalePcm16Le(chunk, volume)
-                    feedPlaybackEnergy(farEnd, offset, written)
+                    feedPlaybackEnergy(farEnd, offset, written, bytesSubmitted.get(), headBytes)
                     feedAecReference(farEnd, offset, written)
                     offset += written
                     bytesSubmitted.addAndGet(written.toLong())
@@ -205,13 +214,36 @@ class VoiceAssistantPcmPlayer {
         }
     }
 
-    /** Matches ExoPlayer [com.example.ava.audio.PlaybackEnergyTee]: level motion tracks AudioTrack input. */
-    private fun feedPlaybackEnergy(chunk: ByteArray, offset: Int, length: Int) {
+    /**
+     * Same scale as ExoPlayer [com.example.ava.audio.PlaybackEnergyTee]. The level is
+     * published for the moment the playback head reaches [chunkStartBytes], so the
+     * visuals follow what is heard, not what was written. Only this stream's
+     * generation is accepted (a write racing a stop does not leak into the next turn).
+     */
+    private fun feedPlaybackEnergy(
+        chunk: ByteArray,
+        offset: Int,
+        length: Int,
+        chunkStartBytes: Long,
+        headBytes: Long,
+    ) {
         if (length < 2) return
+        val gen = energyGen
+        if (!PlaybackEnergyMonitor.accepts(gen)) return
         val buffer = ByteBuffer.wrap(chunk, offset, length).order(ByteOrder.LITTLE_ENDIAN)
         val level = AudioEnergy.rmsLevelPlayback(buffer)
-        if (PlaybackEnergyMonitor.isEnabled()) PlaybackEnergyMonitor.onLevel(level)
+        val bytesPerSecond = AvaVoiceAudioConfig.SAMPLE_RATE * bytesPerPlaybackFrame()
+        val audibleInMs = PlaybackEnergyMonitor.pcmAudibleInMs(chunkStartBytes, headBytes, bytesPerSecond)
+        val durationMs = if (bytesPerSecond > 0) length * 1000L / bytesPerSecond else 0L
+        PlaybackEnergyMonitor.onLevel(level, audibleInMs, durationMs, gen)
         com.example.ava.services.QuickWakeFabService.feedAudioLevel(level)
+    }
+
+    /** Playback head in bytes (the frame counter is unsigned 32-bit); -1 when unreadable. */
+    private fun playbackHeadBytes(track: AudioTrack): Long = try {
+        (track.playbackHeadPosition.toLong() and 0xFFFFFFFFL) * bytesPerPlaybackFrame()
+    } catch (_: Exception) {
+        -1L
     }
 
     /**
@@ -249,6 +281,7 @@ class VoiceAssistantPcmPlayer {
 
     private fun stopInternal(fireComplete: Boolean) {
         active.set(false)
+        energyGen = -1
         streamEnded.set(false)
         drainJob?.cancel()
         drainJob = null

@@ -661,13 +661,17 @@ class VoiceSatelliteAudioInput(
     }
 
     /**
-     * Event-driven arm of the builtin-stop onset guard, called when TTS playback
+     * Event-driven arm of the playback-onset guard, called when TTS playback
      * actually starts (URL and PCM paths). The loop's far-end EDGE arming alone
      * misses one real sequence: wake chime -> short command -> fast HA response.
      * The far-end write-hold (1.5 s) bridges the chime into the TTS start, so
      * playback onset never shows as a fresh edge and the guard armed at chime
      * time is already spent — exactly where isolated opening words ("hello")
-     * were reported firing.
+     * were reported firing, and where speech-insert's raw energy test hears
+     * the speaker as a person.
+     *
+     * Stop dispatch and speech-insert both read this deadline. No double-talk
+     * override: during the transient the residual itself would qualify.
      */
     @Volatile
     private var stopOnsetGuardEventUntilMs = 0L
@@ -2041,6 +2045,8 @@ class VoiceSatelliteAudioInput(
         val preGainDetectRms: Float,
         /** Hardware-AEC ring chunk length read into the scratch buffer (0 = none). */
         val stopRefCount: Int,
+        /** Same far-end ruler the stop onset guard uses. */
+        val farEndActive: Boolean,
     )
 
     private class DetectGates(
@@ -2660,15 +2666,14 @@ class VoiceSatelliteAudioInput(
                 PlaybackReferenceBus.read(stopRefScratch, stopRefCount)
             }
 
-            // Far-end onset guard for the builtin stop dispatch. At playback
-            // start — and after a device-volume change — the echo canceller
-            // (hardware HAL or software) is re-converging: the residual runs
-            // several times above the machine floor's learned prediction, and
-            // the floor's double-talk gate skips learning on exactly those
-            // frames. Isolated opening words ("hello", "OK.") walk the stop
-            // template through that gap. The detector keeps being fed (state
-            // and gain learning stay continuous); only the dispatch is
-            // withheld, mirroring the wake-side convergence window.
+            // Far-end onset guard for stop and speech-insert. At playback
+            // start — and after a device-volume change — the canceller is
+            // re-converging: the residual runs several times above the learned
+            // prediction, and that transient would qualify as double-talk.
+            // Isolated opening words walk the stop template through the same
+            // gap. Detection and gain learning stay continuous; only dispatch
+            // is withheld. The TTS playback-started callback arms the same
+            // deadline, because a wake-chime write-hold can hide this edge.
             val farEndForStop =
                 if (softwareAecLive) frame.aecBargeInActive else stopRefCount > 0
             if (farEndForStop &&
@@ -2686,29 +2691,13 @@ class VoiceSatelliteAudioInput(
             recordWakeWindowPeak(lastPreGainDetectRms)
             recordUserSpeechMicPeak(preGainDetectRms)
             updateIdleAmbientRms(AudioEnergy.pcm16LeFloatRms(frame.rawAudio))
-            // Double-talk ruler: learn how much of the playback reference
-            // survives to the detect tap (echo-path gain), and keep a
-            // windowed peak of the predicted residual. Learning skips
-            // frames that already look like double-talk so the user's own
-            // voice never inflates the baseline it is judged against;
-            // device-volume changes are the exception (the echo rescaled
-            // for real — adopt the new ratio immediately).
             if (aec != null && !frame.pauseAecForSpeech && frame.aecBargeInActive) {
-                val refRms = aec.lastRefRms
-                if (refRms > DTD_MIN_REF_RMS) {
-                    val ratio = (preGainDetectRms / refRms).coerceAtMost(DTD_GAIN_MAX)
-                    val doubleTalkSuspected = ratio > dtdEchoPathGain * DTD_ENERGY_MARGIN
-                    if (!doubleTalkSuspected || PlaybackReferenceBus.hasRecentLevelChange()) {
-                        dtdEchoPathGain += DTD_GAIN_ALPHA * (ratio - dtdEchoPathGain)
-                    }
-                    val expected = dtdEchoPathGain * refRms
-                    if (expected >= dtdExpectedPeak ||
-                        nowMs - dtdExpectedPeakAtMs > WAKE_PEAK_WINDOW_MS
-                    ) {
-                        dtdExpectedPeak = expected
-                        dtdExpectedPeakAtMs = nowMs
-                    }
-                }
+                learnEchoPath(nowMs, preGainDetectRms, aec.lastRefRms)
+            } else if (!softwareAecLive && stopRefCount > 0 && !frame.pauseAecForSpeech) {
+                // Hardware canceller: the ring chunk is the same reference the
+                // stop floor subtracts. Learn the echo path against it so
+                // speech-insert can use that comparison instead of raw energy.
+                learnEchoPath(nowMs, preGainDetectRms, shortRms(stopRefScratch, stopRefCount))
             }
             // NOTE: no per-frame anti-clip here. It looked right on paper but a
             // single loud TTS/media frame (preGainRms 0.20) trimmed the gain to
@@ -2740,7 +2729,42 @@ class VoiceSatelliteAudioInput(
             return CaptureMetrics(
                 preGainDetectRms = preGainDetectRms,
                 stopRefCount = stopRefCount,
+                farEndActive = farEndForStop,
             )
+        }
+
+        /**
+         * Echo-path gain: how much of the playback reference is still in the
+         * detect tap. Frames that already look like double-talk are not learned,
+         * so the user's voice never becomes the baseline it is judged against.
+         * A device-volume change rescales the echo for real and is adopted.
+         */
+        private fun learnEchoPath(nowMs: Long, detectRms: Float, refRms: Float) {
+            if (refRms <= DTD_MIN_REF_RMS) return
+            val ratio = (detectRms / refRms).coerceAtMost(DTD_GAIN_MAX)
+            val doubleTalkSuspected = ratio > dtdEchoPathGain * DTD_ENERGY_MARGIN
+            if (!doubleTalkSuspected || PlaybackReferenceBus.hasRecentLevelChange()) {
+                dtdEchoPathGain += DTD_GAIN_ALPHA * (ratio - dtdEchoPathGain)
+            }
+            val expected = dtdEchoPathGain * refRms
+            if (expected >= dtdExpectedPeak ||
+                nowMs - dtdExpectedPeakAtMs > WAKE_PEAK_WINDOW_MS
+            ) {
+                dtdExpectedPeak = expected
+                dtdExpectedPeakAtMs = nowMs
+            }
+        }
+
+        /** Int16 RMS on the same ±1 scale as [SoftwareAecProcessor.lastRefRms]. */
+        private fun shortRms(samples: ShortArray, count: Int): Float {
+            if (count <= 0) return 0f
+            var sum = 0.0
+            val n = count.coerceAtMost(samples.size)
+            for (i in 0 until n) {
+                val v = samples[i].toDouble()
+                sum += v * v
+            }
+            return (kotlin.math.sqrt(sum / n) / Short.MAX_VALUE).toFloat()
         }
 
         /** Refresh deep diagnostics ~every 50 frames for the stats sheet (+ vs gain trim). */
@@ -2834,7 +2858,7 @@ class VoiceSatelliteAudioInput(
             dispatchClaimed = false
             runBuiltinStop(out, frame, detectionAudio, metrics, gates)
             runWakeDetector(out, frame, detectionAudio, metrics, gates)
-            maybeEmitSpeechInsert(out, frame, gates)
+            maybeEmitSpeechInsert(out, frame, metrics, gates)
         }
 
         /** Keep the cancelled uplink while a turn is in flight and the mic is not uploading. */
@@ -2869,13 +2893,49 @@ class VoiceSatelliteAudioInput(
             }
         }
 
+        /**
+         * Near-end speech the playback reference does not explain.
+         * An unlearned window is not evidence: the silence floor (0.01) is
+         * exactly what the speaker clears at onset.
+         */
+        private fun nearEndBeatsReference(gates: DetectGates, detectRms: Float): Boolean {
+            val expected = gates.dtdExpectedNow
+            if (expected <= DTD_MIN_REF_RMS) return false
+            // Current frame, not the wake-window peak. The peak holds the TTS
+            // onset and then clears a quieter prediction for the rest of the window.
+            return detectRms > maxOf(expected * DTD_ENERGY_MARGIN, DTD_MIN_TAP_RMS)
+        }
+
+        private fun playbackOnsetGuardActive(nowMs: Long): Boolean {
+            val until = maxOf(stopFarEndGuardUntilMs, stopOnsetGuardEventUntilMs)
+            return nowMs < until
+        }
+
         private suspend fun maybeEmitSpeechInsert(
             out: FlowCollector<AudioResult>,
             frame: CaptureFrame,
+            metrics: CaptureMetrics,
             gates: DetectGates,
         ) {
-            val duringPlayback = frame.aecBargeInActive && gates.dtdBargeInEvidence
-            val duringProcessing = speechInsertOpen.get() && !frame.aecBargeInActive &&
+            // TTS playback-started and the far-end edge share one deadline with
+            // stop. While it holds, the residual itself beats the comparison.
+            val onset = playbackOnsetGuardActive(frame.nowMs)
+            // Speaker up: software far-end, the hardware reference read, or the
+            // diagnostic stamp that leads the bus. Raw energy is closed for
+            // all three. A real insert has to clear the learned echo path.
+            // The short write stamp covers the frames before isFarEndActive,
+            // which is when TTS first hits the mic and the raw path used to fire.
+            // Zero the processing arm so the room tail after playback cannot
+            // fall through the moment the stamp drops.
+            val playbackStamp = PlaybackReferenceBus.hasRecentPlaybackSignal(
+                PlaybackReferenceBus.PLAYBACK_RECENT_MS,
+            )
+            val speakerUp = metrics.farEndActive || frame.aecBargeInActive ||
+                frame.ttsEchoAudible || playbackStamp
+            if (onset || speakerUp) speechInsertArmAtMs = 0L
+            val duringPlayback = !onset && speakerUp && !frame.pauseAecForSpeech &&
+                nearEndBeatsReference(gates, metrics.preGainDetectRms)
+            val duringProcessing = !onset && !speakerUp && speechInsertOpen.get() &&
                 speechInsertArmAtMs != 0L && frame.nowMs >= speechInsertArmAtMs &&
                 lastDetectRms() > SPEECH_INSERT_OPEN_RMS
             if (dispatchClaimed || isStreaming || speechInsertLatched ||
@@ -3019,6 +3079,16 @@ class VoiceSatelliteAudioInput(
                 if (peerChorusHold) {
                     continue
                 }
+                // Opening of playback: the room path is not learned yet, so a
+                // loud TTS frame clears the double-talk test. No override.
+                if (playbackOnsetGuardActive(nowMs)) {
+                    Log.i(
+                        TAG,
+                        "wake suppressed id=${detection.wakeWordId} " +
+                            "playback onset guard",
+                    )
+                    continue
+                }
                 if (frame.aecConverging && !gates.dtdBargeInEvidence) {
                     Log.i(
                         TAG,
@@ -3088,6 +3158,12 @@ class VoiceSatelliteAudioInput(
         ) {
             val nowMs = frame.nowMs
             when {
+                playbackOnsetGuardActive(nowMs) ->
+                    Log.i(
+                        TAG,
+                        "stop model suppressed id=${detection.wakeWordId} " +
+                            "playback onset guard",
+                    )
                 !gates.stopGateOpen ->
                     Log.d(
                         TAG,

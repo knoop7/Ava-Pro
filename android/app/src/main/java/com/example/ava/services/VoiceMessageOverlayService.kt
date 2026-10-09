@@ -247,7 +247,10 @@ class VoiceMessageOverlayService : Service(), LifecycleOwner, ViewModelStoreOwne
         // Never remove+add this window. It is focusable Compose: detaching it
         // disposes the call, and doing that while the browser window is also
         // in WindowManager deadlocks the two focused overlays on the main thread.
-        if (OverlayLayerSplit.isPaneView(view) || WebViewService.isAnyBrowserOverlayActive()) return
+        if (OverlayLayerSplit.isPaneView(view) ||
+            OverlayLayerSplit.deferRestack(OverlayLayerSplit.Layer.VOICE_MESSAGE) ||
+            WebViewService.isAnyBrowserOverlayActive()
+        ) return
         try {
             if (AvaVoiceSessionHub.hasLiveCallSessions()) return
             OverlayZOrderCoordinator.bringToFront(windowManager, view, params, TAG)
@@ -409,6 +412,11 @@ class VoiceMessageOverlayService : Service(), LifecycleOwner, ViewModelStoreOwne
                 putExtra(EXTRA_VISIBLE, visible)
             }
             context.startService(intent)
+        }
+
+        /** Same click as browser home/settings. Hide now, before the browser window leaves. */
+        fun dismissForSplitNavigation() {
+            instance?.applyState(visible = false, sendEnabled = true)
         }
 
         fun setCallSuppressed(context: Context, suppressed: Boolean) {

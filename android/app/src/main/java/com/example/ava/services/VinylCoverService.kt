@@ -198,6 +198,8 @@ class VinylCoverService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedS
      * lockstep with [applyWindowMode] so collapse never jumps offset→shell mid-frame.
      */
     private var miniShellLayout by mutableStateOf(false)
+    /** True while the API ≤ 25 FAB shell is being remove+added. Detach must not heal. */
+    private var swappingFabShell = false
     /**
      * Compose-layer sequential crossfade for expand/collapse (API 21–36).
      * Must NOT rely on [ComposeView.setAlpha] — many OEMs ignore View alpha on
@@ -681,22 +683,16 @@ class VinylCoverService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedS
                     isUserTouchingOverlay = true
                     noteOverlayUserActivity()
                 }
-                val chromeAlreadyShown = DashboardOverlayChrome.isShown(
-                    DashboardOverlayChrome.Kind.MEDIA_PLAYER,
-                )
                 val handled = super.dispatchTouchEvent(ev)
                 if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
                     isUserTouchingOverlay = false
                     noteOverlayUserActivity()
-                    // API <= 27: FLAG_NOT_FOCUSABLE swallows system Back, and the
-                    // Compose 2s hold never finishes. These panels end the touch
-                    // immediately (dumpsys: touchscreen UP, then mouse hover that
-                    // is not delivered to this window), so wait-for-hold stays
-                    // cancelled and «Back» never leaves GONE. Show it on release
-                    // after the click has already been delivered.
-                    if (!chromeAlreadyShown) {
-                        revealLegacyBackChrome()
-                    }
+                    // API <= 27: the 2s Compose hold never finishes. This panel
+                    // ends the touch at once (touchscreen UP, then mouse hover
+                    // that never reaches this window). A prior reveal can also
+                    // leave the pill marked shown while it is still alpha 0, so
+                    // do not skip the release — reveal again.
+                    revealLegacyBackChrome()
                 }
                 return handled
             }
@@ -723,6 +719,9 @@ class VinylCoverService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedS
 
             override fun onDetachedFromWindow() {
                 super.onDetachedFromWindow()
+                // The collapsed FAB re-add detaches on purpose. Healing here
+                // would put the fullscreen shell back.
+                if (swappingFabShell) return
                 if (isDraggingMiniFab || visibility == View.VISIBLE) {
                     handler.post { healMiniIfMissing() }
                 }
@@ -1355,7 +1354,7 @@ class VinylCoverService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedS
         DashboardOverlayChrome.onUserTouch(
             this,
             DashboardOverlayChrome.Kind.MEDIA_PLAYER,
-            autoHideMs = DashboardOverlayChrome.MEDIA_AUTO_HIDE_MS,
+            autoHideMs = 3_600_000L,
         )
     }
 
@@ -1603,14 +1602,25 @@ class VinylCoverService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedS
                 interpolator = PathInterpolator(0.4f, 0f, 0.2f, 1f),
             ) {
                 if (!isMorphAnimating) return@animateShellCrossfade
-                applyWindowMode(collapsed = true)
+                // Commit the vinyl FAB before any further chrome sync. On API ≤ 25
+                // the window has to be re-added to leave fullscreen; doing that
+                // and then waiting on another fade left the shell fullscreen or GONE.
                 overlayExpanded = false
-                shellCrossfadeAlpha = 0f
+                applyWindowMode(collapsed = true)
                 applyKeepScreenOn(false)
-                syncMediaChrome()
                 OverlayLayerSplit.releasePane(OverlayLayerSplit.Layer.MEDIA_PLAYER, host)
                 OverlayLayerSplit.sync()
                 raiseCollapsedFabAboveBrowser()
+                if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) {
+                    handler.removeCallbacks(finishCollapseRunnable)
+                    shellCrossfadeAlpha = 1f
+                    isMorphAnimating = false
+                    syncMediaChrome()
+                    OverlayLayerSplit.sync()
+                    return@animateShellCrossfade
+                }
+                shellCrossfadeAlpha = 0f
+                syncMediaChrome()
                 startBirthCrossfadeAfterFirstFrame(
                     durationMs = COLLAPSE_FADE_MS,
                     frameHops = 1,
@@ -1978,10 +1988,15 @@ class VinylCoverService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedS
             Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1 &&
             host.isAttachedToWindow
         ) {
-            // Shrinking TYPE_PHONE is ignored until the window is re-added.
-            // Do this only for the FAB shell — re-adding the fullscreen player
-            // detaches Compose and the collapse fade never finishes.
-            runCatching { wm.removeView(host) }
+            // TYPE_PHONE ignores a shrink until the window is removed and added
+            // again. Immediate, so the detach cannot post a heal that puts the
+            // fullscreen player back before the FAB shell is added.
+            swappingFabShell = true
+            try {
+                runCatching { wm.removeViewImmediate(host) }
+            } finally {
+                swappingFabShell = false
+            }
         }
         if (!ensureOverlayAttached()) {
             if (host.visibility == View.VISIBLE) {
@@ -2730,7 +2745,11 @@ class VinylCoverService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedS
         } else {
             DashboardOverlayChrome.unbind(DashboardOverlayChrome.Kind.MEDIA_PLAYER)
         }
-        syncHaVinylCoverExpandedVisible(shouldBind)
+        // Mid-collapse the player is still expanded for one frame. Writing the
+        // HA switch back ON here reopens the full player instead of the FAB.
+        if (!(isMorphAnimating && !userPrefersExpanded && shouldBind)) {
+            syncHaVinylCoverExpandedVisible(shouldBind)
+        }
     }
 
     /**

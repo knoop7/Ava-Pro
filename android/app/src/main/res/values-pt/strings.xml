@@ -107,7 +107,7 @@
         <item>Antes de controlar os dispositivos domésticos, configure o URL e o token do Home Assistant na página inicial.</item>
         <item>O pedido de competência define as capacidades no dispositivo. Ferramentas disponíveis: Home Assistant, música, web, dispositivo e chamadas de voz.</item>
         <item>Este canal aplica os comandos a entidades do Home Assistant através das ferramentas no dispositivo. Não é necessário substituir o agente de conversa do Home Assistant.</item>
-        <item>Opcional: toque em + para acrescentar ranhuras. No topo desta página aparece então o interruptor Troca automática de modelo. Quando ativada, a ranhura 1 funciona como modelo principal e as seguintes como reserva. Se o principal falhar duas vezes, o sistema muda automaticamente para os modelos de reserva. Rascunhos não guardados não são usados.</item>
+        <item>Opcional: toque em + para acrescentar ranhuras. No topo desta página aparece então o interruptor Troca automática de modelo. Quando ativada, a ranhura 1 funciona como modelo principal e as seguintes como reserva. Se o principal falhar três vezes, o sistema muda automaticamente para os modelos de reserva. Rascunhos não guardados não são usados.</item>
     </string-array>
     <string name="local_llm_models_caption">Lista de modelos</string>
     <string name="local_llm_in_use">Em uso</string>
@@ -119,7 +119,7 @@
     <string name="remote_ai_thinking">Pensar</string>
     <string name="remote_ai_streaming_desc">Recebe a resposta por SSE, a síntese de voz começa após a resposta completa</string>
     <string name="remote_ai_fallback">Troca automática de modelo</string>
-    <string name="remote_ai_fallback_desc">Quando ativada, a ranhura 1 funciona como modelo principal para conversas diárias. Se o modelo principal falhar duas vezes seguidas, o sistema muda automaticamente para os modelos de reserva por ordem, mantendo o serviço de voz.</string>
+    <string name="remote_ai_fallback_desc">Quando ativada, a ranhura 1 funciona como modelo principal para conversas diárias. Se o modelo principal falhar três vezes seguidas, o sistema muda automaticamente para os modelos de reserva por ordem, mantendo o serviço de voz.</string>
     <string name="remote_ai_vision_refused">Este modelo não reconhece imagens. O servidor recusou o fotograma da câmara. Mude para um modelo com visão.</string>
     <string-array name="remote_ai_fail_lines">
         <item>O modelo remoto não está acessível neste momento.</item>

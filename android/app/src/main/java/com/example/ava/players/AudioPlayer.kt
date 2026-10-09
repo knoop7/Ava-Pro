@@ -40,8 +40,14 @@ class AudioPlayer(
         get() = try {
             _player?.let { it.playbackState == Player.STATE_IDLE || it.playbackState == Player.STATE_ENDED } ?: true
         } catch (e: Exception) { true }
+    /** Waiting for data while still meant to play (rebuffer), not a user pause. */
+    val isBuffering: Boolean
+        get() = try {
+            _player?.let { it.playbackState == Player.STATE_BUFFERING && it.playWhenReady } ?: false
+        } catch (e: Exception) { false }
 
     val currentPosition: Long get() = try { _player?.currentPosition ?: 0L } catch (e: Exception) { 0L }
+    val bufferedPosition: Long get() = try { _player?.bufferedPosition ?: 0L } catch (e: Exception) { 0L }
     /**
      * Music keeps the loaded item after it ends, so a later read still sees the
      * song length. URL TTS does not: that player is released when the clip ends.

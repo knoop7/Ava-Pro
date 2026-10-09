@@ -110,7 +110,7 @@
         <item>控制家庭设备前，须在首页 Home Assistant 中配置服务器地址与 Token，本机才能将指令落地到实体。</item>
         <item>「技能提示词」用于定义本机能力与说话方式。可用工具包括 Home Assistant、音乐、网页、本机与语音通话；未开启的功能不会进入模型。</item>
         <item>本通道通过本机工具将指令落地到 Home Assistant 实体，无需在网页端更换对话代理。复合指令由本机工具执行。</item>
-        <item>可选：点加号增加槽位后，页顶会出现「自动模型切换」开关。开启后 1 号槽作为主模型，后续槽位作为备用模型。当主模型连续两次请求失败时，系统自动按顺序切换到备用模型，确保语音服务不中断。未保存的草稿不参与切换。</item>
+        <item>可选：点加号增加槽位后，页顶会出现「自动模型切换」开关。开启后 1 号槽作为主模型，后续槽位作为备用模型。当主模型连续三次请求失败时，系统自动按顺序切换到备用模型，确保语音服务不中断。未保存的草稿不参与切换。</item>
     </string-array>
     <string name="remote_ai_caption">全球云端大模型</string>
     <string name="remote_ai_kind">接口</string>
@@ -142,7 +142,7 @@
     <string name="remote_ai_thinking">思考</string>
     <string name="remote_ai_streaming_desc">通过 SSE 流式接收回复，回复完整到达后再合成语音</string>
     <string name="remote_ai_fallback">自动模型切换</string>
-    <string name="remote_ai_fallback_desc">开启后，1 号槽作为主模型处理日常对话。当主模型连续两次请求失败时，系统自动按顺序切换到后续已保存的备用模型，确保语音服务不中断。</string>
+    <string name="remote_ai_fallback_desc">开启后，第一个填写完整的槽（通常是 1 号槽）作为主模型处理日常对话。当主模型连续三次请求失败（接口直接拒绝，如密钥无效、模型不存在等，也计入次数）时，系统自动按顺序切换到后续填写完整的备用模型，确保语音服务不中断</string>
     <string name="remote_ai_tool_idle">功能未开，开了才会进模型</string>
     <string name="remote_ai_history_turns">记忆上下文</string>
     <string name="remote_ai_history_off">关闭</string>
@@ -153,6 +153,19 @@
     <string name="remote_ai_base_url">接口地址</string>
     <string name="remote_ai_model">模型</string>
     <string name="remote_ai_token">Token</string>
+    <string name="remote_ai_token_show">显示 Token</string>
+    <string name="remote_ai_token_hide">隐藏 Token</string>
+    <string name="remote_ai_use_slot">设为当前</string>
+    <string name="remote_ai_current">当前</string>
+    <string name="remote_ai_now_in_use">%1$d 号槽已设为当前模型</string>
+    <string name="remote_ai_saved_live">%1$d 号槽已保存，正在使用</string>
+    <string name="remote_ai_saved_backup">%1$d 号槽已保存，作为自动模型切换的备用</string>
+    <string name="remote_ai_saved_idle">%1$d 号槽已保存。点“设为当前”后才会用它对话</string>
+    <string name="remote_ai_save_missing">未保存，请填写：%1$s</string>
+    <string name="remote_ai_list_separator">、</string>
+    <string name="remote_ai_fetch_ok">连接成功，找到 %1$d 个模型</string>
+    <string name="remote_ai_fetch_empty">连接成功，但服务器没有列出模型，请手动填写模型名</string>
+    <string name="remote_ai_fetch_error">连接失败：%1$s</string>
     <string name="remote_ai_enabled">启用此接口</string>
     <string name="remote_ai_vision_refused">当前模型不支持图像识别，接口已拒绝这次画面。请更换支持识图的模型后再试。</string>
     <string-array name="remote_ai_fail_lines">
@@ -504,6 +517,8 @@
     <string name="entity_voice_print_status">声纹状态</string>
     <string name="pipeline_error_no_speech">检测到语音，但无文本</string>
     <string name="pipeline_stt_too_short">没听清楚，请再说一遍</string>
+    <!-- 超级智能: spoken when the transcript was too short; the mic then stays open -->
+    <string name="stt_short_reprompt">没听清，再说一遍</string>
     <string name="pipeline_error_config">语音处理暂时受阻，可能需要检查配置</string>
     <string name="pipeline_error_cloud_auth">检测到云端认证问题，重新登录</string>
     <string name="pipeline_error_wake">检测到唤醒信号异常，请重试</string>

@@ -83,11 +83,13 @@ object RemoteAiClient {
         tools: HaToolSet,
         onText: ((String) -> Unit)? = null,
         think: Boolean = true,
+        /** Output cap; only the continue judge lowers it. */
+        maxOutputTokens: Int = MAX_OUTPUT_TOKENS,
     ): Turn = withContext(Dispatchers.IO) {
         val started = System.nanoTime()
         val emit = onText
         val stream = emit != null
-        val body = requestBody(profile, system, messages, tools, stream, think)
+        val body = requestBody(profile, system, messages, tools, stream, think, maxOutputTokens)
         val hadVision = requestHasVision(body)
         Log.i(TAG, "${describeAsk(profile, messages, tools, stream)} ${wireStats(body)}")
         try {
@@ -160,16 +162,17 @@ object RemoteAiClient {
         tools: HaToolSet,
         stream: Boolean = false,
         think: Boolean = true,
+        maxOutputTokens: Int = MAX_OUTPUT_TOKENS,
     ): JSONObject {
         val model = profile.model.trim()
         val nativeOllama = usesNativeOllama(profile)
         val body = when (profile.kind) {
-            RemoteAiKind.CLAUDE -> JSONObject().put("model", model).put("max_tokens", MAX_OUTPUT_TOKENS)
+            RemoteAiKind.CLAUDE -> JSONObject().put("model", model).put("max_tokens", maxOutputTokens)
                 .put("system", claudeSystem(system)).put("messages", claudeMessages(messages))
             RemoteAiKind.OPENAI -> JSONObject().put("model", model)
-                .put(outputCapField(profile), MAX_OUTPUT_TOKENS)
+                .put(outputCapField(profile), maxOutputTokens)
                 .put("messages", openAiMessages(system.joined(), messages, replayThink = !tools.isEmpty))
-            RemoteAiKind.OPENAI_RESPONSES -> JSONObject().put("model", model).put("max_output_tokens", MAX_OUTPUT_TOKENS)
+            RemoteAiKind.OPENAI_RESPONSES -> JSONObject().put("model", model).put("max_output_tokens", maxOutputTokens)
                 .put("instructions", system.joined()).put("input", responsesInput(messages))
             RemoteAiKind.OLLAMA -> JSONObject().put("model", model)
                 .put(
@@ -566,7 +569,12 @@ object RemoteAiClient {
     }
 
     private fun parse(profile: RemoteAiProfile, raw: String): Turn {
-        val root = JSONObject(raw)
+        // A 200 that is not JSON (portal page, wrong path) is this host's fault; replaying it will not heal.
+        val root = try {
+            JSONObject(raw)
+        } catch (e: org.json.JSONException) {
+            throw RemoteAiBadReply(e)
+        }
         return when (profile.kind) {
             RemoteAiKind.CLAUDE -> parseClaude(root)
             RemoteAiKind.OPENAI_RESPONSES -> parseResponses(root)
@@ -1309,6 +1317,7 @@ object RemoteAiClient {
     private val DATA_URL = Regex("data:image/[^\"\\s]+")
     private val OLLAMA_IMAGES = Regex("\"images\"\\s*:\\s*\\[([^\\]]*)\\]")
     private val VISION_REFUSAL_CODES = setOf(400, 403, 404, 413, 415, 422)
+    private val DEAD_MODEL_CODES = setOf(400, 401, 403, 404)
 
     /**
      * A fresh socket can heal drops, timeouts, and gateway blips.
@@ -1316,7 +1325,7 @@ object RemoteAiClient {
      * User cancel stays fatal. After the first spoken delta, [canRetry] is false.
      */
     internal fun isRetryableTransport(error: Throwable): Boolean {
-        if (error is RemoteAiFailoverExhausted || error is RemoteAiVisionRejected) return false
+        if (error is RemoteAiFailoverExhausted || error is RemoteAiVisionRejected || error is RemoteAiBadReply) return false
         if (isCanceledIo(error)) return false
         when (error) {
             is SocketTimeoutException,
@@ -1330,6 +1339,21 @@ object RemoteAiClient {
             return code == 408 || code == 429 || code in 500..504
         }
         return true
+    }
+
+    /**
+     * This model, key, or gateway will not answer no matter how often the same
+     * request is replayed: 400 (bad request, context length, credit), 401, 403,
+     * 404, or a 200 whose body is not JSON. Not retried on the same slot; the
+     * turn moves to the next filled slot when continuation is on.
+     * A refused camera frame stays with [RemoteAiVisionRejected].
+     */
+    internal fun isDeadModel(error: Throwable): Boolean {
+        if (error is RemoteAiVisionRejected || error is RemoteAiFailoverExhausted) return false
+        if (isCanceledIo(error)) return false
+        if (error is RemoteAiBadReply) return true
+        val code = httpStatus(error) ?: return false
+        return code in DEAD_MODEL_CODES
     }
 
     /**

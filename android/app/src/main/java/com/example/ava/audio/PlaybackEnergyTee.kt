@@ -13,19 +13,35 @@ import kotlin.math.sqrt
 @UnstableApi
 class PlaybackEnergyTee : TeeAudioProcessor.AudioBufferSink {
     private var encoding = C.ENCODING_INVALID
+    private var sampleRateHz = 0
+    private var channelCount = 0
 
     override fun flush(sampleRateHz: Int, channelCount: Int, encoding: Int) {
         this.encoding = encoding
+        this.sampleRateHz = sampleRateHz
+        this.channelCount = channelCount
     }
 
     override fun handleBuffer(buffer: ByteBuffer) {
         if (!PlaybackEnergyMonitor.isEnabled()) return
-        val level = when (encoding) {
-            C.ENCODING_PCM_16BIT -> AudioEnergy.rmsLevelPlayback(buffer)
-            C.ENCODING_PCM_FLOAT -> rmsLevelFloat(buffer)
+        val bytesPerSample = when (encoding) {
+            C.ENCODING_PCM_16BIT -> 2
+            C.ENCODING_PCM_FLOAT -> 4
             else -> return
         }
-        PlaybackEnergyMonitor.onLevel(level)
+        // Buffer length keeps a prefill burst back to back on the audible timeline.
+        val bytesPerSecond = sampleRateHz.toLong() * channelCount * bytesPerSample
+        val durationMs = if (bytesPerSecond > 0L) buffer.remaining() * 1000L / bytesPerSecond else 0L
+        val level = when (encoding) {
+            C.ENCODING_PCM_16BIT -> AudioEnergy.rmsLevelPlayback(buffer)
+            else -> rmsLevelFloat(buffer)
+        }
+        PlaybackEnergyMonitor.onLevel(
+            level,
+            PlaybackEnergyMonitor.URL_SINK_DELAY_MS,
+            durationMs,
+            PlaybackEnergyMonitor.generation(),
+        )
     }
 
     private fun rmsLevelFloat(buffer: ByteBuffer): Float {

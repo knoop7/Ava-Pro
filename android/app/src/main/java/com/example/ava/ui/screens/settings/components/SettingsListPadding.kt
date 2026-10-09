@@ -96,18 +96,12 @@ fun settingsDetailListContentPadding(extraBottom: Dp = 0.dp): PaddingValues {
 
 @Composable
 fun settingsMainListContentPadding(handleClearance: Boolean = true): PaddingValues {
-    val horizontal = if (LocalSettingsSplitActive.current) {
-        when (rememberSettingsScaleTier()) {
-            SettingsScaleTier.XLARGE -> 20.dp
-            SettingsScaleTier.LARGE -> 16.dp
-            SettingsScaleTier.TABLET -> 14.dp
-            SettingsScaleTier.PHONE -> 12.dp
-        }
-    } else {
-        settingsListHorizontalPadding()
-    }
+    // Split index cards already pad inside the card. Only a 10dp nudge
+    // toward the detail pane — not a second gutter on both sides.
+    val split = LocalSettingsSplitActive.current
+    val horizontal = if (split) 0.dp else settingsListHorizontalPadding()
     return PaddingValues(
-        start = horizontal,
+        start = if (split) 10.dp else horizontal,
         end = horizontal,
         top = settingsListVerticalPadding(),
         bottom = if (handleClearance) 40.dp else settingsListVerticalPadding(),

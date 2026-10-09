@@ -125,9 +125,8 @@ class DreamClockService : Service() {
     private fun bringToFront() {
         if (!isClockEnabled || !isClockVisible) return
         OverlayLayerSplit.sync()
-        // AOD cover is a child of this window. remove+add recreates the surface
-        // and punches a full-bright hole; keep the plate and only raise the FAB.
-        val skipRestack = clockView?.isSmartAodCovering() == true
+        val skipRestack = clockView?.isSmartAodCovering() == true ||
+            OverlayLayerSplit.deferRestack(OverlayLayerSplit.Layer.DREAM_CLOCK)
         val root = frostedHost ?: clockView
         if (!skipRestack && !OverlayLayerSplit.isPaneView(root)) {
             OverlayZOrderCoordinator.bringToFront(windowManager, root, windowParams, TAG)
@@ -709,6 +708,11 @@ class DreamClockService : Service() {
                 putExtra(EXTRA_VISIBLE, visible)
             }
             context.startService(intent)
+        }
+
+        /** Same click as browser home/settings. Hide now, before the browser window leaves. */
+        fun dismissForSplitNavigation() {
+            instance?.hideClock()
         }
     }
 }
@@ -2599,14 +2603,25 @@ class DreamClockView(context: Context, private val clockSize: Int) : View(contex
     private val windowClipPath = android.graphics.Path()
     private val windowCornerPx by lazy { 16f * resources.displayMetrics.density }
 
+    /** This window is one pane. Fullscreen keeps the rounded plate. */
+    private fun isSplitPaneWindow(): Boolean {
+        var current: android.view.View? = this
+        while (current != null) {
+            if (OverlayLayerSplit.isPaneView(current)) return true
+            current = current.parent as? android.view.View
+        }
+        return false
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
         canvas.drawColor(Color.BLACK)
+        val cornerPx = if (isSplitPaneWindow()) 0f else windowCornerPx
         windowClipPath.reset()
         windowClipPath.addRoundRect(
             0f, 0f, width.toFloat(), height.toFloat(),
-            windowCornerPx, windowCornerPx,
+            cornerPx, cornerPx,
             android.graphics.Path.Direction.CW,
         )
         canvas.clipPath(windowClipPath)

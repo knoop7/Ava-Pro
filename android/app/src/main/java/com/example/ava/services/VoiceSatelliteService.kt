@@ -94,6 +94,8 @@ import com.example.ava.settings.MicrophoneSettingsStore
 import com.example.ava.settings.NotificationSettingsStore
 import com.example.ava.settings.PlayerSettings
 import com.example.ava.settings.PlayerSettingsStore
+import com.example.ava.settings.ContinueMode
+import com.example.ava.settings.SettingState
 import com.example.ava.settings.SidebarSettingsStore
 import com.example.ava.settings.WakeWordEngine
 import com.example.ava.settings.VoiceSatelliteSettings
@@ -226,6 +228,20 @@ class VoiceSatelliteService() : LifecycleService() {
     private var overlayStreamMusicLevel: Float? = null
     private var overlayHeardLevel: Float? = null
     private var voiceReplyRestoreFadeJob: Job? = null
+    /**
+     * Pending (caption lead-in) speaking glow from onTtsPlaybackStarted. Listening,
+     * conversation end and TTS audio end cancel it; the token also stops a job that
+     * already passed its delay, so a late SPEAKING cannot repaint after the audio.
+     */
+    @Volatile
+    private var speakingGlowJob: Job? = null
+    private val speakingGlowToken = java.util.concurrent.atomic.AtomicInteger(0)
+
+    private fun dropSpeakingGlow() {
+        speakingGlowToken.incrementAndGet()
+        speakingGlowJob?.cancel()
+        speakingGlowJob = null
+    }
     private var voiceOverlayDuckFadeJob: Job? = null
     /** True while [voiceOverlayDuckFadeJob] is lifting toward full volume. */
     private var voiceOverlayDuckFadingOut = false
@@ -934,6 +950,17 @@ class VoiceSatelliteService() : LifecycleService() {
 
     fun currentMicrophoneLevel(): Float =
         _voiceSatellite.value?.audioInput?.currentMicrophoneLevel() ?: 0f
+
+    /** Mic uplink to HA is open (wake / continue chime done, the person is being heard). */
+    fun isMicUplinkOpen(): Boolean =
+        _voiceSatellite.value?.audioInput?.isStreaming ?: false
+
+    /**
+     * Wake earcon is playing and the mic is being pre-rolled for HA: the person is
+     * already being heard ("okay nabu, turn on the light" in one breath).
+     */
+    fun isWakePreRollCapturing(): Boolean =
+        _voiceSatellite.value?.audioInput?.wakePreRollCapturing ?: false
 
     /** Peak pre-AEC float-RMS during the current guided voiceprint listen window. */
     fun currentVoicePrintEnrollmentPeakLevel(): Float =
@@ -2265,6 +2292,16 @@ class VoiceSatelliteService() : LifecycleService() {
                             applicationContext.screensaverSettingsStore
                         ).get()
                         
+                        // Continue mode as it is in force (ContinueMode): a stored 超级智能 only
+                        // counts while the AI path is cloud, so every runtime gate sees the same
+                        // effective value and it comes back with the cloud path. Writes still go
+                        // to the stored flag.
+                        val continueModeFlow = ContinueMode.flow(
+                            playerSettingsStore.getFlow(),
+                            com.example.ava.localllm.LocalLlmManager.getInstance(applicationContext).settingsStore.getFlow(),
+                        )
+                        fun continueModeState(mode: ContinueMode, stored: SettingState<Boolean>) =
+                            SettingState(continueModeFlow.map { it == mode }) { stored.set(it) }
                         val player = VoiceSatellitePlayer(
                             ttsPlayer = TtsPlayer(
                                 createAudioPlayer(
@@ -2304,9 +2341,9 @@ class VoiceSatelliteService() : LifecycleService() {
                             enableStopSound = playerSettingsStore.enableStopSound,
                             continuousPromptSound = playerSettingsStore.continuousPromptSound,
                             enableContinuousConversation = playerSettingsStore.enableContinuousConversation,
-                            enableQuestionMarkContinue = playerSettingsStore.enableQuestionMarkContinue,
-                            enableExitKeywordStop = playerSettingsStore.enableExitKeywordStop,
-                            enableSmartContinue = playerSettingsStore.enableSmartContinue,
+                            enableQuestionMarkContinue = continueModeState(ContinueMode.QUESTION_MARK, playerSettingsStore.enableQuestionMarkContinue),
+                            enableExitKeywordStop = continueModeState(ContinueMode.EXIT_KEYWORD, playerSettingsStore.enableExitKeywordStop),
+                            enableSmartContinue = continueModeState(ContinueMode.SMART, playerSettingsStore.enableSmartContinue),
                             enableStreamingTtsSubtitles = playerSettingsStore.enableStreamingTtsSubtitles,
                             preserveTtsHttps = playerSettingsStore.preserveTtsHttps,
                         ).apply {
@@ -2652,11 +2689,23 @@ class VoiceSatelliteService() : LifecycleService() {
                                 // Fallback if RUN_START arrives without wakeSatellite duck
                                 // (already latched + fading is a no-op).
                                 beginVoiceOverlayDuck()
+                                dropSpeakingGlow()
                                 lifecycleScope.launch(kotlinx.coroutines.Dispatchers.Main) {
                                     if (isQuickWakeSessionActive()) return@launch
                                     if (playerSettingsStore.enableFloatingWindow.get()) {
                                         if (!syncOverlayPermissionState()) return@launch
                                         FloatingWindowService.showListening(this@VoiceSatelliteService)
+                                        // Edge glow already up (speaking glow of the last
+                                        // reply): move it to listening too, or it stays on
+                                        // SPEAKING through the continue turn.
+                                        if (WakeRippleService.isStateOverlayShowing()) {
+                                            val wakeIndex = _voiceSatellite.value?.sessionAccentWakeIndex() ?: 0
+                                            WakeRippleService.showListening(
+                                                this@VoiceSatelliteService,
+                                                accentColor,
+                                                wakeIndex,
+                                            )
+                                        }
                                     } else {
                                         val wakeIndex = _voiceSatellite.value?.sessionAccentWakeIndex() ?: 0
                                         WakeRippleService.showListening(
@@ -2674,6 +2723,10 @@ class VoiceSatelliteService() : LifecycleService() {
                                     if (playerSettingsStore.enableFloatingWindow.get()) {
                                         if (!syncOverlayPermissionState()) return@launch
                                         FloatingWindowService.showProcessing(this@VoiceSatelliteService)
+                                        // Same as listening: keep a live edge glow in step.
+                                        if (WakeRippleService.isStateOverlayShowing()) {
+                                            WakeRippleService.showProcessing(this@VoiceSatelliteService)
+                                        }
                                     } else {
                                         WakeRippleService.showProcessing(this@VoiceSatelliteService)
                                     }
@@ -2681,6 +2734,7 @@ class VoiceSatelliteService() : LifecycleService() {
                             }
                             
                             onConversationEnd = {
+                                dropSpeakingGlow()
                                 com.example.ava.clock.ClockAlertSensor.onVoiceEnded()
                                 // TTS overlay restore already rides duck → 1; otherwise fade out here.
                                 if (voiceReplyRestoreFadeJob?.isActive != true) {
@@ -2708,7 +2762,9 @@ class VoiceSatelliteService() : LifecycleService() {
                             
                             onTtsPlaybackStarted = { _ ->
                                 QuickWakeFabService.noteTtsAudible()
-                                lifecycleScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                                speakingGlowJob?.cancel()
+                                val glowToken = speakingGlowToken.incrementAndGet()
+                                speakingGlowJob = lifecycleScope.launch(kotlinx.coroutines.Dispatchers.Main) {
                                     val streamingTts =
                                         playerSettingsStore.enableStreamingTtsSubtitles.get()
                                     val floatingWindow = playerSettingsStore.enableFloatingWindow.get()
@@ -2719,6 +2775,8 @@ class VoiceSatelliteService() : LifecycleService() {
                                     if (!streamingTts && floatingWindow && syncOverlayPermissionState()) {
                                         kotlinx.coroutines.delay(500)
                                     }
+                                    // Audio already ended / next listen / session over.
+                                    if (speakingGlowToken.get() != glowToken) return@launch
                                     // Pass accent explicitly so speaking glow stays correct when
                                     // wake ripple was skipped (ripple disabled / no prior overlay).
                                     val accent = _voiceSatellite.value?.currentSessionAccentColor
@@ -2730,6 +2788,17 @@ class VoiceSatelliteService() : LifecycleService() {
                                         wakeIndex,
                                     )
                                 }
+                            }
+
+                            // One "TTS audio really ended" point (URL end, PCM drain, any
+                            // stop, and first thing in onTtsFinished). Clears the speaking
+                            // level on the edge glow and the Quick Wake disc right then,
+                            // not when the continue decision finally moves the state.
+                            onTtsAudioEnded = {
+                                dropSpeakingGlow()
+                                QuickWakeFabService.noteTtsAudioEnded()
+                                FloatingWindowService.noteTtsAudioEnded()
+                                WakeRippleService.endSpeakingAudio(this@VoiceSatelliteService)
                             }
 
                             onTtsDurationReady = { durationMs, text ->
@@ -4154,6 +4223,9 @@ class VoiceSatelliteService() : LifecycleService() {
             SettingsStyleSession.adoptOverlaySplitFromDisk(style)
             OverlayLayerSplit.markSettingsReady()
             OverlayLayerSplit.beginColdStart(expectPair)
+            if (expectPair && browserOn) {
+                OverlayLayerSplit.noteOpened(OverlayLayerSplit.Layer.BROWSER)
+            }
         }
         try {
         reconcileBrowserVisibility()

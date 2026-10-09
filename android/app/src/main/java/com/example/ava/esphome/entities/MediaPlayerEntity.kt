@@ -1,5 +1,6 @@
 package com.example.ava.esphome.entities
 
+import android.util.Log
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import com.example.ava.esphome.voicesatellite.VoiceSatellitePlayer
@@ -40,6 +41,7 @@ class MediaPlayerEntity(
                 if (message.key == key) {
                     if (message.hasMediaUrl) {
                         val playUrl = player.resolvePlayUrl(message.mediaUrl) ?: message.mediaUrl
+                        Log.d(TAG, "media_url announcement=${message.announcement} url=$playUrl")
                         if (message.announcement) {
                             player.playEsphomeAnnouncement(playUrl)
                         } else if (!player.mediaPlayer.isCurrentPlayback(playUrl)) {
@@ -92,6 +94,7 @@ class MediaPlayerEntity(
     }
     
     companion object {
+        private const val TAG = "MediaPlayerEntity"
         private const val FEATURE_PAUSE = 1 shl 0      // 1
         private const val FEATURE_SEEK = 1 shl 1       // 2
         private const val FEATURE_VOLUME_SET = 1 shl 2 // 4

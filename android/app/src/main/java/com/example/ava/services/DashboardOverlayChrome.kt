@@ -497,6 +497,16 @@ private class OverlayBackDock(
             scheduleAutoHide(autoHideMs)
             return
         }
+        // API 21–27: the main thread drops dozens of frames, so the fade often
+        // never reaches alpha 1 and the pill stays invisible. Snap it on.
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.O_MR1) {
+            cancelMotion()
+            alpha = 1f
+            snapMotion(hidden = false)
+            visibility = VISIBLE
+            scheduleAutoHide(autoHideMs)
+            return
+        }
         if (visibility != VISIBLE || alpha <= 0.02f) {
             alpha = 0f
             snapMotion(hidden = true)
