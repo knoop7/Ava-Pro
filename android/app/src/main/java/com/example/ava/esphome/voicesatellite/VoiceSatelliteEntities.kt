@@ -131,6 +131,7 @@ object VoiceSatelliteEntities {
                 EntityCategory.ENTITY_CATEGORY_NONE,
                 acceptedState = { ScreenControlUtils.panelOnState.value },
             ) {
+                if (it) com.example.ava.services.ScreensaverController.noteHaScreenOn()
                 ScreenControlUtils.setScreenOn(context, it)
             })
 
@@ -142,6 +143,11 @@ object VoiceSatelliteEntities {
                 getState = ScreenControlUtils.lockState,
                 entityCategory = EntityCategory.ENTITY_CATEGORY_NONE,
                 setState = { command, _ ->
+                    if (command == com.example.esphomeproto.api.LockCommand.LOCK_UNLOCK ||
+                        command == com.example.esphomeproto.api.LockCommand.LOCK_OPEN
+                    ) {
+                        com.example.ava.services.ScreensaverController.noteHaScreenOn()
+                    }
                     ScreenControlUtils.handleLockCommand(context, command, null)
                 }
             ))
@@ -518,6 +524,37 @@ object VoiceSatelliteEntities {
                                 ?.resubscribeScreensaverStatusSlots()
                         },
                         entityCategory = EntityCategory.ENTITY_CATEGORY_CONFIG
+                    ))
+                }
+            }
+
+            // Simple Clock free text blocks: one HA text entity per block whose own
+            // "Show in Home Assistant" switch is on (no master switch). Built from the saved
+            // layout; adding / removing goes through the settings-driven HA rediscover.
+            // Bold / italic stay in-app only.
+            if (playerSettingsDataResolved.enableScreensaver) {
+                val textIds = com.example.ava.settings.SimpleClockCustomLayout.customTextIds(
+                    playerSettingsDataResolved.screensaverCustomLayoutLandscape,
+                    playerSettingsDataResolved.screensaverCustomLayoutPortrait,
+                )
+                for (textId in textIds) {
+                    val number = textId.textNumber
+                    val textState = store.customTextBlockText(textId)
+                    add(TextEntity(
+                        key = "simple_clock_custom_text_$number".hashCode(),
+                        name = context.getString(R.string.entity_simple_clock_custom_text, number),
+                        objectId = "simple_clock_custom_text_$number",
+                        icon = "mdi:format-text",
+                        getState = textState,
+                        setState = { text ->
+                            textState.set(text)
+                            // Blank deletes the block: drop its entity too.
+                            if (text.isBlank()) {
+                                com.example.ava.services.VoiceSatelliteService.getInstance()?.restartVoiceSatellite()
+                            }
+                        },
+                        entityCategory = EntityCategory.ENTITY_CATEGORY_CONFIG,
+                        maxLength = com.example.ava.settings.SimpleClockCustomLayout.MAX_CUSTOM_TEXT_LENGTH
                     ))
                 }
             }

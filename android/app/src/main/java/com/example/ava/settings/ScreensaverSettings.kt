@@ -305,6 +305,12 @@ data class ScreensaverSettings(
      * Default off → one icon cell per hour.
      */
     val dawnMergeWeatherIconsEnabled: Boolean = false,
+    /**
+     * When true and the app is in dark mode: Dawn magazine draws a black scrim over the
+     * wallpaper (below clock / text). Skipped while Smart AOD is on (no double dim).
+     * Default on (#253).
+     */
+    val dawnDarkModeDimEnabled: Boolean = true,
     val timeoutSeconds: Int = 300,
     /**
      * When true (and screensaver enabled), expose [timeoutSeconds] as HA number
@@ -319,6 +325,11 @@ data class ScreensaverSettings(
      * No idle timer or fade. Independent of Simple Clock AOD. Default off.
      */
     val smartAodEnabled: Boolean = false,
+    /**
+     * When true, screensaver AOD follows the app dark-mode switch instead of
+     * [smartAodEnabled]: dark mode on = AOD on, off = AOD off. Default off.
+     */
+    val smartAodFollowDarkMode: Boolean = false,
     /**
      * Screensaver AOD cover strength: 100 = fully opaque, 5 = lightest. Default 100.
      */
@@ -392,6 +403,10 @@ class ScreensaverSettingsStore(dataStore: DataStore<ScreensaverSettings>) :
         SettingState(getFlow().map { it.smartAodEnabled }) { value ->
             update { it.copy(smartAodEnabled = value) }
         }
+    val smartAodFollowDarkMode =
+        SettingState(getFlow().map { it.smartAodFollowDarkMode }) { value ->
+            update { it.copy(smartAodFollowDarkMode = value) }
+        }
     val smartAodMaskPercent =
         SettingState(getFlow().map { it.smartAodMaskPercent }) { value ->
             update { it.copy(smartAodMaskPercent = value.coerceIn(5, 100)) }
@@ -464,6 +479,10 @@ class ScreensaverSettingsStore(dataStore: DataStore<ScreensaverSettings>) :
     val dawnMergeWeatherIconsEnabled =
         SettingState(getFlow().map { it.dawnMergeWeatherIconsEnabled }) { value ->
             update { it.copy(dawnMergeWeatherIconsEnabled = value) }
+        }
+    val dawnDarkModeDimEnabled =
+        SettingState(getFlow().map { it.dawnDarkModeDimEnabled }) { value ->
+            update { it.copy(dawnDarkModeDimEnabled = value) }
         }
 
     suspend fun updateDawnEntitySlot(index: Int, slot: DawnEntitySlot) {

@@ -97,6 +97,14 @@ fun isSettingsSplitMasterRoute(route: String?): Boolean {
     ) {
         return false
     }
+    // Simple Clock editor (Appearance & status) and its status sub-page: always full-width,
+    // never beside the split index, like Software update above.
+    if (path == Screen.SETTINGS_INTERACTION_SIMPLE_CLOCK ||
+        path.startsWith("${Screen.SETTINGS_INTERACTION_SIMPLE_CLOCK}/") ||
+        path == Screen.SETTINGS_INTERACTION_SIMPLE_CLOCK_STATUS
+    ) {
+        return false
+    }
     return path == Screen.SETTINGS || path.startsWith("settings/")
 }
 

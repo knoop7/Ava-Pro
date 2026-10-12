@@ -1,5 +1,6 @@
 package com.example.ava.server
 
+import android.os.SystemClock
 import android.util.Log
 import com.example.ava.server.noise.EspHomeNoiseResponder
 import com.example.ava.server.noise.MacFailureException
@@ -33,6 +34,15 @@ class ClientConnection(
     /** First decrypted API frame (HelloRequest). Don't send app traffic before that. */
     @Volatile
     private var inboundReady = false
+
+    /**
+     * [SystemClock.elapsedRealtime] of the last frame read off the socket (#254).
+     * Stamped on the read thread, before the message waits for the ordered
+     * consumer, so a slow handler can't make a live HA look silent.
+     */
+    @Volatile
+    var lastFrameElapsedMs: Long = SystemClock.elapsedRealtime()
+        private set
 
     init {
         // Firmware sets TCP_NODELAY in init_common_(). Without it Nagle can hold
@@ -122,6 +132,7 @@ class ClientConnection(
         var message: MessageLite?
         do {
             message = readMessageInternal()
+            lastFrameElapsedMs = SystemClock.elapsedRealtime()
         } while (message == null)
         return message
     }

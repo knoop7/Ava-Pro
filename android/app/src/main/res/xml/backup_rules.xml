@@ -1,4 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
-    
+    <!-- Secrets / device-local keys: HA token, MA login, ESPHome key, keystore-sealed AI tokens, PIN hash. -->
+    <exclude domain="file" path="datastore/ha_settings.json" />
+    <exclude domain="file" path="datastore/mass_api_settings.json" />
+    <exclude domain="file" path="datastore/voice_satellite_settings.json" />
+    <exclude domain="file" path="datastore/remote_ai_settings.json" />
+    <exclude domain="file" path="datastore/home_lock_settings.json" />
+    <!-- Pre-import snapshots hold every secret in clear; custom sounds are large local copies. -->
+    <exclude domain="file" path="backups/" />
+    <exclude domain="file" path="sounds/" />
 </full-backup-content>

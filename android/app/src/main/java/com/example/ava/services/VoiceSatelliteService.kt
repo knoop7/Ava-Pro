@@ -605,6 +605,7 @@ class VoiceSatelliteService() : LifecycleService() {
     }
 
     private fun applyScreenToggle(screenOn: Boolean) {
+        if (screenOn) ScreensaverController.noteHaScreenOn()
         ScreenControlUtils.setScreenOn(this, screenOn)
     }
 
@@ -954,6 +955,10 @@ class VoiceSatelliteService() : LifecycleService() {
     /** Mic uplink to HA is open (wake / continue chime done, the person is being heard). */
     fun isMicUplinkOpen(): Boolean =
         _voiceSatellite.value?.audioInput?.isStreaming ?: false
+
+    /** Satellite is in its STT Listening state (wake or continue turn), whatever the overlays show. */
+    fun isSatelliteListening(): Boolean =
+        _voiceSatellite.value?.state?.value is com.example.ava.esphome.voicesatellite.Listening
 
     /**
      * Wake earcon is playing and the mic is being pre-rolled for HA: the person is
@@ -2777,6 +2782,13 @@ class VoiceSatelliteService() : LifecycleService() {
                                     }
                                     // Audio already ended / next listen / session over.
                                     if (speakingGlowToken.get() != glowToken) return@launch
+                                    // #252: the 500 ms lead-in can outlive the reply (stop,
+                                    // insert, session end) without a token bump; only a
+                                    // channel still in Responding gets the speaking glow.
+                                    val glowChannel = _voiceSatellite.value?.state?.value
+                                    if (glowChannel !is com.example.ava.esphome.voicesatellite.Responding) {
+                                        return@launch
+                                    }
                                     // Pass accent explicitly so speaking glow stays correct when
                                     // wake ripple was skipped (ripple disabled / no prior overlay).
                                     val accent = _voiceSatellite.value?.currentSessionAccentColor

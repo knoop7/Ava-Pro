@@ -14,6 +14,7 @@ import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.PixelFormat
 import android.graphics.PorterDuff
+import android.graphics.PorterDuffColorFilter
 import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
 import android.graphics.RectF
@@ -41,6 +42,9 @@ import androidx.core.content.res.ResourcesCompat
 import com.example.ava.R
 import com.example.ava.mods.ModDeviceSupport
 import com.example.ava.settings.SettingsStyleSession
+import com.example.ava.settings.SimpleClockCustomLayout
+import com.example.ava.settings.SimpleClockLayoutElement
+import com.example.ava.settings.SimpleClockLayoutElementId
 import com.example.ava.settings.SimpleClockPortraitStyle
 import com.example.ava.settings.SimpleClockStatusSlot
 import com.example.ava.settings.migrateScreensaverWeatherIfNeeded
@@ -69,7 +73,9 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.ByteBuffer
 import java.security.MessageDigest
+import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.EnumMap
 import java.util.Locale
 import kotlin.math.max
 
@@ -203,6 +209,10 @@ class ScreensaverService : Service() {
                 screensaverView?.setPortraitStyle(
                     SimpleClockPortraitStyle.fromStored(settings.screensaverPortraitStyle)
                 )
+                screensaverView?.setCustomLayout(
+                    landscape = settings.screensaverCustomLayoutLandscape,
+                    portrait = settings.screensaverCustomLayoutPortrait
+                )
                 screensaverView?.setWeatherEnabled(
                     enabled = settings.enableScreensaverWeather,
                     hasEntity = resolveScreensaverWeatherEntityId(settings).isNotEmpty()
@@ -321,6 +331,11 @@ class ScreensaverService : Service() {
                 dualPane = wallpaperDualPane
             )
             set12HourEnabled(use12Hour)
+            // Custom layout with a logo entry paints the logo on the clock canvas;
+            // hide the overlay ImageView meanwhile so it is never drawn twice.
+            onCanvasLogoChanged = { canvasLogo ->
+                logoView?.visibility = if (canvasLogo) View.INVISIBLE else View.VISIBLE
+            }
         }
         serviceScope.launch {
             migrateScreensaverWeatherIfNeeded(playerSettingsStore)
@@ -328,6 +343,10 @@ class ScreensaverService : Service() {
             screensaverView?.set12HourEnabled(settings.screensaver12HourEnabled)
             screensaverView?.setPortraitStyle(
                 SimpleClockPortraitStyle.fromStored(settings.screensaverPortraitStyle)
+            )
+            screensaverView?.setCustomLayout(
+                landscape = settings.screensaverCustomLayoutLandscape,
+                portrait = settings.screensaverCustomLayoutPortrait
             )
             screensaverView?.updateStatusSlots(
                 enabled = settings.enableScreensaverStatusSlots,
@@ -1169,6 +1188,74 @@ class ScreensaverView(context: Context, private var screenWidth: Int, private va
         setContentPixelShift(0f, 0f)
     }
 
+    // ---------- Custom layout (Appearance & Status → custom layout editor) ----------
+    // Built-in drawing never touches any of this: [frameLayout] stays null unless a custom
+    // layout is enabled (or the editor is previewing) AND the current face is landscape or
+    // simple portrait outside split panes.
+
+    /**
+     * What the last frame did, for the layout editor. Bounds are in view pixels.
+     * [defaultBounds] = built-in spot of each element; [drawnBounds] = where it is drawn
+     * now (hidden elements are absent). [active] = false when this size/style always
+     * uses the built-in layout (portrait magazine, compact square, split pane).
+     */
+    data class CustomLayoutFrame(
+        val portrait: Boolean,
+        val active: Boolean,
+        val width: Int,
+        val height: Int,
+        val defaultBounds: Map<SimpleClockLayoutElementId, RectF>,
+        val drawnBounds: Map<SimpleClockLayoutElementId, RectF>,
+    )
+
+    private var customLandscape: Map<SimpleClockLayoutElementId, SimpleClockLayoutElement> = emptyMap()
+    private var customPortrait: Map<SimpleClockLayoutElementId, SimpleClockLayoutElement> = emptyMap()
+    /** Editor preview: custom maps always apply, logo is painted here, bounds are reported. */
+    private var layoutEditorMode = false
+    /** Layout for the frame being drawn; null = built-in drawing with no transforms. */
+    private var frameLayout: Map<SimpleClockLayoutElementId, SimpleClockLayoutElement>? = null
+    private val frameDefaultBounds =
+        EnumMap<SimpleClockLayoutElementId, RectF>(SimpleClockLayoutElementId::class.java)
+    private val frameDrawnBounds =
+        EnumMap<SimpleClockLayoutElementId, RectF>(SimpleClockLayoutElementId::class.java)
+    private var lastCanvasLogo = false
+    private var lastReportedLayoutFrame: CustomLayoutFrame? = null
+    private var canvasLogoBitmap: Bitmap? = null
+    private var canvasLogoLoadAttempted = false
+    private val canvasLogoPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+        alpha = OverlayLogoBadge.ALPHA
+    }
+
+    /** Service hook: true while this view paints the HA logo itself (hide the ImageView). */
+    var onCanvasLogoChanged: ((Boolean) -> Unit)? = null
+
+    /** Editor hook: posted after a frame whose layout bounds changed. */
+    var onCustomLayoutFrame: ((CustomLayoutFrame) -> Unit)? = null
+
+    /** Saved elements are the custom layout; empty lists (after Reset) draw the built-in face. */
+    fun setCustomLayout(
+        landscape: List<SimpleClockLayoutElement>,
+        portrait: List<SimpleClockLayoutElement>,
+    ) {
+        val landscapeMap = SimpleClockCustomLayout.toMap(landscape)
+        val portraitMap = SimpleClockCustomLayout.toMap(portrait)
+        if (customLandscape == landscapeMap &&
+            customPortrait == portraitMap
+        ) {
+            return
+        }
+        customLandscape = landscapeMap
+        customPortrait = portraitMap
+        invalidate()
+    }
+
+    fun setLayoutEditorMode(enabled: Boolean) {
+        if (layoutEditorMode == enabled) return
+        layoutEditorMode = enabled
+        lastReportedLayoutFrame = null
+        invalidate()
+    }
+
     private val updateRunnable = object : Runnable {
         override fun run() {
             invalidate()
@@ -1794,7 +1881,7 @@ class ScreensaverView(context: Context, private var screenWidth: Int, private va
         val availableWidth = layoutWidth - horizontalPadding * 2
         val calendar = Calendar.getInstance()
         val timeText = formatSimpleClockTime(calendar, use12Hour)
-        val dateText = formatDate(calendar)
+        var dateText = formatDate(calendar)
         // Switch off → no weather chrome / no layout reserve.
         // Switch on → always reserve space; empty entity / no push → sunny + "-".
         val showWeather = weatherEnabled
@@ -1810,6 +1897,13 @@ class ScreensaverView(context: Context, private var screenWidth: Int, private va
         val portrait = sideBySidePane || squarePanel || layoutHeight >= layoutWidth
         val isLandscape = !squarePanel && !sideBySidePane && layoutWidth > layoutHeight * 1.2f
         val isUltraWide = !sideBySidePane && layoutWidth > layoutHeight * 2.0f
+        val customLayoutUsable = beginCustomLayoutFrame(
+            portrait = portrait,
+            sideBySidePane = sideBySidePane,
+            squarePanel = squarePanel,
+        )
+        // Custom layout only: user date pattern (built-in path never gets here with one).
+        customDateText(calendar)?.let { dateText = it }
         
         val screenDiagonalPx = kotlin.math.sqrt((layoutWidth * layoutWidth + layoutHeight * layoutHeight).toDouble()).toFloat()
         val screenDiagonalInch = screenDiagonalPx / (density * 160f)
@@ -1901,7 +1995,9 @@ class ScreensaverView(context: Context, private var screenWidth: Int, private va
                 hasWallpaper = hasWallpaper,
                 use12Hour = use12Hour
             )
+            drawCustomTextElements(canvas, vmin)
             if (shiftingContent) canvas.restore()
+            finishCustomLayoutFrame(canvas, portrait = portrait, usable = customLayoutUsable)
             return
         }
 
@@ -1932,7 +2028,9 @@ class ScreensaverView(context: Context, private var screenWidth: Int, private va
                 tempScale = tempScale,
                 use12Hour = use12Hour
             )
+            drawCustomTextElements(canvas, vmin)
             if (shiftingContent) canvas.restore()
+            finishCustomLayoutFrame(canvas, portrait = portrait, usable = customLayoutUsable)
             return
         }
 
@@ -1988,6 +2086,21 @@ class ScreensaverView(context: Context, private var screenWidth: Int, private va
         val amPmNudgeX = if (!portrait && use12Hour) 15f * density else 0f
         val timeCenterX = contentCenterX - horizontalOffset + amPmNudgeX
 
+        if (frameLayout != null && !portrait && use12Hour) {
+            // Same stable width the 12h block below assigns; known up front so a hidden
+            // time element still leaves weather at its built-in spot.
+            timeWidth = landscapeTwelveHourStableWidth()
+        }
+        drawLayoutElement(canvas, SimpleClockLayoutElementId.TIME, {
+            landscapeTimeBounds(
+                timeCenterX = timeCenterX,
+                timeWidth = timeWidth,
+                timeBaseline = timeBaseline,
+                timeMetrics = timeMetrics,
+                twelveHour = !portrait && use12Hour,
+                density = density,
+            )
+        }) {
         if (!portrait && use12Hour) {
             val parts = splitTwelveHourParts(calendar)
             val hourText = parts.hour.padStart(2, '0')
@@ -2038,6 +2151,7 @@ class ScreensaverView(context: Context, private var screenWidth: Int, private va
         } else {
             canvas.drawText(timeText, timeCenterX, timeBaseline, timePaint)
         }
+        }
 
         val weatherIconRes = if (showWeather) {
             weather?.condition?.let { resolveWeatherIconRes(it) } ?: R.drawable.mdi_weather_sunny
@@ -2087,16 +2201,48 @@ class ScreensaverView(context: Context, private var screenWidth: Int, private va
                 density = density,
                 availableWidth = availableWidth,
                 screenCategory = screenCategory,
-                portrait = portrait
+                portrait = portrait,
+                layoutIds = statusLayoutIds()
             )
+            if (frameLayout != null) {
+                // Built-in: status chips replace the date row. A date the user moved
+                // somewhere else in the editor is drawn there as well.
+                val dateBounds = centeredTextBounds(dateText, contentCenterX, dateBaseline, datePaint)
+                if (frameLayout?.get(SimpleClockLayoutElementId.DATE)?.hasPosition == true) {
+                    drawLayoutElement(canvas, SimpleClockLayoutElementId.DATE, { dateBounds }) {
+                        canvas.drawText(dateText, contentCenterX, dateBaseline, datePaint)
+                    }
+                } else {
+                    frameDefaultBounds[SimpleClockLayoutElementId.DATE] = dateBounds
+                }
+            }
         } else if (portrait) {
             val portraitDateBaseline = contentBottom + dateGap - datePaint.fontMetrics.ascent
             canvas.drawText(dateText, contentCenterX, portraitDateBaseline, datePaint)
         } else {
+            drawLayoutElement(canvas, SimpleClockLayoutElementId.DATE, {
+                centeredTextBounds(dateText, contentCenterX, dateBaseline, datePaint)
+            }) {
             canvas.drawText(dateText, contentCenterX, dateBaseline, datePaint)
+            }
         }
 
         if (!portrait && showWeather && weatherIconRes != null) {
+            drawLayoutElement(canvas, SimpleClockLayoutElementId.WEATHER, {
+                landscapeWeatherBounds(
+                    isSmallScreen = isSmallScreen,
+                    weatherText = weatherText,
+                    iconSize = iconSize,
+                    vmin = vmin,
+                    contentCenterX = contentCenterX,
+                    timeCenterX = timeCenterX,
+                    timeWidth = timeWidth,
+                    timeVisualCenterY = timeVisualCenterY,
+                    weatherGap = weatherGap,
+                    weatherColumnWidth = weatherColumnWidth,
+                    weatherTotalHeight = weatherTotalHeight,
+                )
+            }) {
             if (isSmallScreen) {
                 val smallIconSize = (iconSize * 0.7f).toInt()
                 val smallTempSize = temperaturePaint.textSize * 0.8f
@@ -2136,11 +2282,14 @@ class ScreensaverView(context: Context, private var screenWidth: Int, private va
                     weatherSpacing = weatherSpacing
                 )
             }
+            }
         }
 
+        drawCustomTextElements(canvas, vmin)
         if (shiftingContent) {
             canvas.restore()
         }
+        finishCustomLayoutFrame(canvas, portrait = portrait, usable = customLayoutUsable)
     }
 
     /**
@@ -2372,6 +2521,10 @@ class ScreensaverView(context: Context, private var screenWidth: Int, private va
             // Same quiet ink for hour and minute; late dissolve still only fades minutes.
             color = Color.argb(if (dissolveMinutes) 76 else 87, 255, 255, 255)
         }
+        // Custom layout: the stacked hour / minute pair is one TIME element.
+        drawLayoutElement(canvas, SimpleClockLayoutElementId.TIME, {
+            RectF(pairLeft, hourTop, pairLeft + pairWidth, hourTop + clockHeight)
+        }) {
         drawStableDigits(
             canvas = canvas,
             text = hourText,
@@ -2403,12 +2556,22 @@ class ScreensaverView(context: Context, private var screenWidth: Int, private va
                 paint = digitPaint
             )
         }
+        }
 
         val rightEdge = layoutWidth - padding
+        // Custom layout: AM/PM + date footer (bottom-right) is the DATE element.
+        drawLayoutElement(canvas, SimpleClockLayoutElementId.DATE, {
+            val footerWidth = maxOf(
+                datePaint.measureText(dateText),
+                if (use12Hour) amPmPaint.measureText(amPmText) else 0f
+            )
+            RectF(rightEdge - footerWidth, footerTop, rightEdge, dateBaseline + dateFm.descent)
+        }) {
         if (use12Hour) {
             canvas.drawText(amPmText, rightEdge, amPmBaseline, amPmPaint)
         }
         canvas.drawText(dateText, rightEdge, dateBaseline, datePaint)
+        }
         datePaint.textAlign = Paint.Align.CENTER
 
         if (showWeather && weatherIconRes != null) {
@@ -2420,6 +2583,15 @@ class ScreensaverView(context: Context, private var screenWidth: Int, private va
             val iconTop = weatherTop + (weatherHeight - footerIconSize) / 2f
             val tempBaseline = iconTop + footerIconSize / 2f -
                 (tempFm.ascent + tempFm.descent) / 2f
+            // Custom layout: bottom-left icon + temperature is the WEATHER element.
+            drawLayoutElement(canvas, SimpleClockLayoutElementId.WEATHER, {
+                RectF(
+                    padding,
+                    weatherTop,
+                    padding + footerIconSize + 4f * density + temperaturePaint.measureText(weatherText),
+                    weatherTop + weatherHeight
+                )
+            }) {
             drawWeatherIcon(
                 canvas = canvas,
                 resId = weatherIconRes,
@@ -2433,6 +2605,7 @@ class ScreensaverView(context: Context, private var screenWidth: Int, private va
                 tempBaseline,
                 temperaturePaint
             )
+            }
         }
 
         if (showStatusSlots) {
@@ -2459,10 +2632,18 @@ class ScreensaverView(context: Context, private var screenWidth: Int, private va
                     density = density,
                     availableWidth = railWidth,
                     screenCategory = screenCategory,
-                    portrait = true
+                    portrait = true,
+                    layoutIds = statusLayoutIds()
                 )
             } else {
                 // Short centered hairline, then narrow credits (name ···· value).
+                // Custom layout: the hairline stays only while no credit row was moved / hidden.
+                val creditsUntouched = frameLayout?.let { layout ->
+                    SimpleClockLayoutElementId.entries.none { id ->
+                        id.isStatusSlot && layout[id]?.let { it.hasPosition || !it.visible } == true
+                    }
+                } ?: true
+                if (creditsUntouched) {
                 val hairPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                     color = Color.argb(51, 255, 255, 255)
                     strokeWidth = max(1f, density * 0.9f)
@@ -2475,6 +2656,7 @@ class ScreensaverView(context: Context, private var screenWidth: Int, private va
                     hairY,
                     hairPaint
                 )
+                }
                 drawPortraitCreditsSlots(
                     canvas = canvas,
                     slots = configuredStatusSlots,
@@ -2484,11 +2666,381 @@ class ScreensaverView(context: Context, private var screenWidth: Int, private va
                     density = density,
                     creditsWidth = creditsWidth,
                     screenCategory = screenCategory,
-                    hasWallpaper = hasWallpaper
+                    hasWallpaper = hasWallpaper,
+                    layoutIds = statusLayoutIds()
                 )
             }
         }
     }
+
+    // ---------- Custom layout helpers ----------
+
+    /**
+     * Picks the layout for this frame. Returns true when the custom path may run here.
+     * With no custom layout and no editor this only nulls [frameLayout] and returns.
+     */
+    private fun beginCustomLayoutFrame(
+        portrait: Boolean,
+        sideBySidePane: Boolean,
+        squarePanel: Boolean,
+    ): Boolean {
+        frameLayout = null
+        if (customLandscape.isEmpty() && customPortrait.isEmpty() && !layoutEditorMode) return false
+        frameDefaultBounds.clear()
+        frameDrawnBounds.clear()
+        // v1: magazine portrait, compact square and split panes keep the built-in face.
+        val inSplitPane = !layoutEditorMode && (
+            sideBySidePane ||
+                OverlayLayerSplit.isSideBySidePane(this) ||
+                OverlayLayerSplit.isStackedPane(this)
+            )
+        // Landscape, simple portrait and portrait magazine all take the custom layout.
+        val usable = !squarePanel && !inSplitPane
+        if (!usable) return false
+        frameLayout = if (portrait) customPortrait else customLandscape
+        return true
+    }
+
+    /** Paints the canvas logo when needed and reports the frame. Call after the shift restore. */
+    private fun finishCustomLayoutFrame(canvas: Canvas, portrait: Boolean, usable: Boolean) {
+        val layout = frameLayout
+        frameLayout = null
+        val canvasLogo = layoutEditorMode ||
+            (layout != null && layout.containsKey(SimpleClockLayoutElementId.LOGO))
+        if (canvasLogo) {
+            drawCanvasLogo(canvas, layout?.get(SimpleClockLayoutElementId.LOGO), record = layout != null)
+        }
+        if (canvasLogo != lastCanvasLogo) {
+            lastCanvasLogo = canvasLogo
+            onCanvasLogoChanged?.let { callback -> handler.post { callback(canvasLogo) } }
+        }
+        if (!layoutEditorMode) return
+        val callback = onCustomLayoutFrame ?: return
+        val frame = CustomLayoutFrame(
+            portrait = portrait,
+            active = usable,
+            width = width,
+            height = height,
+            defaultBounds = frameDefaultBounds.mapValues { RectF(it.value) },
+            drawnBounds = frameDrawnBounds.mapValues { RectF(it.value) },
+        )
+        if (frame == lastReportedLayoutFrame) return
+        lastReportedLayoutFrame = frame
+        handler.post { callback(frame) }
+    }
+
+    /**
+     * Built-in path ([frameLayout] == null): runs [block] as-is, nothing else.
+     * Custom path: records the built-in bounds, then moves / scales / hides the element.
+     * [defaultBounds] is only evaluated on the custom path.
+     */
+    private inline fun drawLayoutElement(
+        canvas: Canvas,
+        id: SimpleClockLayoutElementId,
+        defaultBounds: () -> RectF,
+        block: () -> Unit,
+    ) {
+        // [block] is expanded once per call site (inline), so keep a single call.
+        val layout = frameLayout
+        var drawnBounds: RectF? = null
+        var transformed = false
+        var tintLayer = -1
+        if (layout != null) {
+            val bounds = defaultBounds()
+            frameDefaultBounds[id] = RectF(bounds)
+            val element = layout[id]
+            if (element != null && !element.visible) return
+            if (element == null) {
+                drawnBounds = RectF(bounds)
+            } else {
+                val target = transformedBounds(bounds, element)
+                val tint = if (id.supportsColor) element.colorArgb() else null
+                if (tint != null) {
+                    // Offscreen layer + SRC_IN: text and icons take the color, keep their alpha.
+                    val pad = max(target.width(), target.height()) * 0.1f + 4f
+                    tintLayer = canvas.saveLayer(
+                        target.left - pad,
+                        target.top - pad,
+                        target.right + pad,
+                        target.bottom + pad,
+                        layoutTintPaint(tint)
+                    )
+                }
+                val scale = element.scale.coerceIn(
+                    SimpleClockCustomLayout.MIN_SCALE,
+                    SimpleClockCustomLayout.MAX_SCALE
+                )
+                canvas.save()
+                canvas.translate(target.centerX() - bounds.centerX(), target.centerY() - bounds.centerY())
+                canvas.scale(scale, scale, bounds.centerX(), bounds.centerY())
+                transformed = true
+                drawnBounds = target
+            }
+        }
+        block()
+        if (transformed) canvas.restore()
+        if (tintLayer >= 0) canvas.restoreToCount(tintLayer)
+        if (drawnBounds != null) frameDrawnBounds[id] = drawnBounds
+    }
+
+    private val customTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(235, 255, 255, 255)
+        textAlign = Paint.Align.CENTER
+    }
+
+    /**
+     * User-added free text blocks (custom layout only). Drawn inside the pixel-shift
+     * transform like the rest of the face; position / size / color / hide go through
+     * [drawLayoutElement] so the editor gets bounds and snap guides for them too.
+     */
+    private fun drawCustomTextElements(canvas: Canvas, vmin: Float) {
+        val layout = frameLayout ?: return
+        for (id in SimpleClockLayoutElementId.customTexts) {
+            val element = layout[id] ?: continue
+            val text = element.text.trim()
+            if (text.isEmpty()) continue
+            customTextPaint.textSize = vmin * 0.055f
+            applyCustomTextStyle(datePaint.typeface, element.bold, element.italic)
+            val centerX = (if (element.hasPosition) element.x else 0.5f) * width
+            val centerY = (if (element.hasPosition) element.y else 0.5f) * height
+            // Long text (HA allows 255 chars) wraps instead of running off screen.
+            val lines = wrapCustomText(text, width * 0.9f)
+            val fm = customTextPaint.fontMetrics
+            val lineHeight = (fm.descent - fm.ascent) * 1.12f
+            val firstBaseline = centerY - lineHeight * (lines.size - 1) / 2f - (fm.ascent + fm.descent) / 2f
+            drawLayoutElement(canvas, id, {
+                val bounds = centeredTextBounds(lines[0], centerX, firstBaseline, customTextPaint)
+                for (i in 1 until lines.size) {
+                    bounds.union(centeredTextBounds(lines[i], centerX, firstBaseline + lineHeight * i, customTextPaint))
+                }
+                bounds
+            }) {
+                for (i in lines.indices) {
+                    canvas.drawText(lines[i], centerX, firstBaseline + lineHeight * i, customTextPaint)
+                }
+            }
+        }
+        customTextPaint.isFakeBoldText = false
+        customTextPaint.textSkewX = 0f
+    }
+
+    /** Bold / italic on the clock's own font; falls back to fake bold / skew when the font has no such face. */
+    private fun applyCustomTextStyle(base: Typeface?, bold: Boolean, italic: Boolean) {
+        val style = when {
+            bold && italic -> Typeface.BOLD_ITALIC
+            bold -> Typeface.BOLD
+            italic -> Typeface.ITALIC
+            else -> Typeface.NORMAL
+        }
+        val typeface = if (style == Typeface.NORMAL) base else Typeface.create(base, style)
+        customTextPaint.typeface = typeface
+        customTextPaint.isFakeBoldText = bold && typeface?.isBold != true
+        customTextPaint.textSkewX = if (italic && typeface?.isItalic != true) -0.22f else 0f
+    }
+
+    private fun wrapCustomText(text: String, maxWidth: Float): List<String> {
+        val out = ArrayList<String>()
+        for (paragraph in text.split('\n')) {
+            var rest = paragraph.trim()
+            if (rest.isEmpty()) {
+                out.add("")
+                continue
+            }
+            while (rest.isNotEmpty() && out.size < 12) {
+                var count = customTextPaint.breakText(rest, true, maxWidth, null).coerceAtLeast(1)
+                if (count < rest.length) {
+                    // Prefer breaking at a space for Latin text; CJK breaks anywhere.
+                    val space = rest.lastIndexOf(' ', count)
+                    if (space > 0) count = space
+                }
+                out.add(rest.substring(0, count).trimEnd())
+                rest = rest.substring(count).trimStart()
+            }
+        }
+        return out.ifEmpty { listOf(text) }
+    }
+
+    private val layoutTintLayerPaint = Paint()
+    private var layoutTintColor = 0
+
+    private fun layoutTintPaint(color: Int): Paint {
+        if (layoutTintLayerPaint.colorFilter == null || layoutTintColor != color) {
+            layoutTintColor = color
+            layoutTintLayerPaint.colorFilter = PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN)
+        }
+        return layoutTintLayerPaint
+    }
+
+    private var customDatePattern: String? = null
+    private var customDateFormat: SimpleDateFormat? = null
+
+    /** Date text from the user's pattern on the custom path; null = built-in date. */
+    private fun customDateText(calendar: Calendar): String? {
+        val pattern = frameLayout?.get(SimpleClockLayoutElementId.DATE)?.text
+            ?.takeIf { it.isNotBlank() } ?: return null
+        if (pattern != customDatePattern) {
+            customDatePattern = pattern
+            customDateFormat = runCatching { SimpleDateFormat(pattern, Locale.getDefault()) }.getOrNull()
+        }
+        val format = customDateFormat ?: return null
+        return runCatching { format.format(calendar.time) }.getOrNull()?.takeIf { it.isNotBlank() }
+    }
+
+    /** Element center goes to its stored 0..1 spot (or stays), size is multiplied. */
+    private fun transformedBounds(bounds: RectF, element: SimpleClockLayoutElement): RectF {
+        val scale = element.scale.coerceIn(SimpleClockCustomLayout.MIN_SCALE, SimpleClockCustomLayout.MAX_SCALE)
+        val centerX = if (element.hasPosition) element.x * width else bounds.centerX()
+        val centerY = if (element.hasPosition) element.y * height else bounds.centerY()
+        val halfWidth = bounds.width() * scale / 2f
+        val halfHeight = bounds.height() * scale / 2f
+        return RectF(centerX - halfWidth, centerY - halfHeight, centerX + halfWidth, centerY + halfHeight)
+    }
+
+    /** Mirrors the stable width computed inside the landscape 12h time block. */
+    private fun landscapeTwelveHourStableWidth(): Float {
+        val slotWidth = widestDigitWidth(timePaint)
+        val colonWidth = timePaint.measureText(":")
+        val pairWidth = slotWidth * 2f
+        val colonGap = timePaint.textSize * 0.02f
+        return pairWidth + colonGap + colonWidth + colonGap + pairWidth
+    }
+
+    private fun landscapeTimeBounds(
+        timeCenterX: Float,
+        timeWidth: Float,
+        timeBaseline: Float,
+        timeMetrics: Paint.FontMetrics,
+        twelveHour: Boolean,
+        density: Float,
+    ): RectF {
+        // 12h: the AM/PM stack sits left of the hour digits (see drawLandscapeTwelveHourAmPm).
+        val amPmExtra = if (twelveHour) {
+            max(8f * density, timePaint.textSize * 0.055f) + timePaint.textSize * 0.155f
+        } else {
+            0f
+        }
+        return RectF(
+            timeCenterX - timeWidth / 2f - amPmExtra,
+            timeBaseline + timeMetrics.ascent,
+            timeCenterX + timeWidth / 2f,
+            timeBaseline + timeMetrics.descent
+        )
+    }
+
+    private fun centeredTextBounds(text: String, centerX: Float, baseline: Float, paint: Paint): RectF {
+        val halfWidth = paint.measureText(text) / 2f
+        val fm = paint.fontMetrics
+        return RectF(centerX - halfWidth, baseline + fm.ascent, centerX + halfWidth, baseline + fm.descent)
+    }
+
+    private fun landscapeWeatherBounds(
+        isSmallScreen: Boolean,
+        weatherText: String,
+        iconSize: Int,
+        vmin: Float,
+        contentCenterX: Float,
+        timeCenterX: Float,
+        timeWidth: Float,
+        timeVisualCenterY: Float,
+        weatherGap: Float,
+        weatherColumnWidth: Float,
+        weatherTotalHeight: Float,
+    ): RectF {
+        if (isSmallScreen) {
+            val smallIconSize = (iconSize * 0.7f).toInt()
+            val scratch = Paint(temperaturePaint).apply { textSize = temperaturePaint.textSize * 0.8f }
+            val tempWidth = scratch.measureText(weatherText)
+            val totalWidth = tempWidth + vmin * 0.02f + smallIconSize
+            val startX = contentCenterX - totalWidth / 2f
+            val fm = scratch.fontMetrics
+            val halfHeight = maxOf(smallIconSize.toFloat(), fm.descent - fm.ascent) / 2f
+            return RectF(
+                startX,
+                timeVisualCenterY - halfHeight,
+                startX + totalWidth,
+                timeVisualCenterY + halfHeight
+            )
+        }
+        val left = timeCenterX + timeWidth / 2f + weatherGap
+        val top = timeVisualCenterY - weatherTotalHeight / 2f
+        return RectF(left, top, left + weatherColumnWidth, top + weatherTotalHeight)
+    }
+
+    /** Same geometry as [drawWeatherColumnBesideTime]. */
+    private fun weatherColumnBounds(
+        timeCenterX: Float,
+        timeWidth: Float,
+        timeBaseline: Float,
+        timeMetrics: Paint.FontMetrics,
+        weatherGap: Float,
+        weatherColumnWidth: Float,
+        iconSize: Int,
+        weatherSpacing: Float,
+        verticalNudgeY: Float = 0f
+    ): RectF {
+        val weatherColumnLeft = timeCenterX + timeWidth / 2f + weatherGap
+        val timeVisualCenterY = timeBaseline + (timeMetrics.ascent + timeMetrics.descent) / 2f
+        val weatherTotalHeight = iconSize + weatherSpacing +
+            (temperaturePaint.fontMetrics.descent - temperaturePaint.fontMetrics.ascent)
+        val weatherTop = timeVisualCenterY - weatherTotalHeight / 2f + verticalNudgeY
+        return RectF(
+            weatherColumnLeft,
+            weatherTop,
+            weatherColumnLeft + weatherColumnWidth,
+            weatherTop + weatherTotalHeight
+        )
+    }
+
+    /**
+     * Layout ids for the configured (non-blank) status slots, in draw order, keyed by the
+     * slot's settings position so slot 2 keeps its own spot even when slot 1 is empty.
+     * Null on the built-in path.
+     */
+    private fun statusLayoutIds(): List<SimpleClockLayoutElementId>? {
+        if (frameLayout == null) return null
+        val ids = ArrayList<SimpleClockLayoutElementId>(3)
+        statusSlots.forEachIndexed { index, slot ->
+            if (slot.entityId.isNotBlank()) {
+                SimpleClockLayoutElementId.statusSlot(index)?.let { ids += it }
+            }
+        }
+        return ids
+    }
+
+    private fun defaultLogoBounds(): RectF? {
+        if (width <= 0 || height <= 0) return null
+        val layout = OverlayLogoBadge.layoutPx(this)
+        if (layout.sizePx <= 0) return null
+        return RectF(OverlayLogoBadge.destRect(width, layout))
+    }
+
+    /**
+     * HA logo painted on the clock canvas (custom layout / editor only). Same size,
+     * inset and alpha as the overlay ImageView; not affected by pixel shift.
+     */
+    private fun drawCanvasLogo(canvas: Canvas, element: SimpleClockLayoutElement?, record: Boolean) {
+        val bounds = defaultLogoBounds() ?: return
+        if (record) frameDefaultBounds[SimpleClockLayoutElementId.LOGO] = RectF(bounds)
+        if (element != null && !element.visible) return
+        val target = if (element != null) transformedBounds(bounds, element) else RectF(bounds)
+        if (record) frameDrawnBounds[SimpleClockLayoutElementId.LOGO] = RectF(target)
+        if (canvasLogoBitmap == null && !canvasLogoLoadAttempted) {
+            canvasLogoLoadAttempted = true
+            canvasLogoBitmap = OverlayLogoBadge.loadHaLogo(context)
+        }
+        val bitmap = canvasLogoBitmap ?: return
+        val bitmapWidth = bitmap.width.toFloat()
+        val bitmapHeight = bitmap.height.toFloat()
+        if (bitmapWidth <= 0f || bitmapHeight <= 0f) return
+        // FIT_CENTER, like the overlay ImageView.
+        val fit = minOf(target.width() / bitmapWidth, target.height() / bitmapHeight)
+        val drawWidth = bitmapWidth * fit
+        val drawHeight = bitmapHeight * fit
+        val left = target.centerX() - drawWidth / 2f
+        val top = target.centerY() - drawHeight / 2f
+        canvas.drawBitmap(bitmap, null, RectF(left, top, left + drawWidth, top + drawHeight), canvasLogoPaint)
+    }
+
 
     /** Weather icon above temperature, vertically centered to the clock, placed to its right. */
     private fun drawWeatherColumnBesideTime(
@@ -2598,8 +3150,10 @@ class ScreensaverView(context: Context, private var screenWidth: Int, private va
         val weekdayText = weekdayShort(calendar)
         val monthDayText = formatMastheadMonthDay(calendar)
         val amPmText = if (use12Hour) splitTwelveHourParts(calendar).amPm else ""
-        val leftMeta = if (use12Hour) formatMastheadDate(calendar) else weekdayText
-        val rightMeta = if (use12Hour) amPmText else monthDayText
+        val customDate = customDateText(calendar)
+        val leftMeta = customDate ?: if (use12Hour) formatMastheadDate(calendar) else weekdayText
+        // A custom date pattern owns the whole date; the 12h AM/PM cell stays.
+        val rightMeta = if (use12Hour) amPmText else if (customDate != null) "" else monthDayText
         datePaint.textSize = vmin * dateScale
         datePaint.letterSpacing = 0.08f
         val savedDateColor = datePaint.color
@@ -2657,9 +3211,31 @@ class ScreensaverView(context: Context, private var screenWidth: Int, private va
         val timeCenterX = contentCenterX - horizontalOffset
 
         timePaint.textAlign = Paint.Align.CENTER
+        drawLayoutElement(canvas, SimpleClockLayoutElementId.TIME, {
+            RectF(
+                timeCenterX - timeWidth / 2f,
+                timeBaseline + timeMetrics.ascent,
+                timeCenterX + timeWidth / 2f,
+                timeBaseline + timeMetrics.descent
+            )
+        }) {
         canvas.drawText(clockText, timeCenterX, timeBaseline, timePaint)
+        }
 
         if (showWeather && weatherIconRes != null) {
+            drawLayoutElement(canvas, SimpleClockLayoutElementId.WEATHER, {
+                weatherColumnBounds(
+                    timeCenterX = timeCenterX,
+                    timeWidth = timeWidth,
+                    timeBaseline = timeBaseline,
+                    timeMetrics = timeMetrics,
+                    weatherGap = weatherGap,
+                    weatherColumnWidth = weatherColumnWidth,
+                    iconSize = iconSize,
+                    weatherSpacing = weatherSpacing,
+                    verticalNudgeY = 4f * density
+                )
+            }) {
             drawWeatherColumnBesideTime(
                 canvas = canvas,
                 weatherIconRes = weatherIconRes,
@@ -2674,6 +3250,7 @@ class ScreensaverView(context: Context, private var screenWidth: Int, private va
                 weatherSpacing = weatherSpacing,
                 verticalNudgeY = 4f * density
             )
+            }
         }
 
         val lineLeft = timeCenterX - timeWidth / 2f
@@ -2683,6 +3260,9 @@ class ScreensaverView(context: Context, private var screenWidth: Int, private va
             timeCenterX + timeWidth / 2f
         }
         val hairY = timeBaseline + timeMetrics.descent + hairGap
+        drawLayoutElement(canvas, SimpleClockLayoutElementId.DATE, {
+            RectF(lineLeft, hairY - hairStroke / 2f, lineRight, hairY + cellGap + metaHeight)
+        }) {
         val hairPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.argb(36, 255, 255, 255)
             strokeWidth = hairStroke
@@ -2696,6 +3276,7 @@ class ScreensaverView(context: Context, private var screenWidth: Int, private va
         if (rightMeta.isNotEmpty()) {
             val rightBaseline = hairY + cellGap - rightFm.ascent
             canvas.drawText(rightMeta, lineRight, rightBaseline, rightPaint)
+        }
         }
 
         datePaint.color = savedDateColor
@@ -2715,7 +3296,8 @@ class ScreensaverView(context: Context, private var screenWidth: Int, private va
                 portrait = true,
                 sizeScale = SIMPLE_PORTRAIT_SLOT_SCALE,
                 blockGapScale = SIMPLE_PORTRAIT_SLOT_GAP_SCALE,
-                threeSeat = true
+                threeSeat = true,
+                layoutIds = statusLayoutIds()
             )
         }
     }
@@ -2792,7 +3374,8 @@ class ScreensaverView(context: Context, private var screenWidth: Int, private va
         portrait: Boolean,
         sizeScale: Float = 1f,
         blockGapScale: Float = 1f,
-        threeSeat: Boolean = false
+        threeSeat: Boolean = false,
+        layoutIds: List<SimpleClockLayoutElementId>? = null
     ) {
         val nameScale = when (screenCategory) {
             "tiny" -> 0.055f
@@ -2824,13 +3407,19 @@ class ScreensaverView(context: Context, private var screenWidth: Int, private va
             val width: Float
         )
 
-        val blocks = slots.map { slot ->
+        val blocks = slots.mapIndexed { slotIndex, slot ->
             val entityId = slot.entityId.trim()
             val rawState = statusEntityStates[entityId] ?: ""
             val isActive = isStatusEntityActive(rawState)
             // Custom label from settings is shown as-is; auto names (HA paste / friendly_name)
             // truncate English to at most 2 words.
-            val name = if (slot.label.isNotBlank()) {
+            // Custom layout: a per-slot name set in the editor wins over the slot label.
+            val layoutName = layoutIds?.getOrNull(slotIndex)
+                ?.let { frameLayout?.get(it)?.text }
+                ?.takeIf { it.isNotBlank() }
+            val name = if (layoutName != null) {
+                layoutName
+            } else if (slot.label.isNotBlank()) {
                 slot.label.trim()
             } else {
                 truncateAutoDisplayName(
@@ -2887,21 +3476,29 @@ class ScreensaverView(context: Context, private var screenWidth: Int, private va
             val columnLeft = centerX - maxBlockWidth / 2f
             val seatIndex = if (threeSeat && blocks.size == 1) 1 else 0
             var y = top + (drawRowHeight + drawBlockGap) * seatIndex
-            blocks.forEach { block ->
+            blocks.forEachIndexed { index, block ->
                 val rowCenterY = y + drawRowHeight / 2f
-                drawStatusIcon(
-                    canvas = canvas,
-                    resId = block.iconRes,
-                    left = columnLeft,
-                    top = rowCenterY - drawIconSize / 2f,
-                    size = drawIconSize
-                )
-                val textLeft = columnLeft + drawIconSize + drawIconTextGap
-                val textStackTop = rowCenterY - drawTextStackHeight / 2f
-                val nameBaseline = textStackTop - drawNameFm.ascent
-                val valueBaseline = nameBaseline + drawNameFm.descent + drawLineGap - drawValueFm.ascent
-                canvas.drawText(block.name, textLeft, nameBaseline, statusNamePaint)
-                canvas.drawText(block.value, textLeft, valueBaseline, statusValuePaint)
+                val layoutId = layoutIds?.getOrNull(index)
+                if (layoutId != null && frameLayout != null) {
+                    // Custom layout: each slot is its own element (default = its row here).
+                    val blockRect = RectF(
+                        columnLeft,
+                        y,
+                        columnLeft + drawIconSize + drawIconTextGap + block.textWidth * scale,
+                        y + drawRowHeight
+                    )
+                    drawLayoutElement(canvas, layoutId, { blockRect }) {
+                        drawStatusBlock(
+                            canvas, block.iconRes, block.name, block.value, columnLeft, rowCenterY,
+                            drawIconSize, drawIconTextGap, drawTextStackHeight, drawNameFm, drawValueFm, drawLineGap
+                        )
+                    }
+                } else {
+                    drawStatusBlock(
+                        canvas, block.iconRes, block.name, block.value, columnLeft, rowCenterY,
+                        drawIconSize, drawIconTextGap, drawTextStackHeight, drawNameFm, drawValueFm, drawLineGap
+                    )
+                }
                 y += drawRowHeight + drawBlockGap
             }
         } else {
@@ -2912,25 +3509,58 @@ class ScreensaverView(context: Context, private var screenWidth: Int, private va
             var x = centerX - totalDrawWidth / 2f
             val rowCenterY = top + drawRowHeight / 2f
 
-            blocks.forEach { block ->
+            blocks.forEachIndexed { index, block ->
                 val blockTextWidth = block.textWidth * scale
                 val blockWidth = drawIconSize + drawIconTextGap + blockTextWidth
-                drawStatusIcon(
-                    canvas = canvas,
-                    resId = block.iconRes,
-                    left = x,
-                    top = rowCenterY - drawIconSize / 2f,
-                    size = drawIconSize
-                )
-                val textLeft = x + drawIconSize + drawIconTextGap
-                val textStackTop = rowCenterY - drawTextStackHeight / 2f
-                val nameBaseline = textStackTop - drawNameFm.ascent
-                val valueBaseline = nameBaseline + drawNameFm.descent + drawLineGap - drawValueFm.ascent
-                canvas.drawText(block.name, textLeft, nameBaseline, statusNamePaint)
-                canvas.drawText(block.value, textLeft, valueBaseline, statusValuePaint)
+                val layoutId = layoutIds?.getOrNull(index)
+                if (layoutId != null && frameLayout != null) {
+                    // Custom layout: each chip is its own element (default = its spot in the row).
+                    val blockRect = RectF(x, top, x + blockWidth, top + drawRowHeight)
+                    drawLayoutElement(canvas, layoutId, { blockRect }) {
+                        drawStatusBlock(
+                            canvas, block.iconRes, block.name, block.value, x, rowCenterY,
+                            drawIconSize, drawIconTextGap, drawTextStackHeight, drawNameFm, drawValueFm, drawLineGap
+                        )
+                    }
+                } else {
+                    drawStatusBlock(
+                        canvas, block.iconRes, block.name, block.value, x, rowCenterY,
+                        drawIconSize, drawIconTextGap, drawTextStackHeight, drawNameFm, drawValueFm, drawLineGap
+                    )
+                }
                 x += blockWidth + drawBlockGap
             }
         }
+    }
+
+    /** One status chip: icon on the left, name over value on the right. Same math as before. */
+    private fun drawStatusBlock(
+        canvas: Canvas,
+        iconRes: Int,
+        name: String,
+        value: String,
+        left: Float,
+        rowCenterY: Float,
+        iconSize: Int,
+        iconTextGap: Float,
+        textStackHeight: Float,
+        nameFm: Paint.FontMetrics,
+        valueFm: Paint.FontMetrics,
+        lineGap: Float,
+    ) {
+        drawStatusIcon(
+            canvas = canvas,
+            resId = iconRes,
+            left = left,
+            top = rowCenterY - iconSize / 2f,
+            size = iconSize
+        )
+        val textLeft = left + iconSize + iconTextGap
+        val textStackTop = rowCenterY - textStackHeight / 2f
+        val nameBaseline = textStackTop - nameFm.ascent
+        val valueBaseline = nameBaseline + nameFm.descent + lineGap - valueFm.ascent
+        canvas.drawText(name, textLeft, nameBaseline, statusNamePaint)
+        canvas.drawText(value, textLeft, valueBaseline, statusValuePaint)
     }
 
     /** Prefer configured icon; if still the default HA logo, infer from entity id. */
@@ -3224,7 +3854,8 @@ class ScreensaverView(context: Context, private var screenWidth: Int, private va
         density: Float,
         creditsWidth: Float,
         screenCategory: String,
-        hasWallpaper: Boolean
+        hasWallpaper: Boolean,
+        layoutIds: List<SimpleClockLayoutElementId>? = null
     ) {
         if (slots.isEmpty()) return
         val nameScale = when (screenCategory) {
@@ -3281,28 +3912,36 @@ class ScreensaverView(context: Context, private var screenWidth: Int, private va
         val leaderPad = 6f * density
 
         var y = top
-        slots.forEach { slot ->
+        slots.forEachIndexed { slotIndex, slot ->
             val entityId = slot.entityId.trim()
             val rawState = statusEntityStates[entityId] ?: ""
-            val name = if (slot.label.isNotBlank()) {
-                slot.label.trim()
-            } else {
-                truncateAutoDisplayName(
-                    statusEntityLabels[entityId] ?: guessLabelFromEntityId(entityId)
-                )
-            }.uppercase(Locale.ROOT)
+            val layoutId = layoutIds?.getOrNull(slotIndex)
+            // Custom layout: a per-slot name set in the editor wins over the slot label.
+            val layoutName = layoutId?.let { frameLayout?.get(it)?.text }?.takeIf { it.isNotBlank() }
+            val name = (
+                layoutName ?: if (slot.label.isNotBlank()) {
+                    slot.label.trim()
+                } else {
+                    truncateAutoDisplayName(
+                        statusEntityLabels[entityId] ?: guessLabelFromEntityId(entityId)
+                    )
+                }
+                ).uppercase(Locale.ROOT)
             val value = formatStatusLabel(rawState, statusEntityUnits[entityId].orEmpty())
             val baseline = y - nameFm.ascent
-            val nameW = statusNamePaint.measureText(name)
-            val valueW = statusValuePaint.measureText(value)
-            val leaderStart = columnLeft + nameW + leaderPad
-            val leaderEnd = columnRight - valueW - leaderPad
-            if (leaderEnd > leaderStart + 4f * density) {
-                val leaderY = baseline + (nameFm.ascent + nameFm.descent) * 0.35f
-                canvas.drawLine(leaderStart, leaderY, leaderEnd, leaderY, leaderPaint)
+            if (layoutId != null && frameLayout != null) {
+                // Custom layout: each credit row is its own status element.
+                val rowRect = RectF(columnLeft, y, columnRight, y + rowHeight)
+                drawLayoutElement(canvas, layoutId, { rowRect }) {
+                    drawPortraitCreditsRow(
+                        canvas, name, value, columnLeft, columnRight, baseline, nameFm, leaderPaint, leaderPad, density
+                    )
+                }
+            } else {
+                drawPortraitCreditsRow(
+                    canvas, name, value, columnLeft, columnRight, baseline, nameFm, leaderPaint, leaderPad, density
+                )
             }
-            canvas.drawText(name, columnLeft, baseline, statusNamePaint)
-            canvas.drawText(value, columnRight, baseline, statusValuePaint)
             y += rowHeight + rowGap
         }
 
@@ -3310,6 +3949,31 @@ class ScreensaverView(context: Context, private var screenWidth: Int, private va
         statusValuePaint.textAlign = prevValueAlign
         statusNamePaint.letterSpacing = prevNameSpacing
         statusValuePaint.letterSpacing = prevValueSpacing
+    }
+
+    /** One credits row: NAME ···· value (same math as before the custom layout split). */
+    private fun drawPortraitCreditsRow(
+        canvas: Canvas,
+        name: String,
+        value: String,
+        columnLeft: Float,
+        columnRight: Float,
+        baseline: Float,
+        nameFm: Paint.FontMetrics,
+        leaderPaint: Paint,
+        leaderPad: Float,
+        density: Float,
+    ) {
+        val nameW = statusNamePaint.measureText(name)
+        val valueW = statusValuePaint.measureText(value)
+        val leaderStart = columnLeft + nameW + leaderPad
+        val leaderEnd = columnRight - valueW - leaderPad
+        if (leaderEnd > leaderStart + 4f * density) {
+            val leaderY = baseline + (nameFm.ascent + nameFm.descent) * 0.35f
+            canvas.drawLine(leaderStart, leaderY, leaderEnd, leaderY, leaderPaint)
+        }
+        canvas.drawText(name, columnLeft, baseline, statusNamePaint)
+        canvas.drawText(value, columnRight, baseline, statusValuePaint)
     }
 
     private fun portraitCreditsColumnHeight(

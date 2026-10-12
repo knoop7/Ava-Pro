@@ -107,7 +107,6 @@ enum class InteractionSettingsDestination {
     Scene,
     VoiceMessage,
     QuickEntity,
-    SimpleClockAppearance,
     SimpleClockStatus,
     DreamClockAppearance,
 }
@@ -339,25 +338,6 @@ fun InteractionSettingsScreen(
                     coroutineScope = coroutineScope,
                     onOpenAppearanceSettings = {
                         navController.navigate(Screen.SETTINGS_INTERACTION_SIMPLE_CLOCK_APPEARANCE) {
-                            launchSingleTop = true
-                        }
-                    }
-                )
-            }
-        }
-
-        InteractionSettingsDestination.SimpleClockAppearance -> {
-            SettingsDetailScreen(
-                navController = navController,
-                title = stringResource(R.string.settings_simple_clock_appearance_entry_title)
-            ) {
-                simpleClockAppearanceSettingsSection(
-                    viewModel = viewModel,
-                    playerState = playerState,
-                    enabled = enabled,
-                    coroutineScope = coroutineScope,
-                    onOpenStatusSettings = {
-                        navController.navigate(Screen.SETTINGS_INTERACTION_SIMPLE_CLOCK_STATUS) {
                             launchSingleTop = true
                         }
                     }
@@ -1673,278 +1653,289 @@ private fun DreamClockTimerEntitySetting(
     }
 }
 
-private fun LazyListScope.simpleClockAppearanceSettingsSection(
+/**
+ * What the Simple Clock shows: wallpaper, portrait style, weather, 12h and the status slots
+ * entry. Hosted by the custom layout editor's "Display" tab so it sits next to the live
+ * preview; same rows / view model calls as the old Appearance page cards.
+ */
+@Composable
+internal fun SimpleClockDisplaySettingsCards(
     viewModel: SettingsViewModel,
     playerState: PlayerSettings?,
     enabled: Boolean,
     coroutineScope: kotlinx.coroutines.CoroutineScope,
-    onOpenStatusSettings: () -> Unit
+    onOpenStatusSettings: () -> Unit,
 ) {
-    // Card 1 — wallpaper / background appearance
-    item(key = "simple_clock_wallpaper") {
-        SimpleCard {
-            ScreensaverWallpaperUrlSetting(
+    SimpleCard {
+        ScreensaverWallpaperUrlSetting(
+            viewModel = viewModel,
+            playerState = playerState,
+            enabled = enabled,
+            coroutineScope = coroutineScope
+        )
+
+        SettingsDivider()
+        Spacer(modifier = Modifier.height(8.dp))
+
+        ScreensaverWallpaperRefreshSetting(
+            viewModel = viewModel,
+            playerState = playerState,
+            enabled = enabled,
+            coroutineScope = coroutineScope
+        )
+
+        SettingsDivider()
+        Spacer(modifier = Modifier.height(8.dp))
+
+        SettingRow(
+            label = stringResource(R.string.settings_screensaver_wallpaper_dual_pane),
+            subLabel = stringResource(R.string.settings_screensaver_wallpaper_dual_pane_desc)
+        ) {
+            ModernSwitch(
+                checked = playerState?.screensaverWallpaperDualPane ?: false,
+                enabled = enabled,
+                onCheckedChange = {
+                    coroutineScope.launch {
+                        viewModel.saveScreensaverWallpaperDualPane(it)
+                    }
+                }
+            )
+        }
+
+        SettingsDivider()
+        Spacer(modifier = Modifier.height(8.dp))
+
+        SettingRow(
+            label = stringResource(R.string.settings_screensaver_wallpaper_dark_overlay),
+            subLabel = stringResource(R.string.settings_screensaver_wallpaper_dark_overlay_desc)
+        ) {
+            ModernSwitch(
+                checked = playerState?.screensaverWallpaperDarkOverlayEnabled ?: true,
+                enabled = enabled,
+                onCheckedChange = {
+                    coroutineScope.launch {
+                        viewModel.saveScreensaverWallpaperDarkOverlayEnabled(it)
+                    }
+                }
+            )
+        }
+
+        SettingsDivider()
+        Spacer(modifier = Modifier.height(8.dp))
+
+        val portraitMagazine = stringResource(R.string.settings_simple_clock_portrait_magazine)
+        val portraitMagazineDesc = stringResource(R.string.settings_simple_clock_portrait_magazine_desc)
+        val portraitSimple = stringResource(R.string.settings_simple_clock_portrait_simple)
+        val portraitSimpleDesc = stringResource(R.string.settings_simple_clock_portrait_simple_desc)
+        SelectSetting(
+            name = stringResource(R.string.settings_simple_clock_portrait_style),
+            description = stringResource(R.string.settings_simple_clock_portrait_style_desc),
+            selected = SimpleClockPortraitStyle.fromStored(playerState?.screensaverPortraitStyle),
+            items = SimpleClockPortraitStyle.entries,
+            enabled = enabled,
+            key = { it.storageKey },
+            value = { style ->
+                when (style) {
+                    SimpleClockPortraitStyle.MAGAZINE -> portraitMagazine
+                    else -> portraitSimple
+                }
+            },
+            itemDescription = { style ->
+                when (style) {
+                    SimpleClockPortraitStyle.MAGAZINE -> portraitMagazineDesc
+                    else -> portraitSimpleDesc
+                }
+            },
+            onConfirmRequest = { style ->
+                if (style != null) {
+                    coroutineScope.launch {
+                        viewModel.saveSimpleClockPortraitStyle(style)
+                    }
+                }
+            }
+        )
+
+        SettingsDivider()
+        Spacer(modifier = Modifier.height(8.dp))
+
+        SettingRow(
+            label = stringResource(R.string.settings_simple_clock_weather),
+            subLabel = stringResource(R.string.settings_simple_clock_weather_desc)
+        ) {
+            ModernSwitch(
+                checked = playerState?.enableScreensaverWeather ?: true,
+                enabled = enabled,
+                onCheckedChange = {
+                    coroutineScope.launch {
+                        viewModel.saveSimpleClockWeatherEnabled(it)
+                    }
+                }
+            )
+        }
+
+        if (playerState?.enableScreensaverWeather != false) {
+            SettingsDivider()
+            Spacer(modifier = Modifier.height(8.dp))
+            SimpleClockWeatherEntitySetting(
                 viewModel = viewModel,
                 playerState = playerState,
                 enabled = enabled,
                 coroutineScope = coroutineScope
             )
+        }
+    }
 
-            SettingsDivider()
-            Spacer(modifier = Modifier.height(8.dp))
-
-            ScreensaverWallpaperRefreshSetting(
-                viewModel = viewModel,
-                playerState = playerState,
+    SimpleCard {
+        SettingRow(
+            label = stringResource(R.string.settings_simple_clock_12_hour),
+            subLabel = stringResource(R.string.settings_simple_clock_12_hour_desc)
+        ) {
+            ModernSwitch(
+                checked = playerState?.screensaver12HourEnabled ?: false,
                 enabled = enabled,
-                coroutineScope = coroutineScope
+                onCheckedChange = {
+                    coroutineScope.launch {
+                        viewModel.saveSimpleClock12HourEnabled(it)
+                    }
+                }
             )
+        }
 
-            SettingsDivider()
-            Spacer(modifier = Modifier.height(8.dp))
+        SettingsDivider()
+        Spacer(modifier = Modifier.height(8.dp))
 
-            SettingRow(
-                label = stringResource(R.string.settings_screensaver_wallpaper_dual_pane),
-                subLabel = stringResource(R.string.settings_screensaver_wallpaper_dual_pane_desc)
-            ) {
-                ModernSwitch(
-                    checked = playerState?.screensaverWallpaperDualPane ?: false,
-                    enabled = enabled,
-                    onCheckedChange = {
-                        coroutineScope.launch {
-                            viewModel.saveScreensaverWallpaperDualPane(it)
-                        }
-                    }
-                )
-            }
+        SettingRow(
+            label = stringResource(R.string.settings_screensaver_status_slots),
+            subLabel = stringResource(R.string.settings_screensaver_status_slots_entry_desc),
+            onClick = onOpenStatusSettings
+        ) {
+            SettingsChevronIcon(tint = SubLabelColor)
+        }
+    }
+}
 
-            SettingsDivider()
-            Spacer(modifier = Modifier.height(8.dp))
-
-            SettingRow(
-                label = stringResource(R.string.settings_screensaver_wallpaper_dark_overlay),
-                subLabel = stringResource(R.string.settings_screensaver_wallpaper_dark_overlay_desc)
-            ) {
-                ModernSwitch(
-                    checked = playerState?.screensaverWallpaperDarkOverlayEnabled ?: true,
-                    enabled = enabled,
-                    onCheckedChange = {
-                        coroutineScope.launch {
-                            viewModel.saveScreensaverWallpaperDarkOverlayEnabled(it)
-                        }
-                    }
-                )
-            }
-
-            SettingsDivider()
-            Spacer(modifier = Modifier.height(8.dp))
-
-            val portraitMagazine = stringResource(R.string.settings_simple_clock_portrait_magazine)
-            val portraitMagazineDesc = stringResource(R.string.settings_simple_clock_portrait_magazine_desc)
-            val portraitSimple = stringResource(R.string.settings_simple_clock_portrait_simple)
-            val portraitSimpleDesc = stringResource(R.string.settings_simple_clock_portrait_simple_desc)
-            SelectSetting(
-                name = stringResource(R.string.settings_simple_clock_portrait_style),
-                description = stringResource(R.string.settings_simple_clock_portrait_style_desc),
-                selected = SimpleClockPortraitStyle.fromStored(playerState?.screensaverPortraitStyle),
-                items = SimpleClockPortraitStyle.entries,
+/**
+ * Simple Clock behavior: burn-in pixel shift, screen off in the dark, smart AOD.
+ * Hosted at the bottom of the custom layout editor (same rows as the old Appearance card).
+ */
+@Composable
+internal fun SimpleClockBehaviorSettingsCard(
+    viewModel: SettingsViewModel,
+    playerState: PlayerSettings?,
+    enabled: Boolean,
+    coroutineScope: kotlinx.coroutines.CoroutineScope,
+) {
+    SimpleCard {
+        SettingRow(
+            label = stringResource(R.string.settings_simple_clock_pixel_shift),
+            subLabel = stringResource(R.string.settings_simple_clock_pixel_shift_desc)
+        ) {
+            ModernSwitch(
+                checked = playerState?.screensaverPixelShiftEnabled ?: false,
                 enabled = enabled,
-                key = { it.storageKey },
-                value = { style ->
-                    when (style) {
-                        SimpleClockPortraitStyle.MAGAZINE -> portraitMagazine
-                        else -> portraitSimple
+                onCheckedChange = {
+                    coroutineScope.launch {
+                        viewModel.saveSimpleClockPixelShiftEnabled(it)
                     }
-                },
-                itemDescription = { style ->
-                    when (style) {
-                        SimpleClockPortraitStyle.MAGAZINE -> portraitMagazineDesc
-                        else -> portraitSimpleDesc
-                    }
-                },
-                onConfirmRequest = { style ->
-                    if (style != null) {
-                        coroutineScope.launch {
-                            viewModel.saveSimpleClockPortraitStyle(style)
+                }
+            )
+        }
+
+        SettingsDivider()
+        Spacer(modifier = Modifier.height(8.dp))
+
+        val darkOffContext = LocalContext.current
+        SettingRow(
+            label = stringResource(R.string.settings_screensaver_dark_off),
+            subLabel = stringResource(R.string.settings_screensaver_dark_off_desc)
+        ) {
+            ModernSwitch(
+                checked = playerState?.screensaverDarkOffEnabled ?: false,
+                enabled = enabled,
+                onCheckedChange = {
+                    coroutineScope.launch {
+                        if (!it || ScreenControlUtils.ensureScreenOffPermission(darkOffContext)) {
+                            viewModel.saveSimpleClockDarkOffEnabled(it)
                         }
                     }
                 }
             )
-
-            SettingsDivider()
-            Spacer(modifier = Modifier.height(8.dp))
-
-            SettingRow(
-                label = stringResource(R.string.settings_simple_clock_weather),
-                subLabel = stringResource(R.string.settings_simple_clock_weather_desc)
-            ) {
-                ModernSwitch(
-                    checked = playerState?.enableScreensaverWeather ?: true,
-                    enabled = enabled,
-                    onCheckedChange = {
-                        coroutineScope.launch {
-                            viewModel.saveSimpleClockWeatherEnabled(it)
-                        }
-                    }
-                )
-            }
-
-            if (playerState?.enableScreensaverWeather != false) {
-                SettingsDivider()
-                Spacer(modifier = Modifier.height(8.dp))
-                SimpleClockWeatherEntitySetting(
-                    viewModel = viewModel,
-                    playerState = playerState,
-                    enabled = enabled,
-                    coroutineScope = coroutineScope
-                )
-            }
         }
-    }
 
-    // Card 2 — on-clock display: time format + burn-in shift + smart AOD + entity status chips
-    item(key = "simple_clock_status_display") {
-        SimpleCard {
-            SettingRow(
-                label = stringResource(R.string.settings_simple_clock_12_hour),
-                subLabel = stringResource(R.string.settings_simple_clock_12_hour_desc)
-            ) {
-                ModernSwitch(
-                    checked = playerState?.screensaver12HourEnabled ?: false,
-                    enabled = enabled,
-                    onCheckedChange = {
-                        coroutineScope.launch {
-                            viewModel.saveSimpleClock12HourEnabled(it)
-                        }
+        SettingsDivider()
+        Spacer(modifier = Modifier.height(8.dp))
+
+        SettingRow(
+            label = stringResource(R.string.settings_simple_clock_smart_aod),
+            subLabel = stringResource(R.string.settings_simple_clock_smart_aod_desc)
+        ) {
+            ModernSwitch(
+                checked = playerState?.smartPowerSavingAodEnabled ?: false,
+                enabled = enabled,
+                onCheckedChange = {
+                    coroutineScope.launch {
+                        viewModel.saveSmartPowerSavingAodEnabled(it)
                     }
-                )
-            }
+                }
+            )
+        }
+
+        if (playerState?.smartPowerSavingAodEnabled == true) {
+            SettingsDivider()
+            Spacer(modifier = Modifier.height(8.dp))
+
+            val context = LocalContext.current
+            IntSetting(
+                name = stringResource(R.string.settings_simple_clock_smart_aod_timeout),
+                description = stringResource(R.string.settings_simple_clock_smart_aod_timeout_desc),
+                value = playerState.smartPowerSavingAodTimeoutSeconds,
+                enabled = enabled,
+                validation = { value ->
+                    if (value != null && value in 10..3600) {
+                        null
+                    } else {
+                        context.getString(R.string.validation_range, 10, 3600)
+                    }
+                },
+                onConfirmRequest = {
+                    coroutineScope.launch {
+                        if (it != null) viewModel.saveSmartPowerSavingAodTimeoutSeconds(it)
+                    }
+                },
+            )
 
             SettingsDivider()
             Spacer(modifier = Modifier.height(8.dp))
 
-            SettingRow(
-                label = stringResource(R.string.settings_simple_clock_pixel_shift),
-                subLabel = stringResource(R.string.settings_simple_clock_pixel_shift_desc)
-            ) {
-                ModernSwitch(
-                    checked = playerState?.screensaverPixelShiftEnabled ?: false,
-                    enabled = enabled,
-                    onCheckedChange = {
-                        coroutineScope.launch {
-                            viewModel.saveSimpleClockPixelShiftEnabled(it)
-                        }
+            val maskPercent = playerState.smartPowerSavingAodMaskPercent.coerceIn(5, 100)
+            var maskSlider by remember(maskPercent) { mutableFloatStateOf(maskPercent.toFloat()) }
+            SettingSliderLabelRow(
+                title = stringResource(R.string.settings_simple_clock_smart_aod_mask),
+                description = stringResource(R.string.settings_simple_clock_smart_aod_mask_desc),
+                badgeText = "${maskSlider.toInt()}%",
+            )
+            TickSlider(
+                value = maskSlider,
+                onValueChange = { maskSlider = it },
+                onValueChangeFinished = {
+                    val snapped = maskSlider.toInt().coerceIn(5, 100)
+                    maskSlider = snapped.toFloat()
+                    coroutineScope.launch {
+                        viewModel.saveSmartPowerSavingAodMaskPercent(snapped)
                     }
-                )
-            }
-
-            SettingsDivider()
-            Spacer(modifier = Modifier.height(8.dp))
-
-            val darkOffContext = LocalContext.current
-            SettingRow(
-                label = stringResource(R.string.settings_screensaver_dark_off),
-                subLabel = stringResource(R.string.settings_screensaver_dark_off_desc)
-            ) {
-                ModernSwitch(
-                    checked = playerState?.screensaverDarkOffEnabled ?: false,
-                    enabled = enabled,
-                    onCheckedChange = {
-                        coroutineScope.launch {
-                            if (!it || ScreenControlUtils.ensureScreenOffPermission(darkOffContext)) {
-                                viewModel.saveSimpleClockDarkOffEnabled(it)
-                            }
-                        }
-                    }
-                )
-            }
-
-            SettingsDivider()
-            Spacer(modifier = Modifier.height(8.dp))
-
-            SettingRow(
-                label = stringResource(R.string.settings_simple_clock_smart_aod),
-                subLabel = stringResource(R.string.settings_simple_clock_smart_aod_desc)
-            ) {
-                ModernSwitch(
-                    checked = playerState?.smartPowerSavingAodEnabled ?: false,
-                    enabled = enabled,
-                    onCheckedChange = {
-                        coroutineScope.launch {
-                            viewModel.saveSmartPowerSavingAodEnabled(it)
-                        }
-                    }
-                )
-            }
-
-            if (playerState?.smartPowerSavingAodEnabled == true) {
-                SettingsDivider()
-                Spacer(modifier = Modifier.height(8.dp))
-
-                val context = LocalContext.current
-                IntSetting(
-                    name = stringResource(R.string.settings_simple_clock_smart_aod_timeout),
-                    description = stringResource(R.string.settings_simple_clock_smart_aod_timeout_desc),
-                    value = playerState.smartPowerSavingAodTimeoutSeconds,
-                    enabled = enabled,
-                    validation = { value ->
-                        if (value != null && value in 10..3600) {
-                            null
-                        } else {
-                            context.getString(R.string.validation_range, 10, 3600)
-                        }
-                    },
-                    onConfirmRequest = {
-                        coroutineScope.launch {
-                            if (it != null) viewModel.saveSmartPowerSavingAodTimeoutSeconds(it)
-                        }
-                    },
-                )
-
-                SettingsDivider()
-                Spacer(modifier = Modifier.height(8.dp))
-
-                val maskPercent = playerState.smartPowerSavingAodMaskPercent.coerceIn(5, 100)
-                var maskSlider by remember(maskPercent) { mutableFloatStateOf(maskPercent.toFloat()) }
-                SettingSliderLabelRow(
-                    title = stringResource(R.string.settings_simple_clock_smart_aod_mask),
-                    description = stringResource(R.string.settings_simple_clock_smart_aod_mask_desc),
-                    badgeText = "${maskSlider.toInt()}%",
-                )
-                TickSlider(
-                    value = maskSlider,
-                    onValueChange = { maskSlider = it },
-                    onValueChangeFinished = {
-                        val snapped = maskSlider.toInt().coerceIn(5, 100)
-                        maskSlider = snapped.toFloat()
-                        coroutineScope.launch {
-                            viewModel.saveSmartPowerSavingAodMaskPercent(snapped)
-                        }
-                    },
-                    enabled = enabled,
-                    valueRange = 5f..100f,
-                    steps = 94,
-                    colors = SliderDefaults.colors(
-                        thumbColor = getAccentColor(),
-                        activeTrackColor = getAccentColor(),
-                        inactiveTrackColor = getSliderInactiveColor(),
-                        activeTickColor = Color.Transparent,
-                        inactiveTickColor = Color.Transparent,
-                    ),
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
-
-            SettingsDivider()
-            Spacer(modifier = Modifier.height(8.dp))
-
-            SettingRow(
-                label = stringResource(R.string.settings_screensaver_status_slots),
-                subLabel = stringResource(R.string.settings_screensaver_status_slots_entry_desc),
-                onClick = onOpenStatusSettings
-            ) {
-                SettingsChevronIcon(tint = SubLabelColor)
-            }
+                },
+                enabled = enabled,
+                valueRange = 5f..100f,
+                steps = 94,
+                colors = SliderDefaults.colors(
+                    thumbColor = getAccentColor(),
+                    activeTrackColor = getAccentColor(),
+                    inactiveTrackColor = getSliderInactiveColor(),
+                    activeTickColor = Color.Transparent,
+                    inactiveTickColor = Color.Transparent,
+                ),
+                modifier = Modifier.padding(top = 8.dp),
+            )
         }
     }
 }
@@ -2997,7 +2988,7 @@ private fun ScreensaverWallpaperRefreshSetting(
 }
 
 @Composable
-private fun SimpleClockTextDialog(
+internal fun SimpleClockTextDialog(
     title: String,
     description: String,
     currentValue: String,
@@ -3007,7 +2998,13 @@ private fun SimpleClockTextDialog(
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     validation: ((String) -> String?)? = null,
     showClearAction: Boolean = false,
-    clearContentDescription: String? = null
+    clearContentDescription: String? = null,
+    /** Roomier field / spacing (layout editor). Off keeps the compact settings look. */
+    roomy: Boolean = false,
+    /** Hard cap on input length; a counter is shown in multi-line mode. */
+    maxLength: Int = Int.MAX_VALUE,
+    /** Lets long text wrap (up to 4 visible lines) instead of a single scrolling line. */
+    multiLine: Boolean = false
 ) {
     var text by remember { mutableStateOf(currentValue) }
     val validationText = validation?.invoke(text)
@@ -3045,13 +3042,14 @@ private fun SimpleClockTextDialog(
             Column {
                 Text(
                     text = description,
-                    fontSize = 11.sp,
+                    fontSize = if (roomy) settingsBodyTextSize() else 11.sp,
+                    lineHeight = if (roomy) 19.sp else androidx.compose.ui.unit.TextUnit.Unspecified,
                     color = getSettingsDescriptionColor(),
-                    modifier = Modifier.padding(bottom = 16.dp)
+                    modifier = Modifier.padding(bottom = if (roomy) 20.dp else 16.dp)
                 )
                 androidx.compose.material3.TextField(
                     value = text,
-                    onValueChange = { text = it },
+                    onValueChange = { text = it.take(maxLength) },
                     placeholder = {
                         Text(
                             text = placeholder,
@@ -3063,16 +3061,28 @@ private fun SimpleClockTextDialog(
                     },
                     supportingText = if (!validationText.isNullOrBlank()) {
                         { Text(validationText, fontSize = settingsBodyTextSize()) }
+                    } else if (multiLine && maxLength != Int.MAX_VALUE) {
+                        {
+                            Text(
+                                text = "${text.length} / $maxLength",
+                                fontSize = 12.sp,
+                                color = getSettingsDescriptionColor(),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
                     } else {
                         null
                     },
                     isError = !validationText.isNullOrBlank(),
-                    singleLine = true,
+                    singleLine = !multiLine,
+                    maxLines = if (multiLine) 4 else 1,
                     keyboardOptions = keyboardOptions,
                     // Keep a single-line control after clear; M3 TextField otherwise reserves tall padding.
+                    // Roomy: standard 56dp field that can grow for the error line instead of squeezing.
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp),
+                        .then(if (roomy) Modifier.heightIn(min = 56.dp) else Modifier.height(48.dp)),
                     textStyle = androidx.compose.ui.text.TextStyle(
                         fontSize = settingsTitleTextSize(),
                         color = getLabelColor()

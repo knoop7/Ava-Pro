@@ -290,7 +290,10 @@ abstract class EspHomeDevice(
                 wasInteractive = isDisplayInteractiveForHaLink()
                 continue
             }
-            val idleMs = SystemClock.elapsedRealtime() - lastInboundElapsedMs
+            // #254: also trust the socket's own receive stamp. HA's pings and
+            // commands were arriving while the handler-side stamp stayed stale.
+            val lastSeen = maxOf(lastInboundElapsedMs, server.currentClientLastFrameElapsedMs() ?: 0L)
+            val idleMs = SystemClock.elapsedRealtime() - lastSeen
             val displayOn = isDisplayInteractiveForHaLink()
             // First check after the display wakes still uses the screen-off floor.
             // Doze can leave idle already past the 120s interactive timeout; hanging

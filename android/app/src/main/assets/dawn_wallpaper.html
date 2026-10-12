@@ -233,6 +233,28 @@
             opacity: 0.55;
         }
 
+        /* #253: dark-mode scrim — above wallpaper / veils (same z, later in DOM),
+           below clock, poem, capsules and hourly strip (z >= 3). Plain black layer,
+           no CSS filter (cheap on old WebViews). */
+        .dark-mode-dim {
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            pointer-events: none;
+            background: #000;
+            opacity: 0;
+            transition: opacity 0.6s ease;
+        }
+
+        body.dark-mode .dark-mode-dim {
+            opacity: 0.5;
+        }
+
         /* —— Classic bottom-left poem layout —— */
         .info-container {
             position: absolute;
@@ -2315,6 +2337,7 @@
     <div class="gradient-overlay"></div>
     <div class="mist" aria-hidden="true"></div>
     <div class="readability-veil" aria-hidden="true"></div>
+    <div class="dark-mode-dim" aria-hidden="true"></div>
 
     <!-- Fake preload logo: directly above wallpaper stack, never between clock sublayers -->
     <div class="logo-splash" id="logo-splash" aria-hidden="true">
@@ -3943,6 +3966,10 @@
                     isoTimeEnabled = !!cfg.isoTime;
                     toggleClass(document.body, 'iso-time', isoTimeEnabled);
                     mergeWeatherIconsEnabled = !!cfg.mergeWeatherIcons;
+                    // #253: only touch the scrim when the App sent the flag.
+                    if (Object.prototype.hasOwnProperty.call(cfg, 'darkMode')) {
+                        toggleClass(document.body, 'dark-mode', !!cfg.darkMode);
+                    }
                     renderSlots();
                     // Capsules: only filled entity IDs. Hourly: weather entity + real hours.
                     // Important: empty/missing cfg.hourly must NOT wipe a strip that setHourly
@@ -4006,6 +4033,12 @@
                     hourlyHours = hours;
                     ingestHourlyPastCache(hours);
                     renderHourly();
+                } catch (e) {}
+            },
+            /** #253: live dark-mode scrim toggle without re-running setConfig. */
+            setDarkMode: function (on) {
+                try {
+                    toggleClass(document.body, 'dark-mode', !!on);
                 } catch (e) {}
             },
             /** Seed ≤3h past cache (HA upstream is Now+future only). */

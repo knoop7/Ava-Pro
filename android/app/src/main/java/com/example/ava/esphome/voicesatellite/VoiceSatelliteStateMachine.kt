@@ -193,6 +193,8 @@ class VoiceSatelliteStateMachine(
     private var deferredReply: String? = null
     /** Set when [replyInterceptor] claimed the current run's reply. */
     private var replySuppressed = false
+    /** The local intent fallback swallowed this run's HA reply (nothing of HA's will play). */
+    val isReplySuppressed: Boolean get() = replySuppressed
 
     // Hot-path settings snapshots: these are read from ESPHome/audio callback threads
     // where runBlocking { DataStore } causes jank and can ANR. Kept fresh by scope-bound
@@ -224,6 +226,21 @@ class VoiceSatelliteStateMachine(
      * TTS-end continue path only consults the judge while this holds.
      */
     @Volatile var smartJudgeEligible = false
+        private set
+
+    /**
+     * #252: HA's continue_conversation from this run's INTENT_END. Null until
+     * INTENT_END arrives (streaming TTS can start first). 超级智能 only forces
+     * the mic open on the cloud path; an HA-handled reply follows this flag.
+     */
+    @Volatile var haContinueFlag: Boolean? = null
+        private set
+
+    /**
+     * 超级智能 saw an HA reply before INTENT_END. The end-of-reply decision has
+     * to wait for HA's flag instead of reading a provisional "no".
+     */
+    @Volatile var smartContinueAwaitsIntent = false
         private set
 
     init {
@@ -382,6 +399,8 @@ class VoiceSatelliteStateMachine(
                 intentEnded = false
                 turnUserText = ""
                 smartJudgeEligible = false
+                haContinueFlag = null
+                smartContinueAwaitsIntent = false
                 val incomingUrl = voiceEvent.stringField("url")
                 earlyTtsUrl = if (dropOldReply) {
                     if (incomingUrl != null) Log.d(TAG, "RUN_START TTS url dropped, FAB splice")
@@ -584,7 +603,11 @@ class VoiceSatelliteStateMachine(
                     Log.d(TAG, "INTENT_END conversation_id=$id")
                     onConversationId?.invoke(id)
                 }
-                voiceEvent.stringField("continue_conversation")?.let { value ->
+                val haContinueField = voiceEvent.stringField("continue_conversation")
+                // #252: no field is HA not asking for a follow-up.
+                haContinueFlag = haContinueField == "1"
+                smartContinueAwaitsIntent = false
+                haContinueField?.let { value ->
                     continueConversation = value == "1"
                     Log.d(TAG, "INTENT_END continue_conversation=$continueConversation")
                 }
@@ -1500,8 +1523,9 @@ class VoiceSatelliteStateMachine(
      * position advance for [URL_PLAYOUT_PAUSED_END_MS] (progressive WAV often never
      * reaches ENDED); or when "playing" makes no progress for [URL_PLAYOUT_PLAYING_STALL_MS].
      * Those two stop the player first, which fires the audio-ended hook. Not started
-     * yet after [URL_PLAYOUT_NO_START_MS], or past [URL_PLAYOUT_MAX_WAIT_MS], completes
-     * without stopping (the old behaviour). The classic watchdog stays as the last resort.
+     * yet after [URL_PLAYOUT_NO_START_MS], or past [URL_PLAYOUT_MAX_WAIT_MS], also stops
+     * the player before completing (#252), so a continue turn never listens over it.
+     * The classic watchdog stays as the last resort.
      */
     private fun completeUrlTtsSessionAfterPlayout(reason: String) {
         val tts = player.ttsPlayer
@@ -1549,7 +1573,11 @@ class VoiceSatelliteStateMachine(
                     return@launch
                 }
                 if ((!started && waited >= URL_PLAYOUT_NO_START_MS) || waited >= URL_PLAYOUT_MAX_WAIT_MS) {
-                    Log.w(TAG, "URL TTS playout wait gave up after ${waited}ms (started=$started)")
+                    Log.w(TAG, "URL TTS playout wait gave up after ${waited}ms (started=$started), stopping playback")
+                    // #252: completing with the player still live let the continue
+                    // turn open the mic over the rest of the reply (or over a late
+                    // start). Stop it first, same as the drained branch above.
+                    tts.cancelActivePlayback()
                     completeUrlTtsSession("$reason; playout wait cap")
                     return@launch
                 }
@@ -1710,6 +1738,8 @@ class VoiceSatelliteStateMachine(
         continueConversation = true
         turnUserText = ""
         smartJudgeEligible = false
+        haContinueFlag = null
+        smartContinueAwaitsIntent = false
         stopWordProtectionEndTime = 0L
         haVadStarted = false
         stopRequested = false
@@ -1956,18 +1986,29 @@ class VoiceSatelliteStateMachine(
             onDeviceAction?.invoke(action)
         }
         if (smartContinueSnapshot) {
-            // 超级智能: an HA-handled reply keeps the mic open like the cloud path,
-            // whatever HA's continue_conversation said. Only a sign-off ends it:
+            // 超级智能 forces the mic open only on the cloud path (ava_turn, see
+            // VoiceSatellite.localReplyContinues). An HA-handled reply reaching
+            // here follows HA's own continue_conversation (#252: "现在几点" kept
+            // the mic open into the reply's echo). A sign-off still ends it:
             // the user saying they are done, or the reply itself saying goodbye.
             // A claimed reply never gets here (replySuppressed); a deferred one
             // that is claimed at TTS_END is reset to false by claimReply.
             // Only the reply's last sentence counts: "已退出音乐。还要调什么？" goes on.
             val done = LightKeywordDetector.isUserDone(turnUserText) ||
                 LightKeywordDetector.replyEndsWithGoodbye(speech)
-            continueConversation = !done
+            val haWants = haContinueFlag
+            if (haWants == null && !fromIntentEnd) smartContinueAwaitsIntent = true
+            val goOn = !done && haWants == true
+            continueConversation = goOn
             if (done) {
                 smartJudgeEligible = false
                 Log.d(TAG, "smart continue: sign-off heard, ending after this reply")
+            } else if (!goOn) {
+                Log.d(
+                    TAG,
+                    "smart continue: HA reply, continue_conversation=${haWants ?: "pending"}; " +
+                        "not forcing follow-up (cloud path only)",
+                )
             } else if (!smartJudgeEligible) {
                 smartJudgeEligible = true
                 onSmartReplyContinues?.invoke(turnUserText, spoken.ifEmpty { speech })

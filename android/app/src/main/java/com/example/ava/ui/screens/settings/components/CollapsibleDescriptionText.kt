@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -25,6 +27,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
@@ -458,6 +461,45 @@ fun SettingsEdgeFadeScrollColumn(
                     flingBehavior = flingBehavior,
                 ),
             verticalArrangement = verticalArrangement,
+            content = content,
+        )
+    }
+}
+
+/**
+ * Horizontal twin of [SettingsEdgeFadeScrollColumn]: a single row that scrolls sideways
+ * with the same DstIn edge dissolve as [HorizontalDissolveText] when it overflows.
+ */
+@Composable
+fun SettingsEdgeFadeScrollRow(
+    modifier: Modifier = Modifier,
+    scrollState: ScrollState = rememberScrollState(),
+    fadeWidth: Dp = 20.dp,
+    horizontalArrangement: Arrangement.Horizontal = Arrangement.Start,
+    verticalAlignment: Alignment.Vertical = Alignment.Top,
+    content: @Composable RowScope.() -> Unit,
+) {
+    val canScroll = scrollState.maxValue > 0
+    val showStartFade = canScroll && scrollState.value > 2
+    val showEndFade = canScroll && scrollState.value < scrollState.maxValue - 2
+    Box(
+        modifier = modifier
+            .clipToBounds()
+            .then(if (canScroll) Modifier.nestedScroll(BoundHandoffNestedScroll) else Modifier)
+            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+            .drawWithContent {
+                drawContent()
+                drawHorizontalDescriptionEdgeMask(
+                    showStartFade = showStartFade,
+                    showEndFade = showEndFade,
+                    fadeWidthPx = fadeWidth.toPx(),
+                )
+            },
+    ) {
+        Row(
+            modifier = Modifier.horizontalScroll(scrollState),
+            horizontalArrangement = horizontalArrangement,
+            verticalAlignment = verticalAlignment,
             content = content,
         )
     }

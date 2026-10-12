@@ -5833,6 +5833,8 @@
     screensaverWallpaperRefreshSeconds: "notification",
     screensaverWallpaperDualPane: "notification",
     screensaverWallpaperDarkOverlayEnabled: "notification",
+    screensaverCustomLayoutLandscape: "notification",
+    screensaverCustomLayoutPortrait: "notification",
     enableWeatherOverlay: "notification",
     enableWeatherOverlayDisplay: "notification",
     haWeatherEntity: "notification",

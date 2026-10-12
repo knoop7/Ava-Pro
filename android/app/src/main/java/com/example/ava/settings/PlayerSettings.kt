@@ -179,6 +179,15 @@ data class PlayerSettings(
     /** When true, expose text.xxx_simple_clock_status_slot_N in Home Assistant for quick swaps. */
     val enableScreensaverStatusHaSlots: Boolean = false,
     val screensaverStatusSlots: List<SimpleClockStatusSlot> = List(3) { SimpleClockStatusSlot() },
+    /**
+     * Simple Clock custom layout (landscape + simple portrait only). Off = built-in layout,
+     * drawn exactly as before. Portrait magazine, compact square and split panes always
+     * use the built-in layout.
+     */
+    /** Moved / resized / hidden elements for landscape. Missing element = built-in spot. */
+    val screensaverCustomLayoutLandscape: List<SimpleClockLayoutElement> = emptyList(),
+    /** Same for the simple portrait clock. */
+    val screensaverCustomLayoutPortrait: List<SimpleClockLayoutElement> = emptyList(),
     val enableWeatherOverlay: Boolean = false,  
     val enableWeatherOverlayDisplay: Boolean = false,  
     val enableWeatherOverlayVisible: Boolean = false,  
@@ -703,6 +712,44 @@ class PlayerSettingsStore(dataStore: DataStore<PlayerSettings>) :
     }
     val screensaverStatusSlots = SettingState(getFlow().map { it.screensaverStatusSlots }) { value ->
         update { it.copy(screensaverStatusSlots = value) }
+    }
+    /** Free text block [id] as seen from HA: landscape first, else portrait. */
+    private fun customTextBlock(settings: PlayerSettings, id: SimpleClockLayoutElementId): SimpleClockLayoutElement? =
+        settings.screensaverCustomLayoutLandscape.firstOrNull { it.id == id.key }
+            ?: settings.screensaverCustomLayoutPortrait.firstOrNull { it.id == id.key }
+
+    /**
+     * HA text entity for one free text block the user added (max 255). Updates the block in
+     * every orientation it exists in; never creates blocks. Blank deletes the block.
+     */
+    fun customTextBlockText(id: SimpleClockLayoutElementId) = SettingState(
+        getFlow().map { customTextBlock(it, id)?.text.orEmpty() }
+    ) { value ->
+        val text = value.trim().take(SimpleClockCustomLayout.MAX_CUSTOM_TEXT_LENGTH)
+        update {
+            it.copy(
+                screensaverCustomLayoutLandscape =
+                    SimpleClockCustomLayout.updateCustomText(it.screensaverCustomLayoutLandscape, id) { e -> e?.copy(text = text) },
+                screensaverCustomLayoutPortrait =
+                    SimpleClockCustomLayout.updateCustomText(it.screensaverCustomLayoutPortrait, id) { e -> e?.copy(text = text) },
+            )
+        }
+    }
+
+    /**
+     * One write for the editor's Save so the clock never sees a half-saved layout.
+     * A non-empty list is the custom layout; an empty list (Reset) means the built-in face.
+     */
+    suspend fun saveScreensaverCustomLayout(
+        landscape: List<SimpleClockLayoutElement>,
+        portrait: List<SimpleClockLayoutElement>,
+    ) {
+        update {
+            it.copy(
+                screensaverCustomLayoutLandscape = SimpleClockCustomLayout.sanitize(landscape),
+                screensaverCustomLayoutPortrait = SimpleClockCustomLayout.sanitize(portrait),
+            )
+        }
     }
 
     /**

@@ -278,6 +278,27 @@ class VoiceSatelliteAudioInput(
     }
 
     /**
+     * Issue #252: HA has said TTS_START for this turn. From here on the reply
+     * can reach the speaker at any frame, before the far-end ruler or the
+     * playback stamp sees it, so the no-playback (processing) insert path is
+     * closed. Only the playback path, which has to beat the learned echo, can
+     * still fire. Cleared when the next turn opens the uplink.
+     */
+    private val speechInsertReplyStarted = AtomicBoolean(false)
+    fun setSpeechInsertReplyStarted(value: Boolean) {
+        speechInsertReplyStarted.set(value)
+    }
+
+    /**
+     * Same bundled VAD the wake pre-roll uses. A processing insert must be
+     * speech by this model, not just loud. Null (asset missing) closes the
+     * processing path instead of falling back to raw energy.
+     */
+    private val speechInsertVadLoader by lazy {
+        com.example.ava.microwakeword.WakePreRollSpeechDetector.Loader(appContext.assets)
+    }
+
+    /**
      * Emit [AudioResult.Audio] frames while the mic uplink is still closed for the wake
      * earcon, so the satellite can pre-roll them. Without this the stream gate below
      * drops the frames at the source and speech spoken over the earcon ("hey ava,
@@ -1226,8 +1247,15 @@ class VoiceSatelliteAudioInput(
          */
         private const val SPEECH_INSERT_ARM_MS = 450L
 
-        /** Detect-RMS floor for an insert while nothing is playing. */
-        private const val SPEECH_INSERT_OPEN_RMS = 0.02f
+        /**
+         * Detect-RMS floor for an insert while nothing is playing. Raised from
+         * 0.02 for #252: the room tail of the reply and a TV cleared the old floor.
+         * The VAD check in maybeEmitSpeechInsert still has to agree.
+         */
+        private const val SPEECH_INSERT_OPEN_RMS = 0.035f
+
+        /** After the VAD rejects a loud processing window, wait this long before asking again. */
+        private const val SPEECH_INSERT_VAD_RETRY_MS = 300L
 
         /** Cancelled uplink kept so the sentence onset is not dropped. ~700 ms at 16 kHz. */
         private const val SPEECH_INSERT_MAX_BYTES = 16_000 * 2 * 700 / 1000
@@ -2911,6 +2939,23 @@ class VoiceSatelliteAudioInput(
             return nowMs < until
         }
 
+        /** VAD over the kept uplink window. Fails closed: no model, no insert. */
+        private fun speechInsertWindowHasSpeech(pcm: ByteArray): Boolean {
+            if (pcm.isEmpty()) return false
+            val session = speechInsertVadLoader.newSession() ?: run {
+                Log.w(TAG, "speech insert: VAD unavailable, processing insert dropped")
+                return false
+            }
+            return try {
+                session.push(pcm) != null
+            } catch (e: Exception) {
+                Log.w(TAG, "speech insert: VAD failed (${e.javaClass.simpleName}), processing insert dropped")
+                false
+            } finally {
+                runCatching { session.close() }
+            }
+        }
+
         private suspend fun maybeEmitSpeechInsert(
             out: FlowCollector<AudioResult>,
             frame: CaptureFrame,
@@ -2935,7 +2980,10 @@ class VoiceSatelliteAudioInput(
             if (onset || speakerUp) speechInsertArmAtMs = 0L
             val duringPlayback = !onset && speakerUp && !frame.pauseAecForSpeech &&
                 nearEndBeatsReference(gates, metrics.preGainDetectRms)
+            // #252: once HA said TTS_START the reply can be on the speaker before
+            // any of the speakerUp signals; no raw-energy path from there on.
             val duringProcessing = !onset && !speakerUp && speechInsertOpen.get() &&
+                !speechInsertReplyStarted.get() &&
                 speechInsertArmAtMs != 0L && frame.nowMs >= speechInsertArmAtMs &&
                 lastDetectRms() > SPEECH_INSERT_OPEN_RMS
             if (dispatchClaimed || isStreaming || speechInsertLatched ||
@@ -2946,8 +2994,6 @@ class VoiceSatelliteAudioInput(
             }
             if (speechInsertSinceMs == 0L) speechInsertSinceMs = frame.nowMs
             if (frame.nowMs - speechInsertSinceMs < SPEECH_INSERT_HOLD_MS) return
-            speechInsertLatched = true
-            speechInsertSinceMs = 0L
             var total = 0
             for (chunk in speechInsertRing) total += chunk.size
             val joined = ByteArray(total)
@@ -2956,6 +3002,16 @@ class VoiceSatelliteAudioInput(
                 chunk.copyInto(joined, cursor)
                 cursor += chunk.size
             }
+            // #252: nothing is playing to compare against, so loudness alone is
+            // not evidence. The window must be speech by the VAD; a rejected
+            // window backs off instead of re-running the model every frame.
+            if (!duringPlayback && !speechInsertWindowHasSpeech(joined)) {
+                speechInsertSinceMs = 0L
+                speechInsertArmAtMs = frame.nowMs + SPEECH_INSERT_VAD_RETRY_MS
+                return
+            }
+            speechInsertLatched = true
+            speechInsertSinceMs = 0L
             Log.i(TAG, "speech insert ${joined.size} bytes during ${if (duringPlayback) "playback" else "processing"}")
             out.emit(AudioResult.SpeechInsert(ByteString.copyFrom(joined)))
         }

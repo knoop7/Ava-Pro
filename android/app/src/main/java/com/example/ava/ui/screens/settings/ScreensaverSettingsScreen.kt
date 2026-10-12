@@ -363,6 +363,23 @@ private fun ScreensaverContentSettingsScreen(
                         )
                     }
 
+                    SettingsDivider()
+
+                    SettingRow(
+                        label = stringResource(R.string.settings_dawn_dark_mode_dim),
+                        subLabel = stringResource(R.string.settings_dawn_dark_mode_dim_desc),
+                    ) {
+                        ModernSwitch(
+                            checked = screensaverState?.dawnDarkModeDimEnabled ?: true,
+                            enabled = ready,
+                            onCheckedChange = {
+                                coroutineScope.launch {
+                                    viewModel.saveDawnDarkModeDimEnabled(it)
+                                }
+                            },
+                        )
+                    }
+
                     DawnEntitySlotsSettingsSection(
                         enabled = ready,
                         coroutineScope = coroutineScope,
@@ -533,9 +550,30 @@ private fun ScreensaverBehaviorSettingsScreen(
                     )
                 }
 
-                SettingsDivider()
-                Spacer(modifier = Modifier.height(8.dp))
+                if (hasRoot) {
+                    SettingsDivider()
 
+                    SettingRow(
+                        label = stringResource(R.string.settings_screensaver_smart_cpu_throttle),
+                        subLabel = stringResource(R.string.settings_screensaver_smart_cpu_throttle_desc),
+                    ) {
+                        ModernSwitch(
+                            checked = screensaverState?.smartCpuThrottleEnabled ?: false,
+                            enabled = ready,
+                            onCheckedChange = {
+                                coroutineScope.launch {
+                                    viewModel.saveScreensaverSmartCpuThrottle(it)
+                                }
+                            },
+                        )
+                    }
+                }
+            }
+        }
+
+        // Card: AOD (master switch, follow dark mode, depth).
+        item {
+            SimpleCard {
                 SettingRow(
                     label = stringResource(R.string.settings_screensaver_smart_aod),
                     subLabel = stringResource(R.string.settings_screensaver_smart_aod_desc),
@@ -551,7 +589,26 @@ private fun ScreensaverBehaviorSettingsScreen(
                     )
                 }
 
+                // Follow dark mode and depth slider only show when the master AOD switch is on.
                 if (screensaverState?.smartAodEnabled == true) {
+                SettingsDivider()
+                Spacer(modifier = Modifier.height(8.dp))
+
+                SettingRow(
+                    label = stringResource(R.string.settings_screensaver_smart_aod_follow_dark),
+                    subLabel = stringResource(R.string.settings_screensaver_smart_aod_follow_dark_desc),
+                ) {
+                    ModernSwitch(
+                        checked = screensaverState?.smartAodFollowDarkMode ?: false,
+                        enabled = ready,
+                        onCheckedChange = {
+                            coroutineScope.launch {
+                                viewModel.saveScreensaverSmartAodFollowDarkMode(it)
+                            }
+                        },
+                    )
+                }
+
                     SettingsDivider()
                     Spacer(modifier = Modifier.height(8.dp))
 
@@ -585,25 +642,6 @@ private fun ScreensaverBehaviorSettingsScreen(
                         ),
                         modifier = Modifier.padding(top = 8.dp),
                     )
-                }
-
-                if (hasRoot) {
-                    SettingsDivider()
-
-                    SettingRow(
-                        label = stringResource(R.string.settings_screensaver_smart_cpu_throttle),
-                        subLabel = stringResource(R.string.settings_screensaver_smart_cpu_throttle_desc),
-                    ) {
-                        ModernSwitch(
-                            checked = screensaverState?.smartCpuThrottleEnabled ?: false,
-                            enabled = ready,
-                            onCheckedChange = {
-                                coroutineScope.launch {
-                                    viewModel.saveScreensaverSmartCpuThrottle(it)
-                                }
-                            },
-                        )
-                    }
                 }
             }
         }

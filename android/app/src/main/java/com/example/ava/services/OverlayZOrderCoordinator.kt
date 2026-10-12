@@ -162,14 +162,16 @@ object OverlayZOrderCoordinator {
 
     /**
      * Idle Smart AOD covers the mic. Clock / vinyl / entity plates are the
-     * cover. The Web screensaver (even with its own dim) is not — the disc
-     * stays; the touch pad yields separately. A pinned Feishu / AI page does
+     * cover, and so is the Web screensaver while its AOD dim is showing — the
+     * voice disc (and its caption) hides like every other AOD, then returns
+     * when the screensaver or its AOD goes away. A pinned Feishu / AI page does
      * not cancel that yield — opening the window used to restore the disc
      * on top of the plate.
      */
     fun shouldYieldVoiceToAod(): Boolean {
         return ScreensaverService.isSmartAodCovering() ||
             QuickEntityOverlayService.isSmartAodCovering() ||
+            ScreensaverWebViewService.isSmartAodShowing() ||
             DreamClockService.isSmartAodCovering()
     }
 

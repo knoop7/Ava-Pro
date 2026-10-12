@@ -169,11 +169,21 @@ fun BackupRestoreSettingsScreen(navController: NavController) {
                         com.example.ava.services.SatelliteRestartReason.SATELLITE_PIPELINE,
                     )
                 }
+                if (result.partialErrors.isEmpty()) {
                     AvaToast.show(
                         context,
                         context.getString(R.string.settings_backup_restore_import_success),
                         tag = AvaToast.HA_SYNC_TAG,
                     )
+                } else {
+                    AvaToast.show(
+                        context,
+                        context.getString(
+                            R.string.settings_backup_restore_import_partial,
+                            result.partialErrors.joinToString(", "),
+                        ),
+                    )
+                }
             } else {
                 AvaToast.show(
                     context,

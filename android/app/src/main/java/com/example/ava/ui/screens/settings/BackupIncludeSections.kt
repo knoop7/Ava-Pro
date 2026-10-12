@@ -59,7 +59,19 @@ import com.example.ava.settings.SidebarSettings
 import com.example.ava.settings.SidebarSettingsStore
 import com.example.ava.settings.VoiceChannelSettings
 import com.example.ava.settings.VoiceChannelSettingsStore
+import com.example.ava.settings.LocalLlmEngine
+import com.example.ava.settings.LocalLlmPath
+import com.example.ava.settings.LocalLlmSettingsStore
+import com.example.ava.settings.RemoteAiSettingsStore
+import com.example.ava.settings.VoiceSttEngine
+import com.example.ava.settings.VoiceSttSettingsStore
+import com.example.ava.settings.VoiceTtsEngine
+import com.example.ava.settings.VoiceTtsSettingsStore
 import com.example.ava.settings.haSettingsStore
+import com.example.ava.settings.localLlmSettingsStore
+import com.example.ava.settings.remoteAiSettingsStore
+import com.example.ava.settings.voiceSttSettingsStore
+import com.example.ava.settings.voiceTtsSettingsStore
 import com.example.ava.settings.homeLockSettingsStore
 import com.example.ava.settings.localScenesSettingsStore
 import com.example.ava.settings.massApiSettingsStore
@@ -103,6 +115,10 @@ private val BACKUP_INCLUDE_STORES = listOf(
     BackupIncludeStoreItem("settings_style", R.string.settings_backup_include_store_style, R.string.settings_backup_include_store_style_sub),
     BackupIncludeStoreItem("experimental", R.string.settings_backup_include_store_experimental, R.string.settings_backup_include_store_experimental_sub),
     BackupIncludeStoreItem("update", R.string.settings_backup_include_store_update, R.string.settings_backup_include_store_update_sub),
+    BackupIncludeStoreItem("remote_ai", R.string.settings_backup_include_store_remote_ai, R.string.settings_backup_include_store_remote_ai_sub),
+    BackupIncludeStoreItem("local_llm", R.string.settings_backup_include_store_local_llm, R.string.settings_backup_include_store_local_llm_sub),
+    BackupIncludeStoreItem("voice_stt", R.string.settings_backup_include_store_voice_stt, R.string.settings_backup_include_store_voice_stt_sub),
+    BackupIncludeStoreItem("voice_tts", R.string.settings_backup_include_store_voice_tts, R.string.settings_backup_include_store_voice_tts_sub),
 )
 
 private data class BackupFeaturePresence(
@@ -114,6 +130,7 @@ private data class BackupFeaturePresence(
     val desktopLayout: Boolean,
     val widgetLayout: Boolean,
     val system: Boolean,
+    val remoteAiCredentials: Boolean = false,
 )
 
 private fun ExperimentalSettings.hasOptInFeature(): Boolean =
@@ -164,6 +181,14 @@ private fun rememberBackupFeaturePresence(): BackupFeaturePresence {
     val localScenes by localScenesStore.getFlow().collectAsState(initial = localScenesStore.getCached())
     val player by playerStore.getFlow().collectAsState(initial = playerStore.getCached())
     val homeLock by homeLockStore.getFlow().collectAsState(initial = homeLockStore.getCached())
+    val remoteAiStore = remember { RemoteAiSettingsStore(context.remoteAiSettingsStore) }
+    val localLlmStore = remember { LocalLlmSettingsStore(context.localLlmSettingsStore) }
+    val sttStore = remember { VoiceSttSettingsStore(context.voiceSttSettingsStore) }
+    val ttsStore = remember { VoiceTtsSettingsStore(context.voiceTtsSettingsStore) }
+    val remoteAi by remoteAiStore.getFlow().collectAsState(initial = remoteAiStore.getCached())
+    val localLlm by localLlmStore.getFlow().collectAsState(initial = localLlmStore.getCached())
+    val stt by sttStore.getFlow().collectAsState(initial = sttStore.getCached())
+    val tts by ttsStore.getFlow().collectAsState(initial = ttsStore.getCached())
     val installedMods by ModManager.getInstance(context).installedMods.collectAsState()
     val hasSystemGrants = remember(context) {
         context.getSharedPreferences("mod_permission_requests", Context.MODE_PRIVATE).all.isNotEmpty()
@@ -198,12 +223,18 @@ private fun rememberBackupFeaturePresence(): BackupFeaturePresence {
     val remoteUrlOn = browserOn && browser.haRemoteUrlEnabled
     val experimentalOn = experimental.hasOptInFeature()
     val sidebarOn = sidebar.enableSidebar && hasDesktopLayout
+    val remoteAiTokens = remoteAi.profiles.any { it.token.isNotBlank() }
+    val remoteAiOn = remoteAiTokens || remoteAi.profiles.any { it.enabled } || remoteAi.extraPrompt.isNotBlank()
+    val localLlmOn = localLlm.engine != LocalLlmEngine.NONE || localLlm.path == LocalLlmPath.REMOTE
+    val sttOn = stt.engine != VoiceSttEngine.PIPELINE
+    val ttsOn = tts.engine != VoiceTtsEngine.PIPELINE
 
     return remember(
         voiceOn, sendspinOn, haConnected, massConfigured, quickEntity.enableQuickEntity,
         browserOn, remoteUrlOn, screensaver.enabled, notificationOn, sidebarOn,
         experimentalOn, localScenes.scenes.size, installedMods.size, hasSystemGrants,
         hasDesktopLayout, hasWidgetLayout, homeLock.enabled, hasBluetooth,
+        remoteAiOn, remoteAiTokens, localLlmOn, sttOn, ttsOn,
     ) {
         val stores = linkedSetOf<String>()
         stores.add("settings_style")
@@ -226,6 +257,10 @@ private fun rememberBackupFeaturePresence(): BackupFeaturePresence {
         if (homeLock.enabled) stores.add("home_lock")
         if (hasBluetooth) stores.add("bluetooth")
         if (experimentalOn) stores.add("experimental")
+        if (remoteAiOn) stores.add("remote_ai")
+        if (localLlmOn) stores.add("local_llm")
+        if (sttOn) stores.add("voice_stt")
+        if (ttsOn) stores.add("voice_tts")
         BackupFeaturePresence(
             stores = stores,
             mods = installedMods.isNotEmpty(),
@@ -235,6 +270,7 @@ private fun rememberBackupFeaturePresence(): BackupFeaturePresence {
             desktopLayout = hasDesktopLayout,
             widgetLayout = hasWidgetLayout,
             system = hasSystemGrants,
+            remoteAiCredentials = remoteAiTokens,
         )
     }
 }
@@ -278,6 +314,7 @@ internal object BackupIncludeMemory {
             includeDesktopLayout = prefs.getBoolean("${slot}_desktop", false),
             includeWidgetLayout = prefs.getBoolean("${slot}_widgets", false),
             includeSystemPermissions = prefs.getBoolean("${slot}_system", false),
+            includeRemoteAiCredentials = prefs.getBoolean("${slot}_remote_ai_cred", false),
         )
     }
 
@@ -292,6 +329,7 @@ internal object BackupIncludeMemory {
             .putBoolean("${slot}_desktop", options.includeDesktopLayout)
             .putBoolean("${slot}_widgets", options.includeWidgetLayout)
             .putBoolean("${slot}_system", options.includeSystemPermissions)
+            .putBoolean("${slot}_remote_ai_cred", options.includeRemoteAiCredentials)
             .apply()
     }
 }
@@ -306,6 +344,7 @@ private sealed class BackupIncludeLine {
     data object Mods : BackupIncludeLine()
     data object HaCreds : BackupIncludeLine()
     data object MassCreds : BackupIncludeLine()
+    data object RemoteAiCreds : BackupIncludeLine()
     data object RemoteUrl : BackupIncludeLine()
     data object DesktopLayout : BackupIncludeLine()
     data object WidgetLayout : BackupIncludeLine()
@@ -317,6 +356,7 @@ private fun BackupIncludeLine.isChecked(options: AvaBackupIncludeOptions): Boole
     BackupIncludeLine.Mods -> options.includeMods
     BackupIncludeLine.HaCreds -> options.includeHaCredentials
     BackupIncludeLine.MassCreds -> options.includeMassApiCredentials
+    BackupIncludeLine.RemoteAiCreds -> options.includeRemoteAiCredentials
     BackupIncludeLine.RemoteUrl -> options.includeRemoteBrowserUrl
     BackupIncludeLine.DesktopLayout -> options.includeDesktopLayout
     BackupIncludeLine.WidgetLayout -> options.includeWidgetLayout
@@ -334,6 +374,7 @@ private fun BackupIncludeLine.isRowEnabled(
         BackupIncludeLine.Mods -> available?.includeMods ?: true
         BackupIncludeLine.HaCreds -> available?.includeHaCredentials ?: true
         BackupIncludeLine.MassCreds -> available?.includeMassApiCredentials ?: true
+        BackupIncludeLine.RemoteAiCreds -> available?.includeRemoteAiCredentials ?: true
         BackupIncludeLine.RemoteUrl -> available?.includeRemoteBrowserUrl ?: true
         BackupIncludeLine.DesktopLayout -> available?.includeDesktopLayout ?: true
         BackupIncludeLine.WidgetLayout -> available?.includeWidgetLayout ?: true
@@ -351,6 +392,8 @@ private fun AvaBackupIncludeOptions.withLine(
         copy(includeHaCredentials = included).let { if (included) it.withStore("ha", true) else it }
     BackupIncludeLine.MassCreds ->
         copy(includeMassApiCredentials = included).let { if (included) it.withStore("mass_api", true) else it }
+    BackupIncludeLine.RemoteAiCreds ->
+        copy(includeRemoteAiCredentials = included).let { if (included) it.withStore("remote_ai", true) else it }
     BackupIncludeLine.RemoteUrl ->
         copy(includeRemoteBrowserUrl = included).let { if (included) it.withStore("voice_satellite", true) else it }
     BackupIncludeLine.DesktopLayout ->
@@ -439,6 +482,7 @@ internal fun BackupIncludePicker(
             desktopLayout = presence.desktopLayout,
             widgetLayout = presence.widgetLayout,
             system = presence.system,
+            remoteAiCredentials = presence.remoteAiCredentials,
         )?.takeIf { it.hasAnyInclude() } ?: presence.toSeedOptions()
         commitChange(next)
         seeded = true
@@ -461,6 +505,10 @@ internal fun BackupIncludePicker(
     val showMassCreds = catalog?.includeMassApiCredentials
         ?: available?.includeMassApiCredentials
         ?: presence?.massCredentials
+        ?: true
+    val showRemoteAiCreds = catalog?.includeRemoteAiCredentials
+        ?: available?.includeRemoteAiCredentials
+        ?: presence?.remoteAiCredentials
         ?: true
     val showRemoteUrl = catalog?.includeRemoteBrowserUrl
         ?: available?.includeRemoteBrowserUrl
@@ -487,6 +535,7 @@ internal fun BackupIncludePicker(
         if (showWidgetLayout) add(BackupIncludeLine.WidgetLayout)
         if (showHaCreds) add(BackupIncludeLine.HaCreds)
         if (showMassCreds) add(BackupIncludeLine.MassCreds)
+        if (showRemoteAiCreds) add(BackupIncludeLine.RemoteAiCreds)
         if (showRemoteUrl) add(BackupIncludeLine.RemoteUrl)
         if (showSystem) add(BackupIncludeLine.System)
     }
@@ -500,6 +549,7 @@ internal fun BackupIncludePicker(
         desktopLayout = showDesktopLayout,
         widgetLayout = showWidgetLayout,
         system = showSystem,
+        remoteAiCredentials = showRemoteAiCreds,
     )
     val visibleCatalog = AvaBackupIncludeOptions(
         includeStores = storeKeys,
@@ -510,6 +560,7 @@ internal fun BackupIncludePicker(
         includeDesktopLayout = showDesktopLayout,
         includeWidgetLayout = showWidgetLayout,
         includeSystemPermissions = showSystem,
+        includeRemoteAiCredentials = showRemoteAiCreds,
     )
     SideEffect {
         onEffectiveOptions?.invoke(packed)
@@ -631,6 +682,10 @@ private fun BackupIncludeLineRow(
         BackupIncludeLine.MassCreds -> {
             titleRes = R.string.settings_backup_restore_include_mass_api_credentials
             subtitleRes = R.string.settings_backup_include_mass_credentials_sub
+        }
+        BackupIncludeLine.RemoteAiCreds -> {
+            titleRes = R.string.settings_backup_restore_include_remote_ai_credentials
+            subtitleRes = R.string.settings_backup_include_remote_ai_credentials_sub
         }
         BackupIncludeLine.RemoteUrl -> {
             titleRes = R.string.settings_backup_restore_include_remote_browser_url

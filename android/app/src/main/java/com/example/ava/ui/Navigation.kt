@@ -86,6 +86,7 @@ import com.example.ava.ui.screens.settings.BluetoothSettingsScreen
 import com.example.ava.ui.screens.settings.ScreensaverSettingsScreen
 import com.example.ava.ui.screens.settings.ScreensaverSettingsDestination
 import com.example.ava.ui.screens.settings.PermissionManagerScreen
+import com.example.ava.ui.screens.settings.DeviceOwnerSettingsScreen
 import com.example.ava.ui.screens.settings.RootSettingsScreen
 import com.example.ava.ui.screens.settings.DiagnosticSettingsScreen
 import com.example.ava.ui.screens.settings.EnvironmentSettingsScreen
@@ -105,6 +106,7 @@ import com.example.ava.ui.screens.settings.HaSettingsScreen
 import com.example.ava.ui.screens.settings.ClusterManagementSettingsScreen
 import com.example.ava.ui.screens.settings.ModConfigScreen
 import com.example.ava.ui.screens.settings.QuickEntityEditScreen
+import com.example.ava.ui.screens.settings.SimpleClockLayoutEditorScreen
 import com.example.ava.ui.screens.settings.SimpleClockStatusEditScreen
 import com.example.ava.ui.screens.settings.DawnEntitySlotEditScreen
 import com.example.ava.ui.screens.settings.ModStoreScreen
@@ -148,6 +150,8 @@ object Screen {
     const val SETTINGS_INTERACTION_SIMPLE_CLOCK = "settings/interaction/simple_clock"
     const val SETTINGS_INTERACTION_SIMPLE_CLOCK_APPEARANCE = "settings/interaction/simple_clock/appearance"
     const val SETTINGS_INTERACTION_SIMPLE_CLOCK_STATUS = "settings/interaction/simple_clock_status"
+    /** Full-width editor (not under settings/, so the split index never shows beside it). */
+    const val SIMPLE_CLOCK_LAYOUT_EDITOR = "simple_clock_layout_editor"
     const val SETTINGS_INTERACTION_DREAM_CLOCK_APPEARANCE = "settings/interaction/dream_clock/appearance"
     const val SETTINGS_EXPERIMENTAL = "settings/experimental"
     const val SETTINGS_SERVICE = "settings/service"
@@ -186,6 +190,7 @@ object Screen {
     const val SETTINGS_SCREENSAVER_BEHAVIOR = "settings/screensaver/behavior"
     const val SETTINGS_ROOT = "settings/root"
     const val SETTINGS_PERMISSION_MANAGER = "settings/root/permissions"
+    const val SETTINGS_PERMISSION_DEVICE_OWNER = "settings/root/permissions/device_owner"
     const val SETTINGS_DIAGNOSTIC = "settings/diagnostic"
     const val SETTINGS_ENVIRONMENT = "settings/environment"
     const val SETTINGS_CAMERA = "settings/camera"
@@ -267,6 +272,7 @@ object MainNavigationCoordinator {
             route.startsWith("${Screen.MOD_CONFIG}/") ||
             route.startsWith("quick_entity_edit/") ||
             route.startsWith("simple_clock_status_edit/") ||
+            route == Screen.SIMPLE_CLOCK_LAYOUT_EDITOR ||
             route.startsWith("dawn_entity_slot_edit/") ||
             route.startsWith("${Screen.SETTINGS_INTERACTION_SCENE_EDIT}/")
     }
@@ -550,11 +556,26 @@ fun MainNavHost(startDestination: String = Screen.HOME) {
             InteractionSettingsScreen(navController, startDestination = InteractionSettingsDestination.QuickEntity)
         }
         settingsDestination(Screen.SETTINGS_INTERACTION_SIMPLE_CLOCK) {
-            // Legacy path: Simple Clock controls live on Scene; this opens Appearance & Status.
-            InteractionSettingsScreen(navController, startDestination = InteractionSettingsDestination.SimpleClockAppearance)
+            // Legacy path: opens the Simple Clock editor like Appearance & Status.
+            SimpleClockLayoutEditorScreen(
+                onBack = { navController.safePopBackStack() },
+                onOpenStatusSettings = {
+                    navController.navigate(Screen.SETTINGS_INTERACTION_SIMPLE_CLOCK_STATUS) {
+                        launchSingleTop = true
+                    }
+                }
+            )
         }
         settingsDestination(Screen.SETTINGS_INTERACTION_SIMPLE_CLOCK_APPEARANCE) {
-            InteractionSettingsScreen(navController, startDestination = InteractionSettingsDestination.SimpleClockAppearance)
+            // Appearance & Status is the Simple Clock editor itself (layout, display, behavior).
+            SimpleClockLayoutEditorScreen(
+                onBack = { navController.safePopBackStack() },
+                onOpenStatusSettings = {
+                    navController.navigate(Screen.SETTINGS_INTERACTION_SIMPLE_CLOCK_STATUS) {
+                        launchSingleTop = true
+                    }
+                }
+            )
         }
         settingsDestination(Screen.SETTINGS_INTERACTION_SIMPLE_CLOCK_STATUS) {
             InteractionSettingsScreen(navController, startDestination = InteractionSettingsDestination.SimpleClockStatus)
@@ -679,6 +700,9 @@ fun MainNavHost(startDestination: String = Screen.HOME) {
         settingsDestination(Screen.SETTINGS_PERMISSION_MANAGER) {
             PermissionManagerScreen(navController)
         }
+        settingsDestination(Screen.SETTINGS_PERMISSION_DEVICE_OWNER) {
+            DeviceOwnerSettingsScreen(navController)
+        }
         settingsDestination(Screen.SETTINGS_DIAGNOSTIC) {
             DiagnosticSettingsScreen(navController)
         }
@@ -756,6 +780,16 @@ fun MainNavHost(startDestination: String = Screen.HOME) {
             SimpleClockStatusEditScreen(
                 slotIndex = slotIndex,
                 onBack = { navController.safePopBackStack() }
+            )
+        }
+        settingsDestination(Screen.SIMPLE_CLOCK_LAYOUT_EDITOR) {
+            SimpleClockLayoutEditorScreen(
+                onBack = { navController.safePopBackStack() },
+                onOpenStatusSettings = {
+                    navController.navigate(Screen.SETTINGS_INTERACTION_SIMPLE_CLOCK_STATUS) {
+                        launchSingleTop = true
+                    }
+                }
             )
         }
         settingsDestination(

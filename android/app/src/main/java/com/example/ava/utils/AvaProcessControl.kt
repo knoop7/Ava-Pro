@@ -177,6 +177,35 @@ object AvaProcessControl {
         return ran && ScreenControlUtils.isDeviceOwner(app)
     }
 
+    /** `adb shell` command that makes this build (incl. `.gecko`) the device owner. */
+    fun deviceOwnerAdbCommand(context: Context): String {
+        val app = context.applicationContext
+        val component = ComponentName(app, DeviceAdminReceiver::class.java).flattenToShortString()
+        return "adb shell dpm set-device-owner $component"
+    }
+
+    /**
+     * Give up device owner. Leaves Lock Task first (with an Activity) so the kiosk
+     * cannot outlive the privilege that made it non-escapable, then drops the
+     * lock-task whitelist and clears ownership. Main thread when [activity] is set.
+     */
+    @Suppress("DEPRECATION")
+    fun clearDeviceOwner(context: Context, activity: Activity?): Boolean {
+        val app = context.applicationContext
+        if (!ScreenControlUtils.isDeviceOwner(app)) return true
+        val dpm = app.getSystemService(Context.DEVICE_POLICY_SERVICE) as? DevicePolicyManager
+            ?: return false
+        if (activity != null && isPinned(app)) unpinFromWall(activity)
+        runCatching {
+            dpm.setLockTaskPackages(ComponentName(app, DeviceAdminReceiver::class.java), arrayOf<String>())
+        }.onFailure { Log.w(TAG, "clear lock task packages failed", it) }
+        runCatching { dpm.clearDeviceOwnerApp(app.packageName) }
+            .onFailure { Log.w(TAG, "clearDeviceOwnerApp failed", it) }
+        val cleared = !ScreenControlUtils.isDeviceOwner(app)
+        Log.i(TAG, "clearDeviceOwner: cleared=$cleared")
+        return cleared
+    }
+
     private fun stopStickyServices(app: Context) {
         runCatching {
             app.stopService(Intent(app, VoiceSatelliteService::class.java))

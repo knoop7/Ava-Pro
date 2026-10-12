@@ -79,6 +79,8 @@ import com.example.ava.settings.VoiceChannelSettingsStore
 import com.example.ava.settings.playerSettingsStore
 import com.example.ava.settings.voiceChannelSettingsStore
 import com.example.ava.ui.AvaToast
+import com.example.ava.ui.Screen
+import com.example.ava.utils.ScreenControlUtils
 import com.example.ava.ui.prefs.rememberBooleanPreference
 import com.example.ava.ui.screens.home.KEY_DARK_MODE
 import com.example.ava.ui.screens.home.PREFS_NAME
@@ -160,6 +162,12 @@ fun PermissionManagerScreen(navController: NavController) {
         ActivityResultContracts.StartActivityForResult(),
     ) { refreshTick++ }
 
+    fun openDeviceOwnerPage() {
+        navController.navigate(Screen.SETTINGS_PERMISSION_DEVICE_OWNER) {
+            launchSingleTop = true
+        }
+    }
+
     fun onGrant(row: PermissionRowState) {
         if (row.status == PermissionUiStatus.GRANTED && !row.reenterable) return
         when (row.action) {
@@ -184,6 +192,19 @@ fun PermissionManagerScreen(navController: NavController) {
                 refreshTick++
             }
             PermissionGrantAction.DEVICE_ADMIN -> {
+                if (row.status == PermissionUiStatus.GRANTED &&
+                    ScreenControlUtils.isDeviceOwner(context)
+                ) {
+                    // A device owner cannot be deactivated or uninstalled from the
+                    // system dialog; ownership has to be removed on its own page first.
+                    AvaToast.show(
+                        context,
+                        R.string.settings_permission_device_admin_owner_hint,
+                        durationMs = AvaToast.LONG_MS,
+                    )
+                    openDeviceOwnerPage()
+                    return
+                }
                 if (row.status == PermissionUiStatus.GRANTED) {
                     PermissionManager.openDeviceAdminUninstall(context)
                 } else {
@@ -211,6 +232,7 @@ fun PermissionManagerScreen(navController: NavController) {
                     refreshTick++
                 }
             }
+            PermissionGrantAction.DEVICE_OWNER_PAGE -> openDeviceOwnerPage()
             PermissionGrantAction.NONE -> Unit
         }
     }
@@ -447,7 +469,7 @@ private fun PermissionItemCard(
 }
 
 @Composable
-private fun StatusBadge(status: PermissionUiStatus) {
+internal fun StatusBadge(status: PermissionUiStatus) {
     val (labelRes, color, bg) = when (status) {
         PermissionUiStatus.GRANTED -> Triple(
             R.string.settings_permission_status_granted,

@@ -387,6 +387,17 @@ class VoiceSatellite(
     /** Automatic reopens since the last real wake. 超级智能 stops at [SMART_CONTINUE_MAX_TURNS]. */
     private var continuousTurnCount = 0
 
+    /** #252: speech inserts accepted since the last real wake (cap [SPEECH_INSERT_MAX_PER_WAKE]). */
+    @Volatile private var speechInsertsThisWake = 0
+    /** #252: the turn an insert opened has not reached STT_END yet. */
+    @Volatile private var speechInsertTurnPending = false
+    /** #252: reply text the insert may have heard back; compared with its transcript at STT_END. */
+    @Volatile private var speechInsertEchoRef = ""
+    /** #252: the reply text last handed to the speaker (HA or local), for the echo check. */
+    @Volatile private var lastSpokenReplyText = ""
+    /** #252: an insert was refused or looked like echo: the current reply ends the session. */
+    @Volatile private var endSessionAfterReply = false
+
     /**
      * 超级智能 per-turn judge for the HA-handled reply now playing
      * ([com.example.ava.localllm.remote.RemoteAiContinueJudge]). Started when the
@@ -511,6 +522,8 @@ class VoiceSatellite(
             onStopSatellite = { stopSatellite() },
             onConfigInterceptAbort = {
                 // Config wizard intercept: no Assist session — keep wake animation off.
+                // Continuous mode: never reopen a follow-up over the wizard.
+                noteHaSetupUi("wake intercept")
                 suppressWakeAnimationForConfigIntercept()
                 stopSatellite(skipHaStop = true)
                 // Teach wake-word wizard + Mod Store engines on every config intercept.
@@ -598,7 +611,13 @@ class VoiceSatellite(
                 // residual clears a raw-energy or double-talk test, and that
                 // is the TTS self-trigger.
                 audioInput.noteStopOnsetGuard()
-                if (!searchListenOnly) {
+                // #252: a late start (stop / insert / session end already moved the
+                // channel off Responding) must not bring the speaking glow back.
+                val stillResponding = _state.value == Responding
+                if (!stillResponding) {
+                    Log.d(TAG, "TTS playback started outside Responding (state=${_state.value}), no speaking glow")
+                }
+                if (!searchListenOnly && stillResponding) {
                     onTtsPlaybackStarted?.invoke(text)
                     dispatchVoicePipeline(ModVoicePipeline.Events.TTS_PLAYBACK_STARTED) {
                         putString(ModVoicePipeline.Extras.TTS_TEXT, text)
@@ -628,6 +647,9 @@ class VoiceSatellite(
         Log.d(TAG, "remoteAiHold=$hold channel=${_state.value}")
         scope.launch { syncStopWordDetection() }
         if (hold) {
+            // #252: HA's reply is swallowed; the cloud turn is processing again
+            // until its own reply starts (beginLocalReplySession).
+            audioInput.setSpeechInsertReplyStarted(false)
             heldVolumeReleaseJob?.cancel()
             heldVolumeReleaseJob = null
         } else {
@@ -636,6 +658,14 @@ class VoiceSatellite(
     }
 
     @Volatile private var heldVolumeReleaseJob: Job? = null
+
+    /**
+     * #252: a session end ran while the cloud seat held the turn, so it kept
+     * the chrome up for the seat (no [onConversationEnd]). If the seat then
+     * drops without a reply of its own, nobody hid the edge glow; the seat
+     * release settles it in [scheduleHeldVolumeRelease].
+     */
+    @Volatile private var conversationEndOwedToSeat = false
 
     /**
      * The voice-reply volume stays lowered while the cloud seat works (see
@@ -650,9 +680,16 @@ class VoiceSatellite(
             heldVolumeReleaseJob = null
             if (_remoteAiHold.value || speechInsertHandoff) return@launch
             if (_state.value != Connected) return@launch
-            if (!player.isWhisperPlaybackActive) return@launch
-            Log.i(TAG, "cloud seat ended with no reply playing; releasing held voice volume")
-            endWhisperSession()
+            if (player.isWhisperPlaybackActive) {
+                Log.i(TAG, "cloud seat ended with no reply playing; releasing held voice volume")
+                endWhisperSession()
+            }
+            if (conversationEndOwedToSeat) {
+                conversationEndOwedToSeat = false
+                Log.i(TAG, "cloud seat ended with no reply; ending conversation chrome (edge glow)")
+                wakeAnimationPresented = false
+                onConversationEnd?.invoke()
+            }
         }
     }
 
@@ -710,6 +747,7 @@ class VoiceSatellite(
             while (true) {
                 val spoken = source.spoken
                 localReplyText = spoken
+                if (segment.text.isNotBlank()) lastSpokenReplyText = segment.text
                 ttsEntity.updateState(spoken)
                 // Caption follows the phrase being spoken, not the accumulated transcript.
                 onConversationText?.invoke("assistant", segment.text)
@@ -762,6 +800,25 @@ class VoiceSatellite(
     private fun smartContinueCapReached(): Boolean {
         if (!stateMachine.smartContinueOn() || continuousTurnCount < SMART_CONTINUE_MAX_TURNS) return false
         Log.i(TAG, "smart continue: $continuousTurnCount turns in a row, ending session")
+        return true
+    }
+
+    /**
+     * #252 loop breaker, every continue mode. A session that has had a speech
+     * insert stops reopening the mic after [SPEECH_INSERT_CONTINUE_MAX_TURNS]
+     * automatic turns; a refused or echo-looking insert ends it after this reply.
+     * Sessions without inserts keep their normal limits.
+     */
+    private fun speechInsertContinueCapReached(): Boolean {
+        if (endSessionAfterReply) {
+            Log.i(TAG, "speech insert: session marked to end, no continue")
+            return true
+        }
+        if (speechInsertsThisWake == 0 || continuousTurnCount < SPEECH_INSERT_CONTINUE_MAX_TURNS) return false
+        Log.i(
+            TAG,
+            "speech insert: $speechInsertsThisWake inserts, $continuousTurnCount auto turns this wake, ending session",
+        )
         return true
     }
 
@@ -888,6 +945,9 @@ class VoiceSatellite(
     private fun beginLocalReplySession(firstText: String) {
         _state.value = Responding
         cancelContinueJudge()
+        // #252: the local reply is about to play; only echo-checked inserts from here.
+        audioInput.setSpeechInsertReplyStarted(true)
+        if (firstText.isNotBlank()) lastSpokenReplyText = firstText
         localReplyText = firstText
         // Claimed HA replies force continue false so the swallowed pipeline
         // does not reopen the mic. The continue mode puts it back (smart: the
@@ -910,7 +970,8 @@ class VoiceSatellite(
             val keepListening = continuousForVoiceWake() &&
                 player.enableContinuousConversation.get() &&
                 localReplyContinues() &&
-                !smartContinueCapReached()
+                !smartContinueCapReached() &&
+                !speechInsertContinueCapReached()
             // Continuing: keep the lowered voice volume through the next turn
             // instead of lifting it here and dropping it again at the next reply.
             endWhisperSession(keepVolume = keepListening)
@@ -928,6 +989,12 @@ class VoiceSatellite(
                 }
                 player.playContinuousPromptSound {
                     scope.launch {
+                        // HA setup wizard opened while the chime played: do not reopen over it.
+                        if (haSetupUiActive) {
+                            Log.i(TAG, "continue: HA voice setup UI open, not reopening mic")
+                            if (_state.value != Connected) stopSatellite()
+                            return@launch
+                        }
                         wakeSatellite(isContinueConversation = true)
                         armContinueNoSpeechTimeout()
                     }
@@ -940,6 +1007,7 @@ class VoiceSatellite(
             restorePreferredMediaRoute()
             audioInput.resetWakeWordDetector()
             dispatchVoicePipeline(ModVoicePipeline.Events.SESSION_ENDED)
+            conversationEndOwedToSeat = false
             onConversationEnd?.invoke()
         }
     }
@@ -1086,7 +1154,55 @@ class VoiceSatellite(
      * Continuous conversation follows a voice wake only. A press of the voice
      * button — hybrid or button-only — keeps that turn to itself.
      */
-    private fun continuousForVoiceWake(): Boolean = !isQuickWakeSession && !isButtonWakeMode()
+    private fun continuousForVoiceWake(): Boolean =
+        !isQuickWakeSession && !isButtonWakeMode() && !haSetupUiActive && !idleAnnouncePlaying
+
+    /**
+     * A plain HA announce that started while the satellite was idle (Voice Satellite
+     * setup connection test, automations) is not a conversation turn: no continuous
+     * follow-up after it and no speech insert while it plays. Otherwise the wizard's
+     * test sound reopened the mic and the user's test wake word went in as a
+     * wake-less continue turn, which HA's wake intercept rejects.
+     */
+    @Volatile private var idleAnnouncePlaying = false
+
+    /**
+     * HA "Set up voice assistant" wizard is (or just was) open for this satellite.
+     * Its wake-word step arms assist_satellite/intercept_wake_word: the next pipeline
+     * start is swallowed (RUN_END, no RUN_START). A continuous follow-up start has no
+     * wake phrase, so HA fails the intercept ("No wake word phrase provided") and the
+     * wizard hangs; a follow-up listen also keeps the entity non-idle (wizard spinner)
+     * and eats the user's test wake word as STT. While set, no turn reopens the mic.
+     * Set by the wizard's connection-test announce or a config intercept; cleared by
+     * the next real wake that HA accepts (RUN_START outside a continue turn).
+     */
+    @Volatile private var haSetupUiActive = false
+
+    private fun noteHaSetupUi(reason: String) {
+        if (!haSetupUiActive) {
+            Log.i(TAG, "HA voice setup UI ($reason): continuous conversation paused until next real wake")
+        }
+        haSetupUiActive = true
+        continuousTurnCount = 0
+    }
+
+    private fun isHaSetupConnectionTest(mediaId: String): Boolean =
+        mediaId.contains("/api/assist_satellite/connection_test/")
+
+    /**
+     * Wizard CHECK step (connection test announce). A continuous session still open
+     * would keep listening / reopening under the wizard: end it cleanly first (mic,
+     * duck, edge glow, captions all go through stopSatellite / onConversationEnd).
+     * Continuous off keeps the old behaviour.
+     */
+    private suspend fun yieldContinuousForHaSetup() {
+        noteHaSetupUi("connection test")
+        cancelContinueNoSpeechTimeout()
+        cancelContinueJudge()
+        if (player.enableContinuousConversation.get()) {
+            abortVoiceSessionIfActive()
+        }
+    }
 
     private fun shouldRenewFabListen(): Boolean {
         if (searchListenOnly) return false
@@ -1913,6 +2029,13 @@ class VoiceSatellite(
         val voiceSessionActive = _state.value == Processing ||
             _state.value == Responding ||
             _remoteAiHold.value
+        // #252: TTS_START closes the processing insert path for its turn only.
+        // Early PCM / URL TTS can move to Responding before TTS_START; same rule.
+        if (!voiceSessionActive) {
+            audioInput.setSpeechInsertReplyStarted(false)
+        } else if (_state.value == Responding && !stateMachine.isReplySuppressed) {
+            audioInput.setSpeechInsertReplyStarted(true)
+        }
         audioInput.setStopWordDetectionEnabled(timerFinished || voiceSessionActive)
         audioInput.setSpeechInsertOpen(
             voiceSessionActive &&
@@ -2264,12 +2387,15 @@ class VoiceSatellite(
                     Log.w(TAG, "Ignoring wake words: $ignoredWakeWords")
             }
 
-            is VoiceAssistantAnnounceRequest -> handleAnnouncement(
-                startConversation = message.startConversation,
-                mediaId = message.mediaId,
-                preannounceId = message.preannounceMediaId,
-                announceText = message.text
-            )
+            is VoiceAssistantAnnounceRequest -> {
+                if (isHaSetupConnectionTest(message.mediaId)) yieldContinuousForHaSetup()
+                handleAnnouncement(
+                    startConversation = message.startConversation,
+                    mediaId = message.mediaId,
+                    preannounceId = message.preannounceMediaId,
+                    announceText = message.text
+                )
+            }
 
             is VoiceAssistantEventResponse -> handleVoiceAssistantMessage(message)
 
@@ -3924,6 +4050,8 @@ class VoiceSatellite(
             "VoiceAssistantAnnounceRequest: startConversation=$startConversation, " +
                 "mediaId=${mediaId.take(80)}, preannounce=${preannounceId.take(80)}"
         )
+        idleAnnouncePlaying = !startConversation &&
+            _state.value == Connected && !_remoteAiHold.value
         _state.value = Responding
         stateMachine.prepareTtsPlayback()
         // Same self-wake screen as pipeline TTS: an announcement that speaks the wake
@@ -3954,7 +4082,14 @@ class VoiceSatellite(
                     }
                 } else {
                     // Normal announce: full cleanup (onTtsFinished sends AnnounceFinished internally)
-                    onTtsFinished()
+                    try {
+                        onTtsFinished()
+                    } finally {
+                        if (idleAnnouncePlaying) {
+                            idleAnnouncePlaying = false
+                            syncStopWordDetection()
+                        }
+                    }
                 }
             }
         }
@@ -3966,6 +4101,11 @@ class VoiceSatellite(
         stateMachine.handleVoiceEvent(voiceEvent)
         when (voiceEvent.eventType) {
             VoiceAssistantEvent.VOICE_ASSISTANT_RUN_START -> {
+                if (haSetupUiActive && continuousTurnCount == 0 && !isAskQuestionMode) {
+                    // HA accepted a real wake: no intercept armed, wizard is done.
+                    haSetupUiActive = false
+                    Log.i(TAG, "HA voice setup UI: real wake accepted, continuous conversation resumes")
+                }
                 fabListenOpenedAt = System.currentTimeMillis()
                 if (isQuickWakeSession && fabListenSessionAt == 0L) {
                     fabListenSessionAt = fabListenOpenedAt
@@ -4018,6 +4158,25 @@ class VoiceSatellite(
                     closePendingMicAudio()
                     stateMachine.setStopRequested(true)
                     scope.launch { stopSatellite() }
+                } else if (speechInsertTurnPending) {
+                    speechInsertTurnPending = false
+                    val heard = voiceEvent.stringField("text").orEmpty()
+                    val tooShort = SpeechInsertEchoCheck.isTooShort(heard)
+                    val echo = !tooShort && SpeechInsertEchoCheck.echoesReply(heard, speechInsertEchoRef)
+                    if (tooShort || echo) {
+                        // #252: the insert heard Ava's own reply ("…5点21分" → "521"),
+                        // or nothing usable. Do not answer it and do not reopen.
+                        Log.i(
+                            TAG,
+                            "speech insert turn: '${heard.take(40)}' " +
+                                "${if (tooShort) "too short" else "matches last reply"}, ending session",
+                        )
+                        endSessionAfterReply = true
+                        closePendingMicAudio()
+                        if (_remoteAiHold.value) localIntentFallback.cancel()
+                        stateMachine.setStopRequested(true)
+                        scope.launch { stopSatellite() }
+                    }
                 }
             }
             VoiceAssistantEvent.VOICE_ASSISTANT_STT_VAD_END -> {
@@ -4030,6 +4189,14 @@ class VoiceSatellite(
                 closePendingMicAudio()
                 maybeApplyWhisperResponse()
                 val ttsText = voiceEvent.stringField("text")
+                // #252: the insert turn (if any) is past STT_END. HA's reply can hit
+                // the speaker from now on, before any playback signal shows it, so
+                // the raw processing insert path closes here, not at first audio.
+                speechInsertTurnPending = false
+                if (!stateMachine.isReplySuppressed) {
+                    audioInput.setSpeechInsertReplyStarted(true)
+                    if (!ttsText.isNullOrBlank()) lastSpokenReplyText = ttsText
+                }
                 dispatchVoicePipeline(ModVoicePipeline.Events.RESPONDING)
                 dispatchVoicePipeline(ModVoicePipeline.Events.TTS_START) {
                     val shown = ttsText?.let { TtsMdFilter.apply(it) }.orEmpty()
@@ -4568,9 +4735,24 @@ class VoiceSatellite(
         if (_state.value != Processing && _state.value != Responding && !_remoteAiHold.value) return
         if (stateMachine.isWaking || stateMachine.isWakePhase) return
         if (speechInsertHandoff) return
+        if (speechInsertsThisWake >= SPEECH_INSERT_MAX_PER_WAKE) {
+            // #252: inserts chaining off our own reply. Let this reply finish,
+            // then end the session instead of interrupting it again.
+            if (!endSessionAfterReply) {
+                Log.i(TAG, "speech insert: $speechInsertsThisWake this wake, ignored; session ends after this reply")
+            }
+            endSessionAfterReply = true
+            return
+        }
         speechInsertHandoff = true
         try {
-            Log.i(TAG, "speech insert state=${_state.value} hold=${_remoteAiHold.value}, ${leadIn.size()} bytes")
+            speechInsertsThisWake++
+            speechInsertEchoRef = lastSpokenReplyText
+            speechInsertTurnPending = true
+            Log.i(
+                TAG,
+                "speech insert #$speechInsertsThisWake state=${_state.value} hold=${_remoteAiHold.value}, ${leadIn.size()} bytes",
+            )
             if (!audioInput.wakePreRollCapturing) startWakePreRoll()
             if (leadIn.size() > 0) {
                 synchronized(wakePreRollLock) { wakePreRollBuffer.append(leadIn) }
@@ -4788,9 +4970,18 @@ class VoiceSatellite(
         // A wake of any kind replaces the follow-up timeout; continuation re-arms it.
         cancelContinueNoSpeechTimeout()
         cancelContinueJudge()
+        // A real session takes over from an idle announce.
+        idleAnnouncePlaying = false
+        // A new turn owns the chrome; a seat dropping later must not hide it.
+        conversationEndOwedToSeat = false
         if (!isContinueConversation) {
             continuousTurnCount = 0
+            speechInsertsThisWake = 0
+            speechInsertTurnPending = false
+            endSessionAfterReply = false
         }
+        // #252: a new turn starts in processing again; TTS_START closes it.
+        audioInput.setSpeechInsertReplyStarted(false)
 
         val priorState = _state.value
         if (priorState == Disconnected || priorState == Stopped) {
@@ -5505,7 +5696,10 @@ class VoiceSatellite(
         sendMessage(voiceAssistantAnnounceFinished { })
         
         voicePrintManager.onPipelineSessionEnd()
+        // #252: chrome stays up for the cloud seat; its release hides it if no reply comes.
+        if (remoteSeat && !yieldCaptureOnly) conversationEndOwedToSeat = true
         if (!keepSeat) {
+            conversationEndOwedToSeat = false
             dispatchVoicePipeline(ModVoicePipeline.Events.SESSION_ENDED)
             onConversationEnd?.invoke()
             searchListenOnly = false
@@ -5568,11 +5762,36 @@ class VoiceSatellite(
         // session actually ends below. A new owner (wake / stop) releases it itself.
         endWhisperSession(keepVolume = true)
         sendMessage(voiceAssistantAnnounceFinished { })
-        
-        val keywordContinue = continuousForVoiceWake() &&
-            player.enableContinuousConversation.get() &&
+
+        val continuousOn = continuousForVoiceWake() && player.enableContinuousConversation.get()
+        // #252: decide only after INTENT_END. Its continue_conversation is what
+        // an HA-handled reply follows (超级智能 included), and streaming TTS can
+        // finish playing before it arrives. This wait used to run after the
+        // decision, so a provisional value already reopened the mic.
+        if (continuousOn && !stateMachine.intentEnded &&
+            (stateMachine.continueConversation || stateMachine.smartContinueAwaitsIntent)
+        ) {
+            val stateBeforeWait = _state.value
+            var waitCount = 0
+            while (!stateMachine.intentEnded && waitCount < 50) {
+                delay(100)
+                waitCount++
+            }
+            if (!stateMachine.intentEnded) {
+                Log.w(TAG, "continue: no INTENT_END after ${waitCount * 100}ms, deciding without it")
+            }
+            if (_state.value != stateBeforeWait) {
+                // A wake, insert or stop took the session while we waited.
+                Log.i(TAG, "continue: session moved to ${_state.value} during INTENT_END wait")
+                stateMachine.continueConversation = true
+                return
+            }
+        }
+
+        val keywordContinue = continuousOn &&
             stateMachine.continueConversation &&
-            !smartContinueCapReached()
+            !smartContinueCapReached() &&
+            !speechInsertContinueCapReached()
         // 超级智能: the per-turn judge started while the reply played may still end
         // it. It never overrides a sign-off or the turn cap (keywordContinue false).
         val shouldContinue = if (keywordContinue) {
@@ -5591,11 +5810,6 @@ class VoiceSatellite(
         }
         if (shouldContinue) {
             continuousTurnCount++
-            var waitCount = 0
-            while (!stateMachine.intentEnded && waitCount < 50) {
-                delay(100)
-                waitCount++
-            }
             // Start speaking→listening motion and chime together (not after settle / blind wait).
             // Button continue / button-only mode: do not open Esper / ripple — the FAB listens.
             if (!suppressWakeChrome()) {
@@ -5609,6 +5823,12 @@ class VoiceSatellite(
             }
             player.playContinuousPromptSound {
                 scope.launch {
+                    // HA setup wizard opened while the chime played: do not reopen over it.
+                    if (haSetupUiActive) {
+                        Log.i(TAG, "continue: HA voice setup UI open, not reopening mic")
+                        if (_state.value != Connected) stopSatellite()
+                        return@launch
+                    }
                     wakeSatellite(isContinueConversation = true)
                     armContinueNoSpeechTimeout()
                 }
@@ -5623,9 +5843,13 @@ class VoiceSatellite(
             _state.value = Connected
 
             if (!remoteSeat) {
+                conversationEndOwedToSeat = false
                 restorePreferredMediaRoute()
                 audioInput.resetWakeWordDetector()
                 onConversationEnd?.invoke()
+            } else {
+                // #252: chrome stays up for the cloud seat; its release hides it if no reply comes.
+                conversationEndOwedToSeat = true
             }
         }
     }
@@ -6092,6 +6316,10 @@ class VoiceSatellite(
         private const val TAG = "VoiceSatellite"
         /** 超级智能: most automatic mic reopens in a row before the session ends; a fresh wake resets. */
         private const val SMART_CONTINUE_MAX_TURNS = 15
+        /** #252: speech inserts accepted per wake; the next one is ignored and the session ends after the reply. */
+        private const val SPEECH_INSERT_MAX_PER_WAKE = 3
+        /** #252: automatic reopens per wake once that wake has had a speech insert. */
+        private const val SPEECH_INSERT_CONTINUE_MAX_TURNS = 3
         /** Continuous follow-up ends quietly if no speech starts this long after the mic reopens. */
         private const val CONTINUE_NO_SPEECH_TIMEOUT_MS = 10_000L
         /** Push-to-talk: how long a release waits for HA RUN_START before giving up on the marker. */

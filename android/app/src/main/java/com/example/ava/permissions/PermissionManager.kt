@@ -31,6 +31,8 @@ enum class ManagedPermission {
     ACCESSIBILITY,
     DEVICE_ADMIN,
     LOCATION,
+    /** Not a grantable permission: a status row that opens the device-owner page. */
+    DEVICE_OWNER,
 }
 
 enum class PermissionUiStatus {
@@ -46,6 +48,8 @@ enum class PermissionGrantAction {
     SECURE_SETTINGS,
     ACCESSIBILITY_SETTINGS,
     DEVICE_ADMIN,
+    /** Opens the device-owner secondary page (adb command, Root/Shizuku set, remove). */
+    DEVICE_OWNER_PAGE,
     NONE,
 }
 
@@ -101,6 +105,8 @@ object PermissionManager {
             ManagedPermission.LOCATION ->
                 hasRuntime(context, Manifest.permission.ACCESS_FINE_LOCATION) ||
                     hasRuntime(context, Manifest.permission.ACCESS_COARSE_LOCATION)
+            ManagedPermission.DEVICE_OWNER ->
+                ScreenControlUtils.isDeviceOwner(context)
         }
 
     fun isNeeded(
@@ -131,6 +137,8 @@ object PermissionManager {
                     ScreenControlUtils.shouldRequestDeviceAdmin(context)
             ManagedPermission.LOCATION ->
                 BluetoothPresenceManager.getInstance(context).trackedDevices.value.isNotEmpty()
+            // Optional: never shown as "missing".
+            ManagedPermission.DEVICE_OWNER -> false
         }
     }
 
@@ -170,11 +178,12 @@ object PermissionManager {
                 compareBy<PermissionRowState> { order.getValue(it.status) }
                     .thenBy { it.id.ordinal },
             )
-        // Trailing block: Accessibility → Location → Device admin (last).
+        // Trailing block: Accessibility → Location → Device admin → Device owner (last).
         val trailing = listOf(
             ManagedPermission.ACCESSIBILITY,
             ManagedPermission.LOCATION,
             ManagedPermission.DEVICE_ADMIN,
+            ManagedPermission.DEVICE_OWNER,
         )
         val pinned = trailing.mapNotNull { id -> rows.find { it.id == id } }
         val rest = rows.filterNot { it.id in trailing }
@@ -298,6 +307,7 @@ object PermissionManager {
         ManagedPermission.ACCESSIBILITY -> R.string.settings_permission_accessibility_name
         ManagedPermission.DEVICE_ADMIN -> R.string.settings_permission_device_admin_name
         ManagedPermission.LOCATION -> R.string.settings_permission_location_name
+        ManagedPermission.DEVICE_OWNER -> R.string.settings_permission_device_owner_name
     }
 
     private fun whyRes(perm: ManagedPermission): Int = when (perm) {
@@ -310,6 +320,7 @@ object PermissionManager {
         ManagedPermission.ACCESSIBILITY -> R.string.settings_permission_accessibility_why
         ManagedPermission.DEVICE_ADMIN -> R.string.settings_permission_device_admin_why
         ManagedPermission.LOCATION -> R.string.settings_permission_location_why
+        ManagedPermission.DEVICE_OWNER -> R.string.settings_permission_device_owner_why
     }
 
     private fun grantAction(perm: ManagedPermission): PermissionGrantAction = when (perm) {
@@ -323,10 +334,13 @@ object PermissionManager {
         ManagedPermission.SYSTEM_UI -> PermissionGrantAction.SECURE_SETTINGS
         ManagedPermission.ACCESSIBILITY -> PermissionGrantAction.ACCESSIBILITY_SETTINGS
         ManagedPermission.DEVICE_ADMIN -> PermissionGrantAction.DEVICE_ADMIN
+        ManagedPermission.DEVICE_OWNER -> PermissionGrantAction.DEVICE_OWNER_PAGE
     }
 
     private fun isReenterable(perm: ManagedPermission): Boolean =
-        perm == ManagedPermission.DEVICE_ADMIN || perm == ManagedPermission.ACCESSIBILITY
+        perm == ManagedPermission.DEVICE_ADMIN ||
+            perm == ManagedPermission.ACCESSIBILITY ||
+            perm == ManagedPermission.DEVICE_OWNER
 
     private fun actionLabelRes(
         perm: ManagedPermission,
@@ -346,6 +360,7 @@ object PermissionManager {
                 } else {
                     R.string.settings_permission_action_activate
                 }
+            ManagedPermission.DEVICE_OWNER -> R.string.settings_permission_action_open_config
             else -> R.string.settings_permission_action_grant
         }
     }

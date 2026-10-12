@@ -20,7 +20,15 @@ import com.example.ava.settings.DisplayScale
 import com.example.ava.settings.ExperimentalSettingsStore
 import com.example.ava.settings.HaSettingsStore
 import com.example.ava.settings.HomeLockSettingsStore
+import com.example.ava.settings.LocalLlmSettingsStore
 import com.example.ava.settings.LocalScenesStore
+import com.example.ava.settings.RemoteAiSettingsStore
+import com.example.ava.settings.VoiceSttSettingsStore
+import com.example.ava.settings.VoiceTtsSettingsStore
+import com.example.ava.settings.localLlmSettingsStore
+import com.example.ava.settings.remoteAiSettingsStore
+import com.example.ava.settings.voiceSttSettingsStore
+import com.example.ava.settings.voiceTtsSettingsStore
 import com.example.ava.settings.MassApiSettingsStore
 import com.example.ava.settings.MicrophoneSettingsStore
 import com.example.ava.settings.NotificationSettings
@@ -80,6 +88,8 @@ data class AvaBackupIncludeOptions(
     val includeDesktopLayout: Boolean = false,
     /** Current desktop widget placement and sizes. */
     val includeWidgetLayout: Boolean = false,
+    /** Remote AI API tokens (exported in clear). Off unless ticked. */
+    val includeRemoteAiCredentials: Boolean = false,
 ) {
     fun includesStore(key: String): Boolean = key in includeStores
 
@@ -90,6 +100,7 @@ data class AvaBackupIncludeOptions(
             includeHaCredentials = if (key == "ha" && !included) false else includeHaCredentials,
             includeMassApiCredentials = if (key == "mass_api" && !included) false else includeMassApiCredentials,
             includeRemoteBrowserUrl = if (key == "voice_satellite" && !included) false else includeRemoteBrowserUrl,
+            includeRemoteAiCredentials = if (key == "remote_ai" && !included) false else includeRemoteAiCredentials,
         )
     }
 
@@ -100,6 +111,7 @@ data class AvaBackupIncludeOptions(
             includeHaCredentials = if ("ha" !in next) false else includeHaCredentials,
             includeMassApiCredentials = if ("mass_api" !in next) false else includeMassApiCredentials,
             includeRemoteBrowserUrl = if ("voice_satellite" !in next) false else includeRemoteBrowserUrl,
+            includeRemoteAiCredentials = if ("remote_ai" !in next) false else includeRemoteAiCredentials,
         )
     }
 
@@ -108,6 +120,7 @@ data class AvaBackupIncludeOptions(
             includeMods ||
             includeHaCredentials ||
             includeMassApiCredentials ||
+            includeRemoteAiCredentials ||
             includeRemoteBrowserUrl ||
             includeDesktopLayout ||
             includeWidgetLayout ||
@@ -126,6 +139,7 @@ data class AvaBackupIncludeOptions(
         desktopLayout: Boolean,
         widgetLayout: Boolean,
         system: Boolean,
+        remoteAiCredentials: Boolean = false,
     ): AvaBackupIncludeOptions = copy(
         includeStores = includeStores.intersect(storeKeys),
         includeMods = includeMods && mods,
@@ -135,6 +149,7 @@ data class AvaBackupIncludeOptions(
         includeDesktopLayout = includeDesktopLayout && desktopLayout,
         includeWidgetLayout = includeWidgetLayout && widgetLayout,
         includeSystemPermissions = includeSystemPermissions && system,
+        includeRemoteAiCredentials = includeRemoteAiCredentials && remoteAiCredentials,
     )
 
     companion object {
@@ -157,6 +172,10 @@ data class AvaBackupIncludeOptions(
             "settings_style",
             "experimental",
             "update",
+            "remote_ai",
+            "local_llm",
+            "voice_stt",
+            "voice_tts",
         )
     }
 }
@@ -176,6 +195,8 @@ data class AvaBackupImportResult(
     val success: Boolean,
     val message: String,
     val needsSatelliteRestart: Boolean = false,
+    /** Categories that failed while the rest was applied (shown to the user). */
+    val partialErrors: List<String> = emptyList(),
 )
 
 object AvaBackupManager {
@@ -189,6 +210,11 @@ object AvaBackupManager {
     private val MASS_API_SECRET_KEYS = setOf("serverUrl", "username", "password", "authToken")
     /** KeyChain / PKCS#12 aliases are device-local; never clone across tablets. */
     private val MASS_API_DEVICE_LOCAL_KEYS = setOf("clientCertAlias", "clientCertPassword")
+    /**
+     * ESPHome API encryption key + listen port are per-device, like the MAC: cloning
+     * them makes tablets share one key or breaks HA's encrypted link after restore.
+     */
+    private val ESPHOME_DEVICE_LOCAL_KEYS = setOf("encryptionKey", "serverPort", "serverPortUserConfigured")
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val gson = Gson()
@@ -311,6 +337,7 @@ object AvaBackupManager {
             if (root.get("format")?.asString != FORMAT) {
                 throw IllegalStateException("invalid_format")
             }
+            requireSupportedVersion(root)
             createAutoSnapshot(appContext, "pre-clone")
             importRoot(appContext, root, options ?: parseIncludes(root))
         } catch (e: Exception) {
@@ -338,43 +365,59 @@ object AvaBackupManager {
         options: AvaBackupIncludeOptions,
     ): AvaBackupImportResult {
         var needsRestart = false
+        val errors = mutableListOf<String>()
+        // One broken category must not abort the rest, nor be reported as a clean success.
+        suspend fun guarded(category: String, block: suspend () -> Unit) {
+            try {
+                block()
+            } catch (e: Exception) {
+                Log.e(TAG, "Import of $category failed", e)
+                errors += category
+            }
+        }
 
         root.getAsJsonObject("settings")?.let { settings ->
-            val applyResult = applySettingsFromBackup(appContext, settings, options)
-            if (applyResult.errors.isNotEmpty()) {
-                Log.w(TAG, "Settings import warnings: ${applyResult.errors}")
+            guarded("settings") {
+                val applyResult = applySettingsFromBackup(appContext, settings, options)
+                if (applyResult.errors.isNotEmpty()) {
+                    Log.w(TAG, "Settings import warnings: ${applyResult.errors}")
+                    errors += applyResult.errors.map { it.substringBefore(':').trim() }
+                }
+                needsRestart = needsRestart || applyResult.needsSatelliteRestart()
             }
-            needsRestart = needsRestart || applyResult.needsSatelliteRestart()
         }
 
         if (options.includeMods) {
             root.getAsJsonObject("mods")?.let { mods ->
-                importMods(appContext, mods)
-                needsRestart = true
+                guarded("mods") {
+                    importMods(appContext, mods)
+                    needsRestart = true
+                }
             }
         }
 
         if (options.includeSystemPermissions) {
             root.getAsJsonObject("system")?.let { system ->
-                importSystemPrefs(appContext, system)
+                guarded("system") { importSystemPrefs(appContext, system) }
             }
         }
 
         if (options.includeDesktopLayout) {
             root.get("desktop")?.let { desktop ->
-                AvaLauncherLayoutBackup.importDesktop(appContext, desktop)
+                guarded("desktop") { AvaLauncherLayoutBackup.importDesktop(appContext, desktop) }
             }
         }
         if (options.includeWidgetLayout) {
             root.get("widgets")?.let { widgets ->
-                AvaLauncherLayoutBackup.importWidgets(appContext, widgets)
+                guarded("widgets") { AvaLauncherLayoutBackup.importWidgets(appContext, widgets) }
             }
         }
 
         return AvaBackupImportResult(
             success = true,
-            message = "success",
+            message = if (errors.isEmpty()) "success" else "partial",
             needsSatelliteRestart = needsRestart,
+            partialErrors = errors.distinct(),
         )
     }
 
@@ -399,6 +442,7 @@ object AvaBackupManager {
                     includeMassApiCredentials = true,
                     includeDesktopLayout = true,
                     includeWidgetLayout = true,
+                    includeRemoteAiCredentials = true,
                 ),
             )
             val dir = File(context.filesDir, "backups/auto").apply { mkdirs() }
@@ -424,7 +468,15 @@ object AvaBackupManager {
         if (format != FORMAT) {
             throw IllegalStateException("invalid_format")
         }
+        requireSupportedVersion(root)
         return root
+    }
+
+    /** Refuse files written by a newer format this build cannot interpret. Missing = v1. */
+    private fun requireSupportedVersion(root: JsonObject) {
+        val el = root.get("version")
+        val version = if (el != null && el.isJsonPrimitive && el.asJsonPrimitive.isNumber) el.asInt else VERSION
+        if (version > VERSION) throw IllegalStateException("unsupported_version:$version")
     }
 
     private fun parseStoreKeys(element: com.google.gson.JsonElement?): Set<String>? {
@@ -450,6 +502,7 @@ object AvaBackupManager {
             includeMassApiCredentials = obj?.get("mass_api_credentials")?.asBoolean ?: false,
             includeDesktopLayout = obj?.get("desktop_layout")?.asBoolean ?: false,
             includeWidgetLayout = obj?.get("widget_layout")?.asBoolean ?: false,
+            includeRemoteAiCredentials = obj?.get("remote_ai_credentials")?.asBoolean ?: false,
         )
     }
 
@@ -475,6 +528,7 @@ object AvaBackupManager {
         includes.addProperty("mass_api_credentials", options.includeMassApiCredentials)
         includes.addProperty("desktop_layout", options.includeDesktopLayout)
         includes.addProperty("widget_layout", options.includeWidgetLayout)
+        includes.addProperty("remote_ai_credentials", options.includeRemoteAiCredentials)
         return includes
     }
 
@@ -505,6 +559,12 @@ object AvaBackupManager {
                 objectHasAnyKey(settings?.getAsJsonObject("mass_api"), MASS_API_SECRET_KEYS),
             includeDesktopLayout = flags.includeDesktopLayout && root.has("desktop"),
             includeWidgetLayout = flags.includeWidgetLayout && root.has("widgets"),
+            includeRemoteAiCredentials = flags.includeRemoteAiCredentials &&
+                settings?.getAsJsonObject("remote_ai")?.getAsJsonArray("profiles")?.any { p ->
+                    p.isJsonObject && p.asJsonObject.get("token")?.let {
+                        it.isJsonPrimitive && it.asString.isNotBlank()
+                    } == true
+                } == true,
         )
     }
 
@@ -565,6 +625,10 @@ object AvaBackupManager {
         addStore("mass_api") { kxGsonElement(runBlockingGet { MassApiSettingsStore(context.massApiSettingsStore).get() }) }
         addStore("update") { kxGsonElement(runBlockingGet { UpdateSettingsStore(context.updateSettingsStore).get() }) }
         addStore("settings_style") { kxGsonElement(runBlockingGet { SettingsStyleSettingsStore(context.settingsStyleSettingsStore).get() }) }
+        addStore("remote_ai") { kxGsonElement(runBlockingGet { RemoteAiSettingsStore(context.remoteAiSettingsStore).get() }) }
+        addStore("local_llm") { kxGsonElement(runBlockingGet { LocalLlmSettingsStore(context.localLlmSettingsStore).get() }) }
+        addStore("voice_stt") { kxGsonElement(runBlockingGet { VoiceSttSettingsStore(context.voiceSttSettingsStore).get() }) }
+        addStore("voice_tts") { kxGsonElement(runBlockingGet { VoiceTtsSettingsStore(context.voiceTtsSettingsStore).get() }) }
         addStore("local_scenes") { kxGsonElement(runBlockingGet { LocalScenesStore(context.localScenesSettingsStore).get() }) }
         addStore("home_lock") {
             val current = runBlockingGet { HomeLockSettingsStore(context.homeLockSettingsStore).get() }
@@ -597,11 +661,20 @@ object AvaBackupManager {
             vs.remove("macAddress")
             vs.remove("name")
             vs.remove("bluetoothMacAddress")
+            ESPHOME_DEVICE_LOCAL_KEYS.forEach { vs.remove(it) }
         }
 
         if (!options.includeRemoteBrowserUrl) {
             val voiceSatellite = settings.getAsJsonObject("voice_satellite")
             voiceSatellite?.remove("haRemoteUrl")
+            voiceSatellite?.remove("haRemoteUrlRight")
+        }
+
+        // Store.get() returns opened (decrypted) tokens; blank them unless ticked.
+        if (!options.includeRemoteAiCredentials) {
+            settings.getAsJsonObject("remote_ai")?.getAsJsonArray("profiles")?.forEach { profile ->
+                if (profile.isJsonObject) profile.asJsonObject.addProperty("token", "")
+            }
         }
 
         if (!options.includeHaCredentials) {
@@ -695,7 +768,7 @@ object AvaBackupManager {
         // Keep local ESPHome identity even when restoring older backups that still
         // embedded macAddress/name. Omitting keys lets mergePatch preserve current values.
         patchMap["voice_satellite"]?.let { vs ->
-            patchMap["voice_satellite"] = withoutClonedEspHomeIdentity(vs)
+            patchMap["voice_satellite"] = withoutKeys(withoutClonedEspHomeIdentity(vs), ESPHOME_DEVICE_LOCAL_KEYS)
         }
 
         if (!options.includeRemoteBrowserUrl) {
@@ -703,6 +776,7 @@ object AvaBackupManager {
             patchMap["voice_satellite"]?.let { vs ->
                 val merged = vs.toMutableMap()
                 merged["haRemoteUrl"] = JsonPrimitive(currentUrl)
+                if (merged.containsKey("haRemoteUrlRight")) merged.remove("haRemoteUrlRight")
                 patchMap["voice_satellite"] = KxJsonObject(merged)
             }
         }
@@ -737,7 +811,24 @@ object AvaBackupManager {
             patchMap["mass_api"] = next
         }
 
+        // Without the credentials tick, never take tokens from the file; the applier
+        // keeps this device's token for any profile whose incoming token is blank.
+        if (!options.includeRemoteAiCredentials) {
+            patchMap["remote_ai"]?.let { ai ->
+                val profiles = ai["profiles"] as? kotlinx.serialization.json.JsonArray
+                if (profiles != null) {
+                    val cleaned = kotlinx.serialization.json.JsonArray(
+                        profiles.map { p ->
+                            if (p is KxJsonObject) withoutKeys(p, setOf("token")) else p
+                        },
+                    )
+                    patchMap["remote_ai"] = KxJsonObject(ai.toMutableMap().apply { put("profiles", cleaned) })
+                }
+            }
+        }
+
         val applierResult = AvaSettingsApplier.applyPatch(context, KxJsonObject(patchMap))
+        val fullStoreErrors = mutableListOf<String>()
 
         if (options.includesStore("settings_style")) {
             settings.getAsJsonObject("settings_style")?.let { style ->
@@ -773,46 +864,57 @@ object AvaBackupManager {
         }
 
         if (options.includesStore("browser")) {
-            applyFullStoreJson(context, settings, "browser") { decoded ->
+            applyFullStoreJson(context, settings, "browser", fullStoreErrors) { decoded ->
                 BrowserSettingsStore(context).update {
                     json.decodeFromJsonElement(BrowserSettings.serializer(), decoded)
                 }
             }
         }
         if (options.includesStore("notification")) {
-            applyFullStoreJson(context, settings, "notification") { decoded ->
+            applyFullStoreJson(context, settings, "notification", fullStoreErrors) { decoded ->
                 NotificationSettingsStore(context.notificationSettingsStore).update {
                     json.decodeFromJsonElement(NotificationSettings.serializer(), decoded)
                 }
             }
         }
         if (options.includesStore("sidebar")) {
-            applyFullStoreJson(context, settings, "sidebar") { decoded ->
+            applyFullStoreJson(context, settings, "sidebar", fullStoreErrors) { decoded ->
                 SidebarSettingsStore(context.sidebarSettingsStore).update {
                     json.decodeFromJsonElement(SidebarSettings.serializer(), decoded)
                 }
             }
         }
         if (options.includesStore("quick_entity")) {
-            applyFullStoreJson(context, settings, "quick_entity") { decoded ->
+            applyFullStoreJson(context, settings, "quick_entity", fullStoreErrors) { decoded ->
                 QuickEntitySettingsStore(context.quickEntitySettingsStore).update {
                     json.decodeFromJsonElement(QuickEntitySettings.serializer(), decoded)
                 }
             }
         }
 
-        return applierResult
+        return if (fullStoreErrors.isEmpty()) {
+            applierResult
+        } else {
+            applierResult.copy(errors = applierResult.errors + fullStoreErrors)
+        }
     }
 
     private suspend fun applyFullStoreJson(
         context: Context,
         settings: JsonObject,
         key: String,
+        errors: MutableList<String>,
         apply: suspend (JsonElement) -> Unit,
     ) {
         if (!settings.has(key)) return
-        val element = gsonToKxJsonElement(settings.get(key))
-        apply(element)
+        // Decode fully before touching the store, so a bad payload leaves the old value intact.
+        try {
+            val element = gsonToKxJsonElement(settings.get(key))
+            apply(element)
+        } catch (e: Exception) {
+            Log.e(TAG, "Full overwrite of $key failed; kept current", e)
+            errors += key
+        }
     }
 
     private fun gsonToKxJsonObject(element: com.google.gson.JsonElement): KxJsonObject {
@@ -871,13 +973,16 @@ object AvaBackupManager {
         } ?: ModRegistry()
 
         mods.getAsJsonObject("packages")?.entrySet()?.forEach { (modId, pkgElement) ->
+            requireSafeModId(modId)
             val pkg = pkgElement.asJsonObject
             val files = pkg.getAsJsonObject("files") ?: return@forEach
             val modDir = File(modsDir, modId)
+            // Validate every path before deleting the installed copy.
+            files.entrySet().forEach { (relative, _) -> safeChild(modDir, relative) }
             if (modDir.exists()) modDir.deleteRecursively()
             modDir.mkdirs()
             files.entrySet().forEach { (relative, b64) ->
-                val target = File(modDir, relative)
+                val target = safeChild(modDir, relative)
                 target.parentFile?.mkdirs()
                 val bytes = Base64.decode(b64.asString, Base64.NO_WRAP)
                 target.writeBytes(bytes)
@@ -886,12 +991,14 @@ object AvaBackupManager {
         }
 
         mods.getAsJsonObject("configs")?.entrySet()?.forEach { (modId, cfg) ->
+            requireSafeModId(modId)
             val mapType = object : com.google.gson.reflect.TypeToken<Map<String, String>>() {}.type
             val values: Map<String, String> = gson.fromJson(cfg, mapType)
             configStore.saveConfig(modId, values)
         }
 
         mods.getAsJsonObject("states")?.entrySet()?.forEach { (modId, state) ->
+            requireSafeModId(modId)
             val stateFile = File(context.filesDir, "mod_states/$modId.json")
             stateFile.parentFile?.mkdirs()
             stateFile.writeText(gson.toJson(state))
@@ -899,6 +1006,21 @@ object AvaBackupManager {
 
         File(modsDir, "registry.json").writeText(gson.toJson(registry))
         modManager.refreshRegistryFromDisk()
+    }
+
+    /** A forged backup must not use `..` or separators in a mod id to escape filesDir. */
+    private fun requireSafeModId(modId: String) {
+        require(
+            modId.isNotBlank() && modId != "." && modId != ".." &&
+                !modId.contains('/') && !modId.contains('\\') && !modId.contains('\u0000'),
+        ) { "unsafe_mod_id" }
+    }
+
+    private fun safeChild(dir: File, relative: String): File {
+        val base = dir.canonicalFile
+        val target = File(base, relative).canonicalFile
+        require(target.path.startsWith(base.path + File.separator)) { "unsafe_mod_path" }
+        return target
     }
 
     private fun importSystemPrefs(context: Context, system: JsonObject) {

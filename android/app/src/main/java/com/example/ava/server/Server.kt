@@ -135,6 +135,9 @@ class Server(
         connection.value?.sendMessage(message)
     }
     
+    /** Socket-level receive time of the installed client's last frame (#254). */
+    fun currentClientLastFrameElapsedMs(): Long? = connection.value?.lastFrameElapsedMs
+
     fun getClientAddress(): String? {
         return connection.value?.getRemoteAddress()
     }

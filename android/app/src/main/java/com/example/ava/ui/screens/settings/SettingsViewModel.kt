@@ -1826,6 +1826,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         screensaverSettingsStore.smartAodEnabled.set(enabled)
     }
 
+    suspend fun saveScreensaverSmartAodFollowDarkMode(enabled: Boolean) {
+        screensaverSettingsStore.smartAodFollowDarkMode.set(enabled)
+    }
+
     suspend fun saveScreensaverSmartAodMaskPercent(percent: Int) {
         screensaverSettingsStore.smartAodMaskPercent.set(percent)
     }
@@ -1907,6 +1911,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     suspend fun saveDawnMergeWeatherIconsEnabled(enabled: Boolean) {
         screensaverSettingsStore.dawnMergeWeatherIconsEnabled.set(enabled)
+    }
+
+    suspend fun saveDawnDarkModeDimEnabled(enabled: Boolean) {
+        screensaverSettingsStore.dawnDarkModeDimEnabled.set(enabled)
     }
     
     suspend fun saveCameraEnabled(enabled: Boolean) {

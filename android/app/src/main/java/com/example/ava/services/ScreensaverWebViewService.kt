@@ -30,6 +30,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import androidx.core.content.ContextCompat
+import com.example.ava.settings.DarkModeManager
 import com.example.ava.settings.ScreensaverSettings
 import com.example.ava.settings.ScreensaverSettingsStore
 import com.example.ava.settings.DawnEntitySlot
@@ -74,7 +75,10 @@ class ScreensaverWebViewService : Service() {
     private val pixelShift = ScreensaverPixelShift(mainHandler)
     private var settingsJob: Job? = null
     private var pixelShiftEnabled = false
+    /** Effective AOD: master switch must be on; with [smartAodFollowDarkMode] also requires app dark mode. */
     private var smartAodEnabled = false
+    private var smartAodSwitch = false
+    private var smartAodFollowDarkMode = false
     private var smartAodMaskPercent = 100
     private var smartAodOverlay: SmartAodMaskOverlay? = null
     /** Bumped on show/destroy to invalidate in-flight reveal-out / pending reveal-in. */
@@ -109,6 +113,11 @@ class ScreensaverWebViewService : Service() {
     private var dawnIsoTimeEnabled: Boolean = false
     /** Merge 3+ identical hourly icons into one segment (default off). */
     private var dawnMergeWeatherIconsEnabled: Boolean = false
+    /** #253: user toggle "dim in dark mode" (default on). */
+    private var dawnDarkModeDimEnabled: Boolean = true
+    /** Mirrors app dark mode ([DarkModeManager]); pushed live to the Dawn page. */
+    private var appDarkMode: Boolean = false
+    private var darkModeJob: Job? = null
     private val dawnEntityStates = mutableMapOf<String, String>()
     private val dawnEntityLabels = mutableMapOf<String, String>()
     private val dawnEntityUnits = mutableMapOf<String, String>()
@@ -296,7 +305,9 @@ class ScreensaverWebViewService : Service() {
             val screensaverStore = ScreensaverSettingsStore(applicationContext.screensaverSettingsStore)
             screensaverStore.getFlow().collect { settings ->
                     pixelShiftEnabled = settings.pixelShiftEnabled
-                    smartAodEnabled = settings.smartAodEnabled
+                    smartAodSwitch = settings.smartAodEnabled
+                    smartAodFollowDarkMode = settings.smartAodFollowDarkMode
+                    smartAodEnabled = effectiveSmartAod()
                     smartAodMaskPercent = settings.smartAodMaskPercent.coerceIn(
                         SmartAodMaskOverlay.MIN_PERCENT,
                         SmartAodMaskOverlay.MAX_PERCENT
@@ -306,6 +317,21 @@ class ScreensaverWebViewService : Service() {
                 // Dawn weather strip uses ScreensaverSettings.dawnWeatherEntityId only —
                 // never PlayerSettings.haWeatherEntity (that is for overlay / other UIs).
                 applyDawnSettings(settings)
+            }
+        }
+        // #253: follow app dark mode live, even while the screensaver is showing.
+        val darkModeManager = DarkModeManager.getInstance(applicationContext)
+        appDarkMode = darkModeManager.isDarkMode()
+        darkModeJob = serviceScope.launch {
+            darkModeManager.darkModeState.collect { dark ->
+                if (dark == appDarkMode) return@collect
+                appDarkMode = dark
+                val aod = effectiveSmartAod()
+                if (aod != smartAodEnabled) {
+                    smartAodEnabled = aod
+                    syncSmartAodMask()
+                }
+                injectDawnDarkMode()
             }
         }
     }
@@ -339,6 +365,7 @@ class ScreensaverWebViewService : Service() {
             com.example.ava.settings.sanitizeDawnWallpaperSourceUrl(settings.dawnWallpaperSourceUrl)
         dawnIsoTimeEnabled = settings.dawnIsoTimeEnabled
         dawnMergeWeatherIconsEnabled = settings.dawnMergeWeatherIconsEnabled
+        dawnDarkModeDimEnabled = settings.dawnDarkModeDimEnabled
         injectDawnConfig()
     }
 
@@ -935,6 +962,28 @@ class ScreensaverWebViewService : Service() {
         }
     }
 
+    /**
+     * #253: dark-mode scrim on the Dawn page. Skipped while Smart AOD is on — that
+     * cover already dims the whole screensaver, so stacking both would double-dim.
+     */
+    private fun effectiveSmartAod(): Boolean =
+        smartAodSwitch && (!smartAodFollowDarkMode || appDarkMode)
+
+    private fun shouldDimDawnForDarkMode(): Boolean =
+        appDarkMode && dawnDarkModeDimEnabled && !smartAodEnabled
+
+    private fun injectDawnDarkMode() {
+        if (!isPageLoaded || !isDawnWallpaperPage()) return
+        val js = "window.AvaDawn&&window.AvaDawn.setDarkMode(${shouldDimDawnForDarkMode()});"
+        mainHandler.post {
+            try {
+                webView?.evaluateJavascript(js, null)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to inject Dawn dark mode", e)
+            }
+        }
+    }
+
     private fun injectDawnHourly() {
         if (!isPageLoaded || !isDawnWallpaperPage() || !dawnSlotsEnabled) return
         if (dawnWeatherEntityId.isEmpty()) return
@@ -1017,6 +1066,7 @@ class ScreensaverWebViewService : Service() {
             put("wallpaperSource", dawnWallpaperSourceUrl)
             put("isoTime", dawnIsoTimeEnabled)
             put("mergeWeatherIcons", dawnMergeWeatherIconsEnabled)
+            put("darkMode", shouldDimDawnForDarkMode())
         }.toString()
     }
 
@@ -1886,6 +1936,8 @@ class ScreensaverWebViewService : Service() {
         }
         settingsJob?.cancel()
         settingsJob = null
+        darkModeJob?.cancel()
+        darkModeJob = null
         pixelShift.detach()
         serviceScope.cancel()
         destroyWebView()

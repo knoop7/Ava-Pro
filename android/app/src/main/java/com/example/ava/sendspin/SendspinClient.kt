@@ -418,6 +418,19 @@ class SendspinClient(
         /** How fresh a PCM write must be to count as "audibly playing". */
         private const val TRANSPORT_AUDIBLE_WITHIN_MS = 800L
 
+        // #251 audio-focus etiquette (Netflix / Emby fight after MA pause)
+        /** PCM written this recently = actively playing (focus LOSS → re-acquire, Portal). */
+        private const val FOCUS_PLAYING_WRITE_WINDOW_MS = 1_000L
+        /** Started output with an empty buffer this long → pause output + release focus. */
+        private const val FOCUS_IDLE_RELEASE_MS = 2_500L
+        /** Min gap between "pause" commands sent for held server restarts. */
+        const val HELD_RESTART_PAUSE_DEBOUNCE_MS = 5_000L
+
+        /** After user pause / stream/end, keep focus this long for a quick resume. */
+        private const val FOCUS_RELEASE_GRACE_MS = 1_500L
+        /** Chunks arriving this soon after a user pause are the in-flight tail. */
+        private const val PAUSE_STALE_CHUNK_GRACE_MS = 1_200L
+
         // stream/request-format adaptive downgrade tuning
         private const val FORMAT_REQUEST_COOLDOWN_US = 30_000_000L  // 30 s
         private const val UNDERRUN_DOWNGRADE_THRESHOLD = 3L
@@ -560,7 +573,13 @@ class SendspinClient(
         lowMemoryMode = isLowMemoryDevice,
         context = context,
     )
-    private val audioFocus = SendspinAudioFocusController(context) {
+    private val audioFocus = SendspinAudioFocusController(
+        context,
+        // #251: a LOSS only counts as "fight back" while PCM is really flowing.
+        isActivelyPlaying = { isAudiblyPlaying(FOCUS_PLAYING_WRITE_WINDOW_MS) },
+        isVoiceOverlayActive = { voiceOverlayDucked },
+        onPermanentYield = { wasPlaying -> onFocusYielded(wasPlaying) },
+    ) {
         output.ensurePlaying()
     }
     private val speedController = SendspinPlaybackSpeedController(output, jitter)
@@ -810,6 +829,21 @@ class SendspinClient(
     /** Wall clock of last successful PCM write — transport "is playing" signal. */
     @Volatile
     private var lastPcmWriteElapsedRealtimeMs: Long = 0L
+
+    /**
+     * #251: user paused — the playout loop must not revive AudioTrack (and grab
+     * focus) from stale chunks. Lifted by stream/start, user play, or fresh audio
+     * arriving after [PAUSE_STALE_CHUNK_GRACE_MS].
+     */
+    @Volatile
+    private var restartBlockedAfterPause = false
+    @Volatile
+    private var pausedAtElapsedMs = 0L
+    /** Next successful output start is a real play start (lifts the focus idle-loss latch). */
+    @Volatile
+    private var focusColdStart = false
+    @Volatile
+    private var focusReleaseJob: Job? = null
     private var lastTransportAudibleNotifyMs: Long = 0L
 
     // stream/request-format adaptive downgrade bookkeeping
@@ -1130,6 +1164,123 @@ class SendspinClient(
     /** Pause the speaker without tearing the session — user pause / failed wire send. */
     fun pauseAudioOutput() {
         output.pause()
+        // #251: drop the residual buffer (it used to restart output and re-grab
+        // focus), hold restart until a real play, and hand focus back shortly.
+        outputStartedAtUs = 0L
+        speedController.reset()
+        jitter.clear()
+        pausedAtElapsedMs = SystemClock.elapsedRealtime()
+        restartBlockedAfterPause = true
+        focusColdStart = true
+        scheduleFocusReleaseAfterGrace("pause")
+    }
+
+    /**
+     * #251b: another app took permanent focus. Pause locally and, if we were
+     * audibly playing, tell MA so its state matches (no silent "playing").
+     * Never fights back; a user play / later stream/start re-takes focus.
+     */
+    private fun onFocusYielded(wasPlaying: Boolean) {
+        playoutScope.launch {
+            if (!wasPlaying && !output.isStarted()) return@launch
+            Log.i(TAG, "audio focus yielded to other app — pausing (notifyMa=$wasPlaying)")
+            pauseAudioOutput()
+            patchUi { it.copy(playbackState = "paused") }
+            if (wasPlaying) {
+                try {
+                    sendMediaCommand("pause")
+                } catch (e: Exception) {
+                    Log.w(TAG, "yield: pause command failed", e)
+                }
+            }
+        }
+    }
+
+    /** #251: release focus after a short grace unless output came back. */
+    private fun scheduleFocusReleaseAfterGrace(reason: String) {
+        focusReleaseJob?.cancel()
+        focusReleaseJob = playoutScope.launch {
+            delay(FOCUS_RELEASE_GRACE_MS)
+            if (!output.isStarted()) {
+                Log.i(TAG, "audio focus released after $reason grace")
+                audioFocus.release()
+            }
+        }
+    }
+
+    /** #251: stream/start or user play — a genuine wish to hear Sendspin again. */
+    /*
+     * Smart continue / stay-paused rules after a track or stream ends:
+     *  1. User play (Ava button / controller "play")  -> always continue, takes
+     *     focus back even from another app (explicit wish).
+     *  2. Server stream/start (MA next track, queue advance, restart) ->
+     *     a. Ava yielded focus to another app (lostToOtherApp)        -> stay paused
+     *     b. another app is playing media now (Netflix started after
+     *        our focus was already released at stream end)             -> stay paused
+     *     c. user had paused us (restartBlockedAfterPause by pause)   -> MA only sends
+     *        stream/start on a new play, so that counts as play       -> continue
+     *     d. otherwise (Ava was playing, nothing else holds focus)    -> continue next track
+     *  When staying paused because of 2a/2b we tell MA once ("pause") so it does not
+     *  sit in a silent "playing" state and keep pushing tracks.
+     */
+    private fun noteRealPlayIntent(reason: String) {
+        val userInitiated = reason == "user play"
+        audioFocus.noteRealPlayStart(userInitiated = userInitiated)
+        // #251b: still yielded (server restart right after another app took
+        // focus) — stay paused instead of playing over Netflix / the MA client.
+        if (audioFocus.isLostToOtherApp()) {
+            Log.i(TAG, "restart kept blocked after focus yield: $reason")
+            holdServerRestart(reason)
+            return
+        }
+        // Rule 2b: focus already handed back at stream end, then another app
+        // started playing — never steal it with an automatic next track.
+        if (!userInitiated && !output.isStarted() && audioFocus.isOtherAppPlaying()) {
+            Log.i(TAG, "restart kept blocked: another app is playing ($reason)")
+            holdServerRestart(reason)
+            return
+        }
+        if (restartBlockedAfterPause) Log.i(TAG, "restart unblocked: $reason")
+        restartBlockedAfterPause = false
+        focusColdStart = true
+        focusReleaseJob?.cancel()
+    }
+
+    /** Stay paused for a server-driven restart and sync MA's state once. */
+    private fun holdServerRestart(reason: String) {
+        if (reason == "user play") return
+        restartBlockedAfterPause = true
+        pausedAtElapsedMs = SystemClock.elapsedRealtime()
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastHeldRestartPauseMs < HELD_RESTART_PAUSE_DEBOUNCE_MS) return
+        lastHeldRestartPauseMs = now
+        patchUi { it.copy(playbackState = "paused") }
+        playoutScope.launch {
+            try {
+                sendMediaCommand("pause")
+            } catch (e: Exception) {
+                Log.w(TAG, "held restart: pause command failed", e)
+            }
+        }
+    }
+
+    @Volatile
+    private var lastHeldRestartPauseMs = 0L
+
+    /**
+     * #251: mid-track re-acquire (Portal / VOICE_CALL silent-device fix) only while
+     * PCM is really flowing; never on an idle/empty buffer, never during voice overlay,
+     * never after another app took focus while we were idle.
+     */
+    private fun ensureFocusWhilePlaying(): Boolean {
+        if (voiceOverlayDucked) return true
+        val last = lastPcmWriteElapsedRealtimeMs
+        if (last == 0L ||
+            SystemClock.elapsedRealtime() - last > FOCUS_PLAYING_WRITE_WINDOW_MS
+        ) {
+            return true
+        }
+        return audioFocus.ensureHeld() || audioFocus.isLostToOtherApp()
     }
 
     fun stopPlayback() {
@@ -1180,6 +1331,7 @@ class SendspinClient(
             Log.w(TAG, "Drop unsupported controller command=$negotiated supported=$serverSupportedControllerCommands")
             return false
         }
+        if (command == "play") noteRealPlayIntent("user play")
         val controllerObj = JSONObject().put("command", negotiated)
         when (negotiated) {
             "seek" -> positionMs?.let { controllerObj.put("position_ms", it.coerceAtLeast(0L)) }
@@ -2138,6 +2290,8 @@ class SendspinClient(
             // Timeline playout: skip only when a chunk is too late, then always schedule precisely.
             var lateRestartLoops = 0
             var restartBackoffMs = 200L
+            /** #251: elapsedRealtime when the started output first saw an empty buffer. */
+            var emptySinceMs = 0L
             nextStartAttemptUs = 0L
 
             while (isActive && isConnected.get()) {
@@ -2158,9 +2312,16 @@ class SendspinClient(
                 }
 
                 if (!output.isStarted()) {
+                    emptySinceMs = 0L
                     val nowLocalUs = nowUs()
                     if (nextStartAttemptUs > nowLocalUs) {
                         delay(((nextStartAttemptUs - nowLocalUs) / 1000L).coerceAtLeast(10L))
+                        continue
+                    }
+
+                    // #251: user paused — stay quiet until stream/start / play / fresh audio.
+                    if (restartBlockedAfterPause) {
+                        delay(25L)
                         continue
                     }
 
@@ -2308,6 +2469,12 @@ class SendspinClient(
                     }
 
                     outputStartedAtUs = nowUs()
+                    // #251: fresh output after pause / stream end / idle = real play start.
+                    if (focusColdStart) {
+                        focusColdStart = false
+                        audioFocus.noteRealPlayStart()
+                    }
+                    focusReleaseJob?.cancel()
                     audioFocus.acquire()
                     val armHard = startupHardCorrectionArmed
                     startupHardCorrectionArmed = false
@@ -2341,12 +2508,29 @@ class SendspinClient(
                 if (chunk == null) {
                     underrunCount++
                     if (output.isStarted()) {
-                        if (!voiceOverlayDucked) audioFocus.ensureHeld()
+                        // #251: an empty buffer is not playback — never (re)grab focus
+                        // here. Stay quiet too long → pause output and hand focus back.
+                        val nowMs = SystemClock.elapsedRealtime()
+                        if (emptySinceMs == 0L) emptySinceMs = nowMs
+                        val lastWriteMs = lastPcmWriteElapsedRealtimeMs
+                        if (nowMs - emptySinceMs >= FOCUS_IDLE_RELEASE_MS &&
+                            (lastWriteMs == 0L || nowMs - lastWriteMs >= FOCUS_IDLE_RELEASE_MS)
+                        ) {
+                            Log.i(TAG, "buffer empty ${nowMs - emptySinceMs}ms: pausing output, releasing audio focus")
+                            emptySinceMs = 0L
+                            output.pause()
+                            outputStartedAtUs = 0L
+                            speedController.reset()
+                            focusColdStart = true
+                            audioFocus.release()
+                            continue
+                        }
                         output.ensurePlaying()
                     }
                     delay(1L)
                     continue
                 }
+                emptySinceMs = 0L
 
                 val pcmData = when (codec) {
                     "opus" -> {
@@ -2509,7 +2693,8 @@ class SendspinClient(
                 // Without re-acquire, AudioTrack keeps "playing" but the device stays
                 // silent until process kill — match Portal / long-session reports.
                 // During voice overlay, never re-steal GAIN from URL TTS.
-                if (!voiceOverlayDucked && !audioFocus.ensureHeld()) {
+                // #251: only while PCM is really flowing and no app took it from us idle.
+                if (!ensureFocusWhilePlaying()) {
                     Log.w(TAG, "audio focus not held; retrying ensurePlaying")
                 }
                 var wrotePcm = false
@@ -2537,7 +2722,7 @@ class SendspinClient(
                     // speed controller instead of killing it (a dead controller leaves the
                     // last PlaybackParams speed applied forever, e.g. pinned at 0.998x).
                     Log.w(TAG, "pcm write failed (recoverable); re-arming speed controller")
-                    if (!voiceOverlayDucked) audioFocus.ensureHeld()
+                    ensureFocusWhilePlaying()
                     output.setPlaybackSpeed(1.0f)
                     outputStartedAtUs = nowUs()
                     // Mid-play recovery: never arm startup hard-correction (would pause + snap UI).
@@ -2547,7 +2732,7 @@ class SendspinClient(
                     )
                 } else {
                     Log.w(TAG, "pcm write failed; output stopped — will recreate AudioTrack")
-                    if (!voiceOverlayDucked) audioFocus.ensureHeld()
+                    ensureFocusWhilePlaying()
                     outputStartedAtUs = 0L
                     speedController.reset()
                     nextStartAttemptUs = nowUs() + 80_000L
@@ -2704,6 +2889,10 @@ class SendspinClient(
                     opusDecoder = null
                     flacDecoder?.release()
                     flacDecoder = null
+                    // #251: restart already gated (codec cleared until stream/start);
+                    // hand focus back after a short grace.
+                    focusColdStart = true
+                    scheduleFocusReleaseAfterGrace("stream/end")
                     // Spec: stream/end when playback is over and the queue is empty.
                     onStreamEnd?.invoke()
                 }
@@ -2933,6 +3122,21 @@ class SendspinClient(
                 if (!streamFormatReady) return
                 if (!isSupportedStreamCodec(codec)) return
                 if (data.size < 9) return
+                if (restartBlockedAfterPause) {
+                    // #251: in-flight tail after a user pause must not revive output.
+                    // Audio still arriving past the grace = the stream really resumed.
+                    if (SystemClock.elapsedRealtime() - pausedAtElapsedMs < PAUSE_STALE_CHUNK_GRACE_MS) {
+                        return
+                    }
+                    // Smart end: fresh audio must not revive output while yielded
+                    // or while another app plays — that would sound over Netflix
+                    // without even holding focus.
+                    if (audioFocus.isLostToOtherApp() || audioFocus.isOtherAppPlaying()) {
+                        return
+                    }
+                    Log.i(TAG, "restart unblocked: fresh audio after pause")
+                    restartBlockedAfterPause = false
+                }
 
                 val tsServerUs = readInt64BE(data, 1)
                 if (lastChunkServerTimestampUs != Long.MIN_VALUE) {
@@ -3472,6 +3676,7 @@ class SendspinClient(
             ?: playAtServerUs.takeIf { it != Long.MIN_VALUE }
 
     private fun handleStreamStart(payload: JSONObject) {
+        noteRealPlayIntent("stream/start")
         streamEnded = false
         flacEmptyDecodeStreak = 0
         syncedFlacPcmEncoding = Int.MIN_VALUE

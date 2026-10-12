@@ -92,15 +92,15 @@ android {
 
     buildTypes {
         debug {
-            isMinifyEnabled = true
+            isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
         }
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = false
+            isShrinkResources = false
             if (hasReleaseKeystore) {
                 signingConfig = signingConfigs.getByName("release")
             }

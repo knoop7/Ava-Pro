@@ -22,7 +22,7 @@ import java.io.File
  * `microphone`, `player`, `experimental`, `sendspin`, `voice_channel`, `screensaver`,
  * `voice_satellite`, `browser`, `notification`, `sidebar`, `quick_entity`,
  * `home_lock`, `bluetooth`, `mods`, `ha`, `mass_api`, `update`,
- * `settings_style`, `local_scenes`
+ * `settings_style`, `local_scenes`, `remote_ai`, `local_llm`, `voice_stt`, `voice_tts`
  */
 object AvaSettingsApplier {
     private const val TAG = "AvaSettingsApplier"
@@ -65,6 +65,10 @@ object AvaSettingsApplier {
         UPDATE("update"),
         SETTINGS_STYLE("settings_style"),
         LOCAL_SCENES("local_scenes"),
+        REMOTE_AI("remote_ai"),
+        LOCAL_LLM("local_llm"),
+        VOICE_STT("voice_stt"),
+        VOICE_TTS("voice_tts"),
         ;
 
         companion object {
@@ -440,6 +444,33 @@ object AvaSettingsApplier {
             StoreId.LOCAL_SCENES -> {
                 val store = LocalScenesStore(context.localScenesSettingsStore)
                 mergeAndUpdate(store, LocalScenesSettings.serializer(), patch)
+            }
+            StoreId.REMOTE_AI -> {
+                val store = RemoteAiSettingsStore(context.remoteAiSettingsStore)
+                val current = store.get()
+                val merged = mergePatch(current, patch, RemoteAiSettings.serializer())
+                // A patch (backup / template) without a token must not wipe this device's key.
+                val localTokens = current.profiles.associate { it.id to it.token }
+                val next = merged.copy(
+                    profiles = merged.profiles.map { p ->
+                        if (p.token.isBlank()) p.copy(token = localTokens[p.id].orEmpty()) else p
+                    },
+                )
+                if (next == current) return false
+                store.update { next }
+                true
+            }
+            StoreId.LOCAL_LLM -> {
+                val store = LocalLlmSettingsStore(context.localLlmSettingsStore)
+                mergeAndUpdate(store, LocalLlmSettings.serializer(), patch)
+            }
+            StoreId.VOICE_STT -> {
+                val store = VoiceSttSettingsStore(context.voiceSttSettingsStore)
+                mergeAndUpdate(store, VoiceSttSettings.serializer(), patch)
+            }
+            StoreId.VOICE_TTS -> {
+                val store = VoiceTtsSettingsStore(context.voiceTtsSettingsStore)
+                mergeAndUpdate(store, VoiceTtsSettings.serializer(), patch)
             }
         }
     }
